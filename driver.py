@@ -8,13 +8,11 @@ from sklearn.metrics import roc_curve, auc
 import theano
 import theano.tensor as T
 from vmlp import VMLP
-from data import load_data, gen_data
-from loader import load
-
-from itertools import chain
+from data import load_data
 
 import warnings
 warnings.filterwarnings("ignore", category=DeprecationWarning)
+
 
 def test_mlp(learning_rate=0.01, L1_reg=0.00, L2_reg=0.0001, n_epochs=1000,
              dataset='mnist.pkl.gz', batch_size=20, n_hidden=500):
@@ -37,8 +35,7 @@ def test_mlp(learning_rate=0.01, L1_reg=0.00, L2_reg=0.0001, n_epochs=1000,
     # allocate symbolic variables for the data
     index = T.lscalar()  # index to a [mini]batch
     x = T.matrix('x')  # the data is presented as rasterized images
-    y = T.ivector('y')  # the labels are presented as 1D vector of
-                        # [int] labels
+    y = T.ivector('y')
     rng = numpy.random.RandomState(1234)
     classifier = VMLP(
         rng=rng,
@@ -62,15 +59,15 @@ def test_mlp(learning_rate=0.01, L1_reg=0.00, L2_reg=0.0001, n_epochs=1000,
     # end-snippet-4
     # compiling a Theano function that computes the mistakes that are made
     # by the model on a minibatch
-    test_model = theano.function(
-        inputs=[index],
-        outputs=[classifier.errors(y), classifier.output],
-        givens={
-            x: test_set_x[index * batch_size:(index + 1) * batch_size],
-            y: test_set_y[index * batch_size:(index + 1) * batch_size]
-        },
-        mode='DebugMode'
-    )
+    # test_model = theano.function(
+    #    inputs=[index],
+    #    outputs=[classifier.errors(y), classifier.output],
+    #    givens={
+    #        x: test_set_x[index * batch_size:(index + 1) * batch_size],
+    #        y: test_set_y[index * batch_size:(index + 1) * batch_size]
+    #    },
+    #    mode='DebugMode'
+    # )
 
     validate_model = theano.function(
         inputs=[index],
@@ -86,8 +83,9 @@ def test_mlp(learning_rate=0.01, L1_reg=0.00, L2_reg=0.0001, n_epochs=1000,
         (param, param - learning_rate * gparam)
         for param, gparam in zip(classifier.params, gparams)
     ]
-    updates = updates + classifier.get_updates(cost, index, batch_size, learning_rate)
-    debug = classifier.vectors.debug(cost, index)
+    updates = updates + classifier.get_updates(cost, index, batch_size,
+                                               learning_rate)
+    # debug = classifier.vectors.debug(cost, index)
     train_model = theano.function(
         inputs=[index],
         outputs=[cost],
@@ -107,15 +105,9 @@ def test_mlp(learning_rate=0.01, L1_reg=0.00, L2_reg=0.0001, n_epochs=1000,
 
     # early-stopping parameters
     patience = 20000  # look as this many examples regardless
-    patience_increase = 2  # wait this much longer when a new best is
-                           # found
-    improvement_threshold = 0.995  # a relative improvement of this much is
-                                   # considered significant
+    patience_increase = 2
+    improvement_threshold = 0.995
     validation_frequency = min(n_train_batches, patience / 2)
-                                  # go through this many
-                                  # minibatche before checking the network
-                                  # on the validation set; in this case we
-                                  # check every epoch
 
     best_validation_loss = numpy.inf
     best_iter = 0
@@ -138,14 +130,14 @@ def test_mlp(learning_rate=0.01, L1_reg=0.00, L2_reg=0.0001, n_epochs=1000,
             if (iter + 1) % validation_frequency == 0:
                 # compute zero-one loss on validation set
                 validation_losses = [validate_model(i) for i
-                                    in xrange(n_valid_batches)]
-                #print validation_losses
+                                     in xrange(n_valid_batches)]
+                # print validation_losses
                 this_validation_loss = numpy.mean(validation_losses)
-                #print this_validation_loss
+                # print this_validation_loss
 
                 print(
                     'epoch %i, minibatch %i/%i, validation error %f %%' %
-                        (epoch,
+                    (epoch,
                         minibatch_index + 1,
                         n_train_batches,
                         this_validation_loss * 100.)
@@ -153,23 +145,25 @@ def test_mlp(learning_rate=0.01, L1_reg=0.00, L2_reg=0.0001, n_epochs=1000,
 
                 # if we got the best validation score until now
                 if this_validation_loss < best_validation_loss:
-                    #improve patience if loss improvement is good enough
-                    if (this_validation_loss < best_validation_loss * improvement_threshold):
+                    # improve patience if loss improvement is good enough
+                    if (this_validation_loss <
+                            best_validation_loss * improvement_threshold):
                         patience = max(patience, iter * patience_increase)
 
                     best_validation_loss = this_validation_loss
                     best_iter = iter
 
                     # test it on the test set
-                    #test_losses, preds = zip(*[test_model(i) for i
+                    # test_losses, preds = zip(*[test_model(i) for i
                     #                    in xrange(n_test_batches)])
-                    #test_score = numpy.mean(test_losses)
-                    #preds = numpy.array(preds).flatten()
-                    #print len(preds), preds
-                    #fpr, tpr, thresholds = roc_curve(test_set_y.owner.inputs[0].get_value(borrow=True)[:len(preds)],
+                    # test_score = numpy.mean(test_losses)
+                    # preds = numpy.array(preds).flatten()
+                    # print len(preds), preds
+                    # fpr, tpr, thresholds = roc_curve(
+                    # test_set_y.owner.inputs[0].get_value(borrow=True)[:len(preds)],
                     #                                 preds, pos_label=2)
-                    #temp_auc = auc(fpr, tpr)
-                    #print(('     epoch %i, minibatch %i/%i, test error of '
+                    # temp_auc = auc(fpr, tpr)
+                    # print(('     epoch %i, minibatch %i/%i, test error of '
                     #       'best model %f %%') %
                     #      (epoch, minibatch_index + 1, n_train_batches,
                     #       test_score * 100.))

@@ -191,5 +191,5 @@ if __name__ == '__main__':
     #theano.config.compute_test_value = 'raise'
     #test()
     #sys.exit()
-    fname = 'task_data.gz'
+    fname = 'data/task_data.gz'
     test_mlp(dataset=fname, batch_size=30)

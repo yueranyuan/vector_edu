@@ -72,9 +72,18 @@ def install_all():
             run('aws s3 cp --recursive --region us-east-1 s3://cmu-data/vectoredu/data/ data/')
 
 
-def deploy(task, addr):
+def run_experiment():
+    with hide('output'):
+        with cd('vector_edu'):
+            run('python driver.py > run_log.txt')
+            run('aws s3 cp --region us-east-1 run_log.txt s3://cmu-data/vectoredu/results/')
+
+
+def deploy(tasks, addr):
     host_list = ['ubuntu@{0}'.format(addr)]
-    results = execute(task, hosts=host_list)
+    results = []
+    for task in tasks:
+        results.append(execute(task, hosts=host_list))
     return results
 
 
@@ -87,9 +96,9 @@ def start_over():
 def run_something():
     addr = ssh_connect(get_active_instance(connect()))
     env.key_filename = "cmu-east-key1.pem"
-    deploy(install_all, addr)
+    deploy([install_all, run_experiment], addr)
     disconnect_all()
 
-#start_over()
+start_over()
 run_something()
 #terminate_all()

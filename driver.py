@@ -1,6 +1,7 @@
 import os
 import sys
 import time
+import inspect
 
 import numpy
 
@@ -14,8 +15,15 @@ import warnings
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 
 
+def log(txt):
+    print(txt)
+
+
 def test_mlp(learning_rate=0.01, L1_reg=0.00, L2_reg=0.0001, n_epochs=1000,
              dataset='mnist.pkl.gz', batch_size=20, n_hidden=500):
+    args, _, _, values = inspect.getargvalues(inspect.currentframe())
+    arg_summary = ', '.join(['{0}={1}'.format(arg, eval(val)) for (arg, val) in zip(args, values)])
+    log(arg_summary)
     datasets = load_data(dataset)
 
     train_set_x, train_set_y = datasets[0]
@@ -30,7 +38,7 @@ def test_mlp(learning_rate=0.01, L1_reg=0.00, L2_reg=0.0001, n_epochs=1000,
     ######################
     # BUILD ACTUAL MODEL #
     ######################
-    print '... building the model'
+    log('... building the model')
 
     # allocate symbolic variables for the data
     index = T.lscalar()  # index to a [mini]batch
@@ -101,7 +109,7 @@ def test_mlp(learning_rate=0.01, L1_reg=0.00, L2_reg=0.0001, n_epochs=1000,
     ###############
     # TRAIN MODEL #
     ###############
-    print '... training'
+    log('... training')
 
     # early-stopping parameters
     patience = 20000  # look as this many examples regardless
@@ -134,7 +142,7 @@ def test_mlp(learning_rate=0.01, L1_reg=0.00, L2_reg=0.0001, n_epochs=1000,
                 this_validation_loss = numpy.mean(validation_losses)
                 # print this_validation_loss
 
-                print(
+                log(
                     'epoch %i, minibatch %i/%i, validation error %f %%' %
                     (epoch,
                         minibatch_index + 1,
@@ -172,17 +180,17 @@ def test_mlp(learning_rate=0.01, L1_reg=0.00, L2_reg=0.0001, n_epochs=1000,
                 break
 
     end_time = time.clock()
-    print(('Optimization complete. Best validation score of %f %% '
+    log(('Optimization complete. Best validation score of %f %% '
            'obtained at iteration %i, with test performance %f %%') %
           (best_validation_loss * 100., best_iter + 1, test_score * 100.))
     print >> sys.stderr, ('The code for file ' +
                           os.path.split(__file__)[1] +
                           ' ran for %.2fm' % ((end_time - start_time) / 60.))
-    print temp_auc
+    return (best_validation_loss * 100., best_iter + 1, test_score * 100., iter)
 
 if __name__ == '__main__':
     #theano.config.compute_test_value = 'raise'
     #test()
     #sys.exit()
     fname = 'data/task_data.gz'
-    test_mlp(dataset=fname, batch_size=30)
+    log(test_mlp(dataset=fname, batch_size=30))

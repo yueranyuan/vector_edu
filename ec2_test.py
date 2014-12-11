@@ -92,3 +92,4 @@ def run_something():
 
 #start_over()
 run_something()
+#terminate_all()

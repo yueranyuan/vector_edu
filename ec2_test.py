@@ -57,7 +57,7 @@ def ssh_connect(instance, wait=30):
 
 def get_active_instance(conn):
     for res in conn.get_all_reservations():
-        if res.instances[0].state != "terminated":
+        if res.instances[0].state in ("pending", "running"):
             return res.instances[0]
     raise Exception("no more running instances")
 
@@ -67,7 +67,7 @@ def install_all():
         run('sudo apt-get update')
         run('sudo apt-get install -y gcc g++ gfortran build-essential git wget libopenblas-dev python-dev python-pip python-nose python-numpy python-scipy awscli')
         run('sudo pip install theano')
-        #run('git clone https://github.com/yueranyuan/vector_edu.git')
+        run('git clone https://github.com/yueranyuan/vector_edu.git')
         with cd('vector_edu'):
             run('aws s3 cp --recursive --region us-east-1 s3://cmu-data/vectoredu/data/ data/')
 
@@ -91,4 +91,4 @@ def run_something():
     disconnect_all()
 
 #start_over()
-#run_something()
+run_something()

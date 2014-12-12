@@ -10,13 +10,17 @@ import theano
 import theano.tensor as T
 from vmlp import VMLP
 from data import load_data
+import datetime
 
 import warnings
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 
+LOG_FILE = datetime.datetime.now().strftime("%Y_%m_%d_%H_%M_%D.log")
+
 
 def log(txt):
-    print(txt)
+    with open(LOG_FILE, 'r') as f:
+        f.write('{0}\n'.format(txt))
 
 
 def test_mlp(learning_rate=0.01, L1_reg=0.00, L2_reg=0.0001, n_epochs=1000,
@@ -181,8 +185,8 @@ def test_mlp(learning_rate=0.01, L1_reg=0.00, L2_reg=0.0001, n_epochs=1000,
 
     end_time = time.clock()
     log(('Optimization complete. Best validation score of %f %% '
-           'obtained at iteration %i, with test performance %f %%') %
-          (best_validation_loss * 100., best_iter + 1, test_score * 100.))
+         'obtained at iteration %i, with test performance %f %%') %
+        (best_validation_loss * 100., best_iter + 1, test_score * 100.))
     print >> sys.stderr, ('The code for file ' +
                           os.path.split(__file__)[1] +
                           ' ran for %.2fm' % ((end_time - start_time) / 60.))

@@ -48,18 +48,31 @@ def wait_till_running(instance, wait_length, interval=3):
     return False
 
 
-def ssh_connect(instance, wait=30):
-    if not wait_till_running(instance, wait):
-        raise Exception("instance {0} not running after {1} seconds".format(instance.id, wait))
+def ssh_connect(instance, wait=120):
     print 'connecting to instance {0}'.format(instance.id)
     return instance.ip_address
 
 
-def get_active_instance(conn):
-    for res in conn.get_all_reservations():
-        if res.instances[0].state in ("pending", "running"):
-            return res.instances[0]
-    raise Exception("no more running instances")
+def get_active_instance(conn, wait_length=120, interval=10):
+    def check_for_active():
+        statuses = {s.id: s.instance_status.status
+                    for s in conn.get_all_instance_status()}
+        for instance in conn.get_only_instances():
+            instance.update()
+            if (instance.state == 'running' and
+                    statuses.get(instance.id, '') == 'ok'):
+                return instance
+        return None
+
+    inst = check_for_active()
+    if inst:
+        return inst
+    for i in range(0, wait_length, interval):
+        sleep(interval)
+        inst = check_for_active()
+        if inst:
+            return inst
+    raise Exception("no ready instances after waiting {0} seconds".format(wait_length))
 
 
 def install_all():
@@ -76,7 +89,7 @@ def run_experiment():
     with hide('output'):
         with cd('vector_edu'):
             run('python driver.py > run_log.txt')
-            run('aws s3 cp --region us-east-1 run_log.txt s3://cmu-data/vectoredu/results/')
+            run('aws s3 cp --region us-east-1 *.log s3://cmu-data/vectoredu/results/')
 
 
 def deploy(tasks, addr):
@@ -99,6 +112,6 @@ def run_something():
     deploy([install_all, run_experiment], addr)
     disconnect_all()
 
-start_over()
+#start_over()
 run_something()
 #terminate_all()

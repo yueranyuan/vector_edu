@@ -15,7 +15,7 @@ import datetime
 import warnings
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 
-LOG_FILE = datetime.datetime.now().strftime("%Y_%m_%d_%H_%M_%D.log")
+LOG_FILE = datetime.datetime.now().strftime("%Y_%m_%d_%H_%M_%S.log")
 
 
 def log(txt):

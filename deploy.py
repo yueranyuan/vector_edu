@@ -48,12 +48,12 @@ def wait_till_running(instance, wait_length, interval=3):
     return False
 
 
-def ssh_connect(instance, wait=120):
+def ssh_connect(instance):
     print 'connecting to instance {0}'.format(instance.id)
     return instance.ip_address
 
 
-def get_active_instance(conn, wait_length=120, interval=10):
+def get_active_instance(conn, wait_length=180, interval=10):
     def check_for_active():
         statuses = {s.id: s.instance_status.status
                     for s in conn.get_all_instance_status()}
@@ -107,11 +107,11 @@ def start_over():
 
 
 def run_something():
-    addr = ssh_connect(get_active_instance(connect()))
+    addr = ssh_connect(get_active_instance(connect(), 180))
     env.key_filename = "cmu-east-key1.pem"
     deploy([install_all, run_experiment], addr)
     disconnect_all()
 
 #start_over()
 run_something()
-#terminate_all()
+terminate_all()

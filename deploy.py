@@ -8,7 +8,8 @@ def connect(region="us-east-1"):
     return boto.ec2.connect_to_region("us-east-1")
 
 
-def stop_all(conn):
+def stop_all(conn=None):
+    conn = conn or connect()
     reserves = conn.get_all_reservations()
     for r in reserves:
         to_stop = [inst.id for inst in r.instances if inst.state == 'running']
@@ -17,7 +18,8 @@ def stop_all(conn):
             conn.stop_instances(instance_ids=to_stop)
 
 
-def terminate_all(conn):
+def terminate_all(conn=None):
+    conn = conn or connect()
     reserves = conn.get_all_reservations()
     for r in reserves:
         to_stop = [inst.id for inst in r.instances if inst.state != 'terminated']
@@ -106,12 +108,26 @@ def start_over():
     reserve(conn)
 
 
-def run_something():
-    addr = ssh_connect(get_active_instance(connect(), 180))
+def run_something(wait_time=180):
+    addr = ssh_connect(get_active_instance(connect(), wait_time))
     env.key_filename = "cmu-east-key1.pem"
     deploy([install_all, run_experiment], addr)
     disconnect_all()
 
-#start_over()
-run_something()
-terminate_all()
+if __name__ == "__main__":
+    import argparse
+
+    parser = argparse.ArgumentParser(description='Deploy some workers to do some ML')
+    parser.add_argument('mode', metavar="mode", type=str,
+                        choices=['start', 'run', 'terminate'],
+                        help='choices are start/run/terminate')
+    parser.add_argument('--wait', dest='wait', default=180, type=int,
+                        help='how long to wait for a connection')
+
+    args = parser.parse_args()
+    if args.mode == 'start':
+        start_over()
+    elif args.mode == 'run':
+        run_something()
+    elif args.mode == 'terminate':
+        terminate_all()

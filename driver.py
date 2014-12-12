@@ -59,27 +59,21 @@ def test_mlp(learning_rate=0.01, L1_reg=0.00, L2_reg=0.0001, n_epochs=1000,
         full_input=train_set_x
     )
 
-    # start-snippet-4
-    # the cost we minimize during training is the negative log likelihood of
-    # the model plus the regularization terms (L1 and L2); cost is expressed
-    # here symbolically
     cost = (
         classifier.negative_log_likelihood(y)
         + L1_reg * classifier.L1
         + L2_reg * classifier.L2_sqr
     )
-    # end-snippet-4
-    # compiling a Theano function that computes the mistakes that are made
-    # by the model on a minibatch
-    # test_model = theano.function(
-    #    inputs=[index],
-    #    outputs=[classifier.errors(y), classifier.output],
-    #    givens={
-    #        x: test_set_x[index * batch_size:(index + 1) * batch_size],
-    #        y: test_set_y[index * batch_size:(index + 1) * batch_size]
-    #    },
-    #    mode='DebugMode'
-    # )
+
+    test_model = theano.function(
+        inputs=[index],
+        outputs=[classifier.errors(y), classifier.output],
+        givens={
+            x: test_set_x[index * batch_size:(index + 1) * batch_size],
+            y: test_set_y[index * batch_size:(index + 1) * batch_size]
+        },
+        mode='DebugMode'
+    )
 
     validate_model = theano.function(
         inputs=[index],
@@ -97,7 +91,6 @@ def test_mlp(learning_rate=0.01, L1_reg=0.00, L2_reg=0.0001, n_epochs=1000,
     ]
     updates = updates + classifier.get_updates(cost, index, batch_size,
                                                learning_rate)
-    # debug = classifier.vectors.debug(cost, index)
     train_model = theano.function(
         inputs=[index],
         outputs=[cost],
@@ -108,14 +101,12 @@ def test_mlp(learning_rate=0.01, L1_reg=0.00, L2_reg=0.0001, n_epochs=1000,
         },
         on_unused_input="ignore"
     )
-    # end-snippet-5
 
     ###############
     # TRAIN MODEL #
     ###############
     log('... training')
 
-    # early-stopping parameters
     patience = 20000  # look as this many examples regardless
     patience_increase = 2
     improvement_threshold = 0.995
@@ -135,16 +126,12 @@ def test_mlp(learning_rate=0.01, L1_reg=0.00, L2_reg=0.0001, n_epochs=1000,
         epoch = epoch + 1
         for minibatch_index in xrange(n_train_batches):
             minibatch_avg_cost = train_model(minibatch_index)
-            # iteration number
             iter = (epoch - 1) * n_train_batches + minibatch_index
 
             if (iter + 1) % validation_frequency == 0:
-                # compute zero-one loss on validation set
                 validation_losses = [validate_model(i) for i
                                      in xrange(n_valid_batches)]
-                # print validation_losses
                 this_validation_loss = numpy.mean(validation_losses)
-                # print this_validation_loss
 
                 log(
                     'epoch %i, minibatch %i/%i, validation error %f %%' %
@@ -154,9 +141,7 @@ def test_mlp(learning_rate=0.01, L1_reg=0.00, L2_reg=0.0001, n_epochs=1000,
                         this_validation_loss * 100.)
                 )
 
-                # if we got the best validation score until now
                 if this_validation_loss < best_validation_loss:
-                    # improve patience if loss improvement is good enough
                     if (this_validation_loss <
                             best_validation_loss * improvement_threshold):
                         patience = max(patience, iter * patience_increase)
@@ -193,8 +178,5 @@ def test_mlp(learning_rate=0.01, L1_reg=0.00, L2_reg=0.0001, n_epochs=1000,
     return (best_validation_loss * 100., best_iter + 1, test_score * 100., iter)
 
 if __name__ == '__main__':
-    #theano.config.compute_test_value = 'raise'
-    #test()
-    #sys.exit()
     fname = 'data/task_data.gz'
     log(test_mlp(dataset=fname, batch_size=30))

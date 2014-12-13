@@ -28,10 +28,11 @@ def terminate_all(conn=None):
             conn.terminate_instances(instance_ids=to_stop)
 
 
-def reserve(conn):
+def reserve(conn, free=False):
     print 'launching instance'
+    size = 't2.micro' if free else 't2.medium'
     reserve = conn.run_instances('ami-9eaa1cf6', key_name='cmu-east-key1',
-                                 instance_type='t2.medium', security_groups=['Aaron-CMU-East'],
+                                 instance_type=size, security_groups=['Aaron-CMU-East'],
                                  instance_profile_arn='arn:aws:iam::999933667566:instance-profile/Worker')
     print 'launched instance ' + reserve.instances[0].id
     return reserve
@@ -90,7 +91,7 @@ def install_all():
 def run_experiment():
     with hide('output'):
         with cd('vector_edu'):
-            run('python driver.py > run_log.txt')
+            run('python driver.py')
             run('aws s3 cp --region us-east-1 *.log s3://cmu-data/vectoredu/results/')
 
 
@@ -102,10 +103,16 @@ def deploy(tasks, addr):
     return results
 
 
-def start_over():
+def start_over(**kwargs):
     conn = connect()
     terminate_all(conn)  # clear all old reservations
-    reserve(conn)
+    reserve(conn, **kwargs)
+
+
+def add_instances(cnt, **kwargs):
+    conn = connect()
+    for c in range(cnt):
+        reserve(conn, **kwargs)
 
 
 def run_something(wait_time=180):
@@ -119,14 +126,20 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description='Deploy some workers to do some ML')
     parser.add_argument('mode', metavar="mode", type=str,
-                        choices=['start', 'run', 'terminate'],
-                        help='choices are start/run/terminate')
+                        choices=['restart', 'start', 'run', 'terminate'],
+                        help='choices are restart/run/terminate')
     parser.add_argument('--wait', dest='wait', default=180, type=int,
                         help='how long to wait for a connection')
+    parser.add_argument('-i', dest='instance_cnt', metavar="i", default=1,
+                        type=int, help='how many instances to start')
+    parser.add_argument('--free', dest='free', action='store_true',
+                        help='[true] to start free micro instance')
 
     args = parser.parse_args()
-    if args.mode == 'start':
-        start_over()
+    if args.mode == 'restart':
+        start_over(free=args.free)
+    elif args.mode == 'start':
+        add_instances(args.instance_cnt, free=args.free)
     elif args.mode == 'run':
         run_something()
     elif args.mode == 'terminate':

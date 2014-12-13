@@ -11,15 +11,17 @@ import theano.tensor as T
 from vmlp import VMLP
 from data import load_data
 import datetime
-
+from random import randint
 import warnings
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 
-LOG_FILE = datetime.datetime.now().strftime("%Y_%m_%d_%H_%M_%S.log")
+LOG_FILE = '{time}_{nonce}.log'.format(
+    time=datetime.datetime.now().strftime("%Y_%m_%d_%H_%M_%S"),
+    nonce=str(randint(0, 99999)))
 
 
 def log(txt):
-    with open(LOG_FILE, 'r') as f:
+    with open(LOG_FILE, 'a+') as f:
         f.write('{0}\n'.format(txt))
 
 
@@ -48,12 +50,13 @@ def test_mlp(learning_rate=0.01, L1_reg=0.00, L2_reg=0.0001, n_epochs=1000,
     index = T.lscalar()  # index to a [mini]batch
     x = T.matrix('x')  # the data is presented as rasterized images
     y = T.ivector('y')
+    dropout_p = 0.2
     rng = numpy.random.RandomState(1234)
     classifier = VMLP(
         rng=rng,
         input=x,
         n_skills=4600,
-        vector_length=30,
+        vector_length=50,
         n_hidden=n_hidden,
         n_out=3,
         full_input=train_set_x
@@ -70,7 +73,8 @@ def test_mlp(learning_rate=0.01, L1_reg=0.00, L2_reg=0.0001, n_epochs=1000,
         outputs=[classifier.errors(y), classifier.output],
         givens={
             x: test_set_x[index * batch_size:(index + 1) * batch_size],
-            y: test_set_y[index * batch_size:(index + 1) * batch_size]
+            y: test_set_y[index * batch_size:(index + 1) * batch_size],
+            classifier.dropout: dropout_p
         },
         mode='DebugMode'
     )
@@ -80,7 +84,8 @@ def test_mlp(learning_rate=0.01, L1_reg=0.00, L2_reg=0.0001, n_epochs=1000,
         outputs=[classifier.errors(y)],
         givens={
             x: valid_set_x[index * batch_size:(index + 1) * batch_size],
-            y: valid_set_y[index * batch_size:(index + 1) * batch_size]
+            y: valid_set_y[index * batch_size:(index + 1) * batch_size],
+            classifier.dropout: dropout_p
         }
     )
 
@@ -97,7 +102,8 @@ def test_mlp(learning_rate=0.01, L1_reg=0.00, L2_reg=0.0001, n_epochs=1000,
         updates=updates,
         givens={
             x: train_set_x[index * batch_size: (index + 1) * batch_size],
-            y: train_set_y[index * batch_size: (index + 1) * batch_size]
+            y: train_set_y[index * batch_size: (index + 1) * batch_size],
+            classifier.dropout: dropout_p
         },
         on_unused_input="ignore"
     )
@@ -109,7 +115,7 @@ def test_mlp(learning_rate=0.01, L1_reg=0.00, L2_reg=0.0001, n_epochs=1000,
 
     patience = 20000  # look as this many examples regardless
     patience_increase = 2
-    improvement_threshold = 0.995
+    improvement_threshold = 0.998
     validation_frequency = min(n_train_batches, patience / 2)
 
     best_validation_loss = numpy.inf
@@ -180,3 +186,7 @@ def test_mlp(learning_rate=0.01, L1_reg=0.00, L2_reg=0.0001, n_epochs=1000,
 if __name__ == '__main__':
     fname = 'data/task_data.gz'
     log(test_mlp(dataset=fname, batch_size=30))
+    print "finished"
+    if sys.platform.startswith('win'):
+        from win_utils import winalert
+        winalert()

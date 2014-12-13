@@ -28,7 +28,7 @@ class VMLP(object):
                                    input=input,
                                    full_input=full_input,
                                    n_skills=n_skills,
-                                   vector_length=30)
+                                   vector_length=vector_length)
 
         self.MLP = MLP(
             rng=rng,
@@ -46,6 +46,7 @@ class VMLP(object):
 
         self.params = self.MLP.params
         self.get_updates = self.vectors.get_updates
+        self.dropout = self.MLP.dropout
 
 
 def reindex(skills, skillVecs, y=None):

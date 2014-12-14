@@ -141,7 +141,6 @@ class TempWorkers():
 
 
 def run_batch(**kwargs):
-    jobs = [test_command, test_command, test_command]
     conn = connect()
     with TempWorkers(conn=conn, **kwargs) as ids:
         job_queue = multiprocessing.JoinableQueue()

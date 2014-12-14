@@ -14,6 +14,7 @@ import datetime
 from random import randint
 import warnings
 warnings.filterwarnings("ignore", category=DeprecationWarning)
+from config import get_config
 
 LOG_FILE = '{time}_{nonce}.log'.format(
     time=datetime.datetime.now().strftime("%Y_%m_%d_%H_%M_%S"),
@@ -26,9 +27,9 @@ def log(txt):
 
 
 def test_mlp(learning_rate=0.01, L1_reg=0.00, L2_reg=0.0001, n_epochs=1000,
-             dataset='mnist.pkl.gz', batch_size=20, n_hidden=500):
-    args, _, _, values = inspect.getargvalues(inspect.currentframe())
-    arg_summary = ', '.join(['{0}={1}'.format(arg, eval(val)) for (arg, val) in zip(args, values)])
+             dataset='mnist.pkl.gz', batch_size=30, n_hidden=500, dropout_p=0.0):
+    args, _, _, _ = inspect.getargvalues(inspect.currentframe())
+    arg_summary = ', '.join(['{0}={1}'.format(arg, eval(arg)) for arg in args])
     log(arg_summary)
     datasets = load_data(dataset)
 
@@ -50,7 +51,6 @@ def test_mlp(learning_rate=0.01, L1_reg=0.00, L2_reg=0.0001, n_epochs=1000,
     index = T.lscalar()  # index to a [mini]batch
     x = T.matrix('x')  # the data is presented as rasterized images
     y = T.ivector('y')
-    dropout_p = 0.2
     rng = numpy.random.RandomState(1234)
     classifier = VMLP(
         rng=rng,
@@ -185,7 +185,8 @@ def test_mlp(learning_rate=0.01, L1_reg=0.00, L2_reg=0.0001, n_epochs=1000,
 
 if __name__ == '__main__':
     fname = 'data/task_data.gz'
-    log(test_mlp(dataset=fname, batch_size=30))
+    params = get_config()
+    log(test_mlp(dataset=fname, **params))
     print "finished"
     if sys.platform.startswith('win'):
         from win_utils import winalert

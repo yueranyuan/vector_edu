@@ -4,6 +4,7 @@ from fabric.network import disconnect_all
 from time import sleep
 import multiprocessing
 from multijob import Job, JobConsumer
+from config import all_param_set_keys
 
 env.key_filename = "cmu-east-key1.pem"
 
@@ -93,10 +94,10 @@ def install_all():
             run('aws s3 cp --recursive --region us-east-1 s3://cmu-data/vectoredu/data/ data/')
 
 
-def run_experiment():
+def run_experiment(param_set):
     with hide('output'):
         with cd('vector_edu'):
-            run('python driver.py')
+            run('python driver.py {param_set}'.format(param_set=param_set))
             run('aws s3 cp --region us-east-1 *.log s3://cmu-data/vectoredu/results/')
 
 
@@ -127,6 +128,11 @@ def test_command(txt):
     run('echo {txt}'.format(txt=txt))
 
 
+def full_command(param_set):
+    install_all()
+    run_experiment(param_set)
+
+
 class TempWorkers():
     def __init__(self, **kwargs):
         self.args = kwargs
@@ -140,7 +146,7 @@ class TempWorkers():
         pass
 
 
-def run_batch(**kwargs):
+def run_batch(param_set, **kwargs):
     conn = connect()
     with TempWorkers(conn=conn, **kwargs) as ids:
         job_queue = multiprocessing.JoinableQueue()
@@ -159,8 +165,7 @@ def run_batch(**kwargs):
             c.start()
 
         # setup a bunch of jobs
-        jobs = [Job({'txt': 'echoing task {i}'.format(i=i)}, id=str(i))
-                for i in range(15)]
+        jobs = [Job({'param_set': param_set}, id=str(i)) for i in range(15)]
         for j in jobs:
             job_queue.put(j)
         for i in range(len(consumers)):
@@ -177,6 +182,9 @@ if __name__ == "__main__":
     parser.add_argument('mode', metavar="mode", type=str, default='exp',
                         choices=['restart', 'start', 'run', 'batch', 'terminate'],
                         help='choices are start/restart/run/terminate')
+    parser.add_argument('param_set', type=str, default=None,
+                        choices=all_param_set_keys,
+                        help='the name of the parameter set to use')
     parser.add_argument('--wait', dest='wait', default=600, type=int,
                         help='how long to wait for a connection')
     parser.add_argument('-i', dest='instance_cnt', metavar="i", default=1,
@@ -185,6 +193,8 @@ if __name__ == "__main__":
                         help='[true] to start free micro instance')
 
     cmd_args = vars(parser.parse_args())
+    if cmd_args['mode'] == 'batch' and not cmd_args['param_set']:
+        raise Exception('batch mode requires a parameter set')
     handlers = {
         'restart': start_over,
         'start': add_instances,

@@ -54,5 +54,7 @@ ALL_PARAMS['t1v1'] = {
     'dropout_p': GenVar(0, 0.4)
 }
 
+all_param_set_keys = ALL_PARAMS.keys()
+
 if __name__ == '__main__':
     print get_config('t1v1')

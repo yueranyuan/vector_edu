@@ -14,7 +14,7 @@ import datetime
 from random import randint
 import warnings
 warnings.filterwarnings("ignore", category=DeprecationWarning)
-from config import get_config
+import config
 import argparse
 
 LOG_FILE = '{time}_{nonce}.log'.format(
@@ -186,12 +186,14 @@ def test_mlp(learning_rate=0.01, L1_reg=0.00, L2_reg=0.0001, n_epochs=1000,
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="run a theano experiment on this computer")
-    parser.add_argument('param_set', type=str, help='the name of the parameter set that we want to use')
+    parser.add_argument('param_set', type=str,
+                        choices=config.all_param_set_keys,
+                        help='the name of the parameter set that we want to use')
     parser.add_argument('--f', dest='file', type=str, default='data/task_data.gz',
                         help='the data file to use')
     args = parser.parse_args()
 
-    params = get_config(args.param_set)
+    params = config.get_config(args.param_set)
     log(test_mlp(dataset=args.file, **params))
     print "finished"
     if sys.platform.startswith('win'):

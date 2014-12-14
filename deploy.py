@@ -2,40 +2,33 @@ import boto.ec2
 from fabric.api import run, hide, execute, env, cd
 from fabric.network import disconnect_all
 from time import sleep
+import multiprocessing
+from multijob import Job, JobConsumer
+
+env.key_filename = "cmu-east-key1.pem"
 
 
 def connect(region="us-east-1"):
-    return boto.ec2.connect_to_region("us-east-1")
+    return boto.ec2.connect_to_region(region)
 
 
-def stop_all(conn=None):
+def terminate_all(ids=None, conn=None, **kwargs):
     conn = conn or connect()
-    reserves = conn.get_all_reservations()
-    for r in reserves:
-        to_stop = [inst.id for inst in r.instances if inst.state == 'running']
-        if to_stop:
-            print 'stopping: ', to_stop
-            conn.stop_instances(instance_ids=to_stop)
+    instances = conn.get_only_instances(instance_ids=ids)
+    to_stop = [i.id for i in instances if i.state != 'terminated']
+    if to_stop:
+        print 'terminating: {0}'.format(to_stop)
+        conn.terminate_instances(instance_ids=to_stop)
 
 
-def terminate_all(conn=None):
-    conn = conn or connect()
-    reserves = conn.get_all_reservations()
-    for r in reserves:
-        to_stop = [inst.id for inst in r.instances if inst.state != 'terminated']
-        if to_stop:
-            print 'terminating: ', to_stop
-            conn.terminate_instances(instance_ids=to_stop)
-
-
-def reserve(conn, free=False):
+def reserve(conn, free=False, **kwargs):
     print 'launching instance'
     size = 't2.micro' if free else 't2.medium'
     reserve = conn.run_instances('ami-9eaa1cf6', key_name='cmu-east-key1',
                                  instance_type=size, security_groups=['Aaron-CMU-East'],
                                  instance_profile_arn='arn:aws:iam::999933667566:instance-profile/Worker')
     print 'launched instance ' + reserve.instances[0].id
-    return reserve
+    return reserve.instances[0].id
 
 
 def wait_till_running(instance, wait_length, interval=3):
@@ -56,26 +49,38 @@ def ssh_connect(instance):
     return instance.ip_address
 
 
-def get_active_instance(conn, wait_length=180, interval=10):
+class NoInstanceException(BaseException):
+    pass
+
+
+def get_active_instance(conn=None, wait=180, interval=10, ids=None, **kwargs):
+    conn = conn or connect()
+
     def check_for_active():
+        print('looking for usable instance...')
         statuses = {s.id: s.instance_status.status
                     for s in conn.get_all_instance_status()}
-        for instance in conn.get_only_instances():
+        instances = [i for i in conn.get_only_instances(instance_ids=ids)
+                     if i.state != 'terminated']
+        if not instances:
+            raise NoInstanceException("no instances have been started")
+        for instance in instances:
             instance.update()
             if (instance.state == 'running' and
                     statuses.get(instance.id, '') == 'ok'):
                 return instance
+        print 'none found'
         return None
 
     inst = check_for_active()
     if inst:
         return inst
-    for i in range(0, wait_length, interval):
+    for i in range(0, wait, interval):
         sleep(interval)
         inst = check_for_active()
         if inst:
             return inst
-    raise Exception("no ready instances after waiting {0} seconds".format(wait_length))
+    raise NoInstanceException("no ready instances after waiting {0} seconds".format(wait))
 
 
 def install_all():
@@ -95,12 +100,10 @@ def run_experiment():
             run('aws s3 cp --region us-east-1 *.log s3://cmu-data/vectoredu/results/')
 
 
-def deploy(tasks, addr):
+def deploy(addr, **kwargs):
     host_list = ['ubuntu@{0}'.format(addr)]
-    results = []
-    for task in tasks:
-        results.append(execute(task, hosts=host_list))
-    return results
+    print host_list, kwargs
+    return execute(test_command, hosts=host_list, **kwargs)
 
 
 def start_over(**kwargs):
@@ -109,38 +112,85 @@ def start_over(**kwargs):
     reserve(conn, **kwargs)
 
 
-def add_instances(cnt, **kwargs):
-    conn = connect()
-    for c in range(cnt):
-        reserve(conn, **kwargs)
+def add_instances(instance_cnt=1, conn=None, **kwargs):
+    conn = conn or connect()
+    return [reserve(conn, **kwargs) for c in range(instance_cnt)]
 
 
-def run_something(wait_time=180):
-    addr = ssh_connect(get_active_instance(connect(), wait_time))
-    env.key_filename = "cmu-east-key1.pem"
-    deploy([install_all, run_experiment], addr)
+def use_worker(commands=[install_all, run_experiment], **kwargs):
+    addr = ssh_connect(get_active_instance(**kwargs))
+    deploy(commands, addr)
     disconnect_all()
+
+
+def test_command(txt):
+    run('echo {txt}'.format(txt=txt))
+
+
+class TempWorkers():
+    def __init__(self, **kwargs):
+        self.args = kwargs
+
+    def __enter__(self):
+        self.ids = add_instances(**self.args)
+        return self.ids
+
+    def __exit__(self, type, value, traceback):
+        terminate_all(ids=self.ids)
+        pass
+
+
+def run_batch(**kwargs):
+    jobs = [test_command, test_command, test_command]
+    conn = connect()
+    with TempWorkers(conn=conn, **kwargs) as ids:
+        job_queue = multiprocessing.JoinableQueue()
+
+        # setup a jobConsumer for every worker
+        def gen_work(addr):
+            def _work(*args):
+                deploy([test_command], addr)
+            return _work
+        consumers = [JobConsumer(job_queue,
+                                 deploy,
+                                 params={'addr': get_active_instance(ids=[id], conn=conn, **kwargs).ip_address},
+                                 id=id)
+                     for id in ids]
+        for c in consumers:
+            c.start()
+
+        # setup a bunch of jobs
+        jobs = [Job({'txt': 'echoing task {i}'.format(i=i)}, id=str(i))
+                for i in range(15)]
+        for j in jobs:
+            job_queue.put(j)
+        for i in range(len(consumers)):
+            job_queue.put(None)
+
+        job_queue.join()
+        print('finished')
+
 
 if __name__ == "__main__":
     import argparse
 
     parser = argparse.ArgumentParser(description='Deploy some workers to do some ML')
-    parser.add_argument('mode', metavar="mode", type=str,
-                        choices=['restart', 'start', 'run', 'terminate'],
-                        help='choices are restart/run/terminate')
-    parser.add_argument('--wait', dest='wait', default=180, type=int,
+    parser.add_argument('mode', metavar="mode", type=str, default='exp',
+                        choices=['restart', 'start', 'run', 'batch', 'terminate'],
+                        help='choices are start/restart/run/terminate')
+    parser.add_argument('--wait', dest='wait', default=600, type=int,
                         help='how long to wait for a connection')
     parser.add_argument('-i', dest='instance_cnt', metavar="i", default=1,
-                        type=int, help='how many instances to start')
+                        type=int, help='how many instances')
     parser.add_argument('--free', dest='free', action='store_true',
                         help='[true] to start free micro instance')
 
-    args = parser.parse_args()
-    if args.mode == 'restart':
-        start_over(free=args.free)
-    elif args.mode == 'start':
-        add_instances(args.instance_cnt, free=args.free)
-    elif args.mode == 'run':
-        run_something()
-    elif args.mode == 'terminate':
-        terminate_all()
+    cmd_args = vars(parser.parse_args())
+    handlers = {
+        'restart': start_over,
+        'start': add_instances,
+        'run': use_worker,
+        'batch': run_batch,
+        'terminate': terminate_all
+    }
+    handlers[cmd_args['mode']](**cmd_args)

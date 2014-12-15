@@ -10,12 +10,11 @@ import theano
 import theano.tensor as T
 from vmlp import VMLP
 from data import load_data
-import datetime
-from random import randint
 import warnings
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 import config
 import argparse
+from utils import gen_log_name
 
 LOG_FILE = '{time}_{nonce}.log'.format(
     time=datetime.datetime.now().strftime("%Y_%m_%d_%H_%M_%S"),
@@ -191,6 +190,8 @@ if __name__ == '__main__':
                         help='the name of the parameter set that we want to use')
     parser.add_argument('--f', dest='file', type=str, default='data/task_data.gz',
                         help='the data file to use')
+    parser.add_argument('-o', dest='outname', type=str, default=gen_log_name(),
+                        help='name for the log file to be generated')
     args = parser.parse_args()
 
     params = config.get_config(args.param_set)

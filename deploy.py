@@ -1,10 +1,11 @@
 import boto.ec2
 from fabric.api import run, hide, execute, env, cd
-from fabric.network import disconnect_all
 from time import sleep
 import multiprocessing
 from multijob import Job, JobConsumer
 from config import all_param_set_keys
+from utils import gen_log_name
+
 
 env.key_filename = "cmu-east-key1.pem"
 
@@ -30,24 +31,6 @@ def reserve(conn, free=False, **kwargs):
                                  instance_profile_arn='arn:aws:iam::999933667566:instance-profile/Worker')
     print 'launched instance ' + reserve.instances[0].id
     return reserve.instances[0].id
-
-
-def wait_till_running(instance, wait_length, interval=3):
-    print instance.state
-    if instance.state == 'running':
-        return True
-    interval = 3
-    for i in range(0, wait_length, interval):
-        sleep(interval)
-        instance.update()
-        if instance.state == 'running':
-            return True
-    return False
-
-
-def ssh_connect(instance):
-    print 'connecting to instance {0}'.format(instance.id)
-    return instance.ip_address
 
 
 class NoInstanceException(BaseException):
@@ -97,14 +80,11 @@ def install_all():
 def run_experiment(param_set):
     with hide('output'):
         with cd('vector_edu'):
-            run('python driver.py {param_set}'.format(param_set=param_set))
-            run('aws s3 cp --region us-east-1 *.log s3://cmu-data/vectoredu/results/')
-
-
-def deploy(addr, **kwargs):
-    host_list = ['ubuntu@{0}'.format(addr)]
-    print host_list, kwargs
-    return execute(test_command, hosts=host_list, **kwargs)
+            log_name = gen_log_name()
+            run('python driver.py {param_set} -o {log_name}'.format(
+                param_set=param_set, log_name=log_name))
+            run('aws s3 cp --region us-east-1 {log_name} s3://cmu-data/vectoredu/results/'.format(
+                log_name=log_name))
 
 
 def start_over(**kwargs):
@@ -118,19 +98,18 @@ def add_instances(instance_cnt=1, conn=None, **kwargs):
     return [reserve(conn, **kwargs) for c in range(instance_cnt)]
 
 
-def use_worker(commands=[install_all, run_experiment], **kwargs):
-    addr = ssh_connect(get_active_instance(**kwargs))
-    deploy(commands, addr)
-    disconnect_all()
-
-
 def test_command(txt):
     run('echo {txt}'.format(txt=txt))
 
 
-def full_command(param_set):
+def full_command(param_set='default'):
     install_all()
     run_experiment(param_set)
+
+
+def deploy(addr, func=run_experiment, **kwargs):
+    host_list = ['ubuntu@{0}'.format(addr)]
+    return execute(func, hosts=host_list, **kwargs)
 
 
 class TempWorkers():
@@ -139,6 +118,7 @@ class TempWorkers():
 
     def __enter__(self):
         self.ids = add_instances(**self.args)
+        sleep(1)  # it could take a little time for the instances to boot
         return self.ids
 
     def __exit__(self, type, value, traceback):
@@ -146,43 +126,86 @@ class TempWorkers():
         pass
 
 
+class AWSConsumer(JobConsumer):
+    def __init__(self, job_queue, addr=None, no_install=False, kill_after_running=True, **kwargs):
+        JobConsumer.__init__(self, job_queue, **kwargs)
+        self.addr = addr
+        self.inner_func = self.func
+        self.func = self.wrapper
+        self.no_install = no_install
+        self.kill_after_running = kill_after_running
+
+    def wrapper(self, **kwargs):
+        self.inner_func(addr=self.addr, **kwargs)
+
+    def run(self):
+        if not self.no_install:
+            deploy(self.addr, func=install_all)
+        JobConsumer.run(self)
+
+    def shutdown(self):
+        if self.kill_after_running:
+            terminate_all(ids=[self.id])
+        JobConsumer.shutdown(self)
+
+
+def run_on_one(**kwargs):
+    conn = connect()
+    ids = [i.id for i in conn.get_only_instances() if i.state != 'terminated']
+    if not ids:
+        raise Exception("no instances were started")
+    use_worker(conn=conn, ids=ids[:1], **kwargs)
+
+
+def use_worker(param_set, conn, ids, no_install=False, **kwargs):
+    job_queue = multiprocessing.JoinableQueue()
+
+    # setup a jobConsumer for every worker
+    def gen_work(addr):
+        def _work(*args):
+            deploy([test_command], addr)
+        return _work
+    consumers = [AWSConsumer(job_queue,
+                             func=deploy,
+                             addr=get_active_instance(ids=[id], conn=conn, **kwargs).ip_address,
+                             no_install=no_install,
+                             id=id)
+                 for id in ids]
+    for c in consumers:
+        c.start()
+
+    # setup a bunch of jobs
+    jobs = [Job({'param_set': param_set}, id=str(i)) for i in range(15)]
+    for j in jobs:
+        job_queue.put(j)
+    for i in range(len(consumers)):
+        job_queue.put(None)
+
+    job_queue.join()
+    print('finished')
+
+
 def run_batch(param_set, **kwargs):
     conn = connect()
     with TempWorkers(conn=conn, **kwargs) as ids:
-        job_queue = multiprocessing.JoinableQueue()
-
-        # setup a jobConsumer for every worker
-        def gen_work(addr):
-            def _work(*args):
-                deploy([test_command], addr)
-            return _work
-        consumers = [JobConsumer(job_queue,
-                                 deploy,
-                                 params={'addr': get_active_instance(ids=[id], conn=conn, **kwargs).ip_address},
-                                 id=id)
-                     for id in ids]
-        for c in consumers:
-            c.start()
-
-        # setup a bunch of jobs
-        jobs = [Job({'param_set': param_set}, id=str(i)) for i in range(15)]
-        for j in jobs:
-            job_queue.put(j)
-        for i in range(len(consumers)):
-            job_queue.put(None)
-
-        job_queue.join()
-        print('finished')
+        use_worker(param_set, conn, ids, **kwargs)
 
 
 if __name__ == "__main__":
-    import argparse
+    handlers = {
+        'restart': start_over,
+        'start': add_instances,
+        'run': run_on_one,
+        'batch': run_batch,
+        'terminate': terminate_all
+    }
 
+    import argparse
     parser = argparse.ArgumentParser(description='Deploy some workers to do some ML')
     parser.add_argument('mode', metavar="mode", type=str, default='exp',
-                        choices=['restart', 'start', 'run', 'batch', 'terminate'],
-                        help='choices are start/restart/run/terminate')
-    parser.add_argument('param_set', type=str, default=None,
+                        choices=handlers.keys(),
+                        help='choices are {modes}'.format(modes='/'.join(handlers.keys())))
+    parser.add_argument('-p', dest='param_set', type=str, default=None,
                         choices=all_param_set_keys,
                         help='the name of the parameter set to use')
     parser.add_argument('--wait', dest='wait', default=600, type=int,
@@ -191,15 +214,11 @@ if __name__ == "__main__":
                         type=int, help='how many instances')
     parser.add_argument('--free', dest='free', action='store_true',
                         help='[true] to start free micro instance')
+    parser.add_argument('--ni', dest='no_install', action='store_true',
+                        help='when running, do not do install phase')
 
     cmd_args = vars(parser.parse_args())
-    if cmd_args['mode'] == 'batch' and not cmd_args['param_set']:
+    # if we're running an experiment, we need the parameter set
+    if cmd_args['mode'] in ('batch', 'run') and not cmd_args['param_set']:
         raise Exception('batch mode requires a parameter set')
-    handlers = {
-        'restart': start_over,
-        'start': add_instances,
-        'run': use_worker,
-        'batch': run_batch,
-        'terminate': terminate_all
-    }
     handlers[cmd_args['mode']](**cmd_args)

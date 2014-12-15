@@ -20,26 +20,24 @@ class _PopJob():
 
 
 class JobConsumer(multiprocessing.Process):
-    def __init__(self, job_queue, func, params=None, id='[no_name]'):
+    def __init__(self, job_queue, func, id='[no_name]'):
         multiprocessing.Process.__init__(self)
         self.job_queue = job_queue
         self.id = id
         self.func = func
-        self.params = params or {}
-        print self.params, "PARAMS"
 
     def run(self):
         while True:
             with _PopJob(self.job_queue) as job:
                 if job is None:
                     break
-                Log('ec2 {id} is doing task {job.id}'.format(
+                Log('consumer {id} is doing task {job.id}'.format(
                     id=self.id, job=job))
-                self.func(**dict(self.params, **job.params))
+                self.func(**job.params)
         self.shutdown()
 
     def shutdown(self):
-        Log('ec2 {id} is shutting down'.format(id=self.id))
+        Log('consumer {id} is shutting down'.format(id=self.id))
 
 
 class Job():

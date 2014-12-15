@@ -14,3 +14,4 @@ for key in keys:
     params = lines[0]
     results = lines[-2]
     acc, best_iter, test_acc, all_iter = eval(results)
+    print key.key, acc

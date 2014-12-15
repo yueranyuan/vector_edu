@@ -16,10 +16,6 @@ import config
 import argparse
 from utils import gen_log_name
 
-LOG_FILE = '{time}_{nonce}.log'.format(
-    time=datetime.datetime.now().strftime("%Y_%m_%d_%H_%M_%S"),
-    nonce=str(randint(0, 99999)))
-
 
 def log(txt):
     with open(LOG_FILE, 'a+') as f:
@@ -195,6 +191,7 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     params = config.get_config(args.param_set)
+    LOG_FILE = args.outname
     log(test_mlp(dataset=args.file, **params))
     print "finished"
     if sys.platform.startswith('win'):

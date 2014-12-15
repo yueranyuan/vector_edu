@@ -54,7 +54,7 @@ ALL_PARAMS['t1v1'] = {
     'dropout_p': GenVar(0, 0.4)
 }
 ALL_PARAMS['tiny'] = {
-    'n_epochs': 2
+    'n_epochs': GenVar(2)
 }
 
 all_param_set_keys = ALL_PARAMS.keys()

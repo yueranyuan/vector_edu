@@ -5,7 +5,7 @@ from mlp import MLP
 
 
 class VectorLayer(object):
-    def __init__(self, rng, index, batch_size, full_input, n_skills=4600, vector_length=30):
+    def __init__(self, rng, indices, full_input, n_skills=4600, vector_length=30):
         self.skills = theano.shared(numpy.asarray(rng.uniform(low=0, high=1,
                                                               size=(n_skills, vector_length)),
                                                   dtype=theano.config.floatX),
@@ -13,13 +13,15 @@ class VectorLayer(object):
         self.m = theano.shared(reindex(full_input.get_value(borrow=True),
                                        self.skills.get_value(borrow=True)),
                                borrow=True)
-        x = full_input[index * batch_size:(index + 1) * batch_size]
+        self.indices = indices
+        x = full_input[self.indices]
         skill_i = T.cast(x, 'int32')
         self.output = self.skills[skill_i[:, 0]]
 
-    def get_updates(self, cost, index, batch_size, learning_rate):
+    def get_updates(self, cost, learning_rate):
         gx = T.grad(cost, self.output)
-        gskills = T.dot(self.m[:, index * batch_size: (index + 1) * batch_size], gx)
+        width = self.m.get_value(borrow=True).shape[1]
+        gskills = T.dot(self.m[self.indices, 0:width].T, gx)
         return [(self.skills, self.skills - learning_rate * gskills)]
 
 
@@ -56,4 +58,5 @@ def reindex(skills, skillVecs, y=None):
         x = numpy.array(skills)
         i = numpy.where(x == si)[0]
         y[si][i] = 1
+    y = y.T
     return y

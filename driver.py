@@ -15,7 +15,7 @@ import theano.tensor as T
 from mlp import MLP
 from vmlp import VectorLayer
 import config
-from utils import gen_log_name
+from utils import gen_log_name, make_shared
 
 
 def log(txt, also_print=False):
@@ -36,20 +36,13 @@ def test_mlp(learning_rate=0.01, L1_reg=0.00, L2_reg=0.0001, n_epochs=1000,
     ##############
     print '... loading data'
 
-    def make_shared(d, to_int=False):
-        sd = theano.shared(numpy.asarray(d, dtype=theano.config.floatX), borrow=True)
-        if to_int:
-            return T.cast(sd, 'int32')
-        return sd
     with gzip.open(dataset_name, 'rb') as f:
         dataset = [make_shared(d) for d in cPickle.load(f)]
     skill_x, subject_x, correct_y = dataset
     correct_y = T.cast(correct_y, 'int32')
 
-    train_set_x, train_set_y = skill_x, correct_y
-    valid_set_x, valid_set_y = skill_x, correct_y
-    n_train_batches = train_set_x.get_value(borrow=True).shape[0] / batch_size
-    n_valid_batches = valid_set_x.get_value(borrow=True).shape[0] / batch_size
+    n_train_batches = correct_y.get_value(borrow=True).shape[0] / batch_size
+    n_valid_batches = correct_y.get_value(borrow=True).shape[0] / batch_size
 
     ###############
     # BUILD MODEL #
@@ -62,18 +55,17 @@ def test_mlp(learning_rate=0.01, L1_reg=0.00, L2_reg=0.0001, n_epochs=1000,
     y = T.ivector('y')
     rng = numpy.random.RandomState(1234)
     skill_vector_len = 50
+    indices = index + make_shared(range(batch_size), True)
     skill_vectors = VectorLayer(rng=rng,
                                 full_input=skill_x,
                                 n_skills=4600,
-                                index=index,
-                                batch_size=batch_size,
+                                indices=indices,
                                 vector_length=skill_vector_len)
     subject_vector_len = 50
     subject_vectors = VectorLayer(rng=rng,
                                   full_input=subject_x,
                                   n_skills=4600,
-                                  index=index,
-                                  batch_size=batch_size,
+                                  indices=indices,
                                   vector_length=subject_vector_len)
 
     classifier = MLP(rng=rng,
@@ -88,16 +80,16 @@ def test_mlp(learning_rate=0.01, L1_reg=0.00, L2_reg=0.0001, n_epochs=1000,
         + L2_reg * classifier.L2_sqr
     )
 
-    def gen_givens(data_x, data_y):
+    def gen_givens(data_x=None, data_y=None):
         return {
-            y: data_y[index * batch_size:(index + 1) * batch_size],
+            y: data_y[indices],
             classifier.dropout: dropout_p
         }
 
     validate_model = theano.function(
         inputs=[index],
         outputs=[classifier.errors(y)],
-        givens=gen_givens(valid_set_x, valid_set_y),
+        givens=gen_givens(data_y=correct_y),
         on_unused_input="ignore"
     )
 
@@ -106,12 +98,12 @@ def test_mlp(learning_rate=0.01, L1_reg=0.00, L2_reg=0.0001, n_epochs=1000,
         (param, param - learning_rate * gparam)
         for param, gparam in zip(classifier.params, gparams)
     ]
-    updates = updates + skill_vectors.get_updates(cost, index, batch_size, learning_rate)
+    updates = updates + skill_vectors.get_updates(cost, learning_rate)
     train_model = theano.function(
         inputs=[index],
         outputs=[cost],
         updates=updates,
-        givens=gen_givens(train_set_x, train_set_y),
+        givens=gen_givens(data_x=skill_x, data_y=correct_y),
         on_unused_input="ignore"
     )
 

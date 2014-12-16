@@ -8,6 +8,7 @@ from utils import gen_log_name
 
 
 env.key_filename = "cmu-east-key1.pem"
+env.connection_attempts = 5
 
 
 def connect(region="us-east-1"):

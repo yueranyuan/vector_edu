@@ -21,7 +21,7 @@ class VectorLayer(object):
     def get_updates(self, cost, learning_rate):
         gx = T.grad(cost, self.output)
         width = self.m.get_value(borrow=True).shape[1]
-        gskills = T.dot(self.m[self.indices, 0:width].T, gx)
+        gskills = T.dot(self.m[self.indices, 0:width:1].T, gx)
         return [(self.skills, self.skills - learning_rate * gskills)]
 
 

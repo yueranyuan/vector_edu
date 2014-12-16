@@ -1,4 +1,3 @@
-import os
 import sys
 import time
 import inspect
@@ -25,29 +24,23 @@ def log(txt, also_print=False):
         f.write('{0}\n'.format(txt))
 
 
-def test_mlp(learning_rate=0.01, L1_reg=0.00, L2_reg=0.0001, n_epochs=1000,
-             dataset_name='mnist.pkl.gz', batch_size=30, n_hidden=500, dropout_p=0.2):
-    args, _, _, _ = inspect.getargvalues(inspect.currentframe())
-    arg_summary = ', '.join(['{0}={1}'.format(arg, eval(arg)) for arg in args])
-    log(arg_summary)
-
-    ##############
-    # LOAD DATA  #
-    ##############
-    print '... loading data'
+def prepare_data(dataset_name, batch_size):
+    log('... loading data', True)
 
     with gzip.open(dataset_name, 'rb') as f:
         dataset = [make_shared(d) for d in cPickle.load(f)]
     skill_x, subject_x, correct_y = dataset
     correct_y = T.cast(correct_y, 'int32')
 
-    n_train_batches = correct_y.get_value(borrow=True).shape[0] / batch_size
-    n_valid_batches = correct_y.get_value(borrow=True).shape[0] / batch_size
+    n_train_batches = skill_x.get_value(borrow=True).shape[0] / batch_size
+    n_valid_batches = skill_x.get_value(borrow=True).shape[0] / batch_size
+    return (skill_x, subject_x, correct_y), (n_train_batches, n_valid_batches)
 
-    ###############
-    # BUILD MODEL #
-    ###############
+
+def build_model(prepared_data, batch_size, L1_reg, L2_reg, n_hidden, dropout_p,
+                learning_rate):
     log('... building the model', True)
+    skill_x, subject_x, correct_y = prepared_data
 
     # allocate symbolic variables for the data
     index = T.lscalar()  # index to a [mini]batch
@@ -86,7 +79,7 @@ def test_mlp(learning_rate=0.01, L1_reg=0.00, L2_reg=0.0001, n_epochs=1000,
             classifier.dropout: dropout_p
         }
 
-    validate_model = theano.function(
+    f_valid = theano.function(
         inputs=[index],
         outputs=[classifier.errors(y)],
         givens=gen_givens(data_y=correct_y),
@@ -99,71 +92,88 @@ def test_mlp(learning_rate=0.01, L1_reg=0.00, L2_reg=0.0001, n_epochs=1000,
         for param, gparam in zip(classifier.params, gparams)
     ]
     updates = updates + skill_vectors.get_updates(cost, learning_rate)
-    train_model = theano.function(
+    f_train = theano.function(
         inputs=[index],
         outputs=[cost],
         updates=updates,
         givens=gen_givens(data_x=skill_x, data_y=correct_y),
         on_unused_input="ignore"
     )
+    return f_train, f_valid
 
-    ###############
-    # TRAIN MODEL #
-    ###############
+
+def train_model(train_model, validate_model, n_train_batches, n_valid_batches,
+                n_epochs):
     log('... training', True)
 
     patience = 20000  # look as this many examples regardless
     patience_increase = 2
     improvement_threshold = 0.998
     validation_frequency = min(n_train_batches, patience / 2)
-
     best_validation_loss = numpy.inf
     best_iter = 0
-    test_score = 0.
+
+    try:
+        for epoch in range(n_epochs):
+            for minibatch_index in xrange(n_train_batches):
+                train_model(minibatch_index)
+                iter = (epoch) * n_train_batches + minibatch_index
+
+                if (iter + 1) % validation_frequency == 0:
+                    validation_losses = [validate_model(i) for i
+                                         in xrange(n_valid_batches)]
+                    this_validation_loss = numpy.mean(validation_losses)
+
+                    log(
+                        'epoch %i, minibatch %i/%i, validation error %f %%' %
+                        (epoch,
+                            minibatch_index + 1,
+                            n_train_batches,
+                            this_validation_loss * 100.)
+                    )
+
+                    if this_validation_loss < best_validation_loss:
+                        if (this_validation_loss <
+                                best_validation_loss * improvement_threshold):
+                            patience = max(patience, iter * patience_increase)
+
+                        best_validation_loss = this_validation_loss
+                        best_iter = iter
+
+                if patience <= iter:
+                    raise StopIteration('out of patience for training')
+    except StopIteration:
+        pass
+    return best_validation_loss, best_iter
+
+
+def test_mlp(learning_rate=0.01, L1_reg=0.00, L2_reg=0.0001, n_epochs=1000,
+             dataset_name='mnist.pkl.gz', batch_size=30, n_hidden=500, dropout_p=0.2):
+    args, _, _, _ = inspect.getargvalues(inspect.currentframe())
+    arg_summary = ', '.join(['{0}={1}'.format(arg, eval(arg)) for arg in args])
+    log(arg_summary)
+
+    prepared_data, (n_train_batches, n_valid_batches) = (
+        prepare_data(dataset_name, batch_size=batch_size))
+
+    f_train, f_validate = (
+        build_model(prepared_data, batch_size=batch_size, L1_reg=L1_reg,
+                    L2_reg=L2_reg, n_hidden=n_hidden, dropout_p=dropout_p,
+                    learning_rate=learning_rate))
+
     start_time = time.clock()
-
-    epoch = 0
-    done_looping = False
-
-    while (epoch < n_epochs) and (not done_looping):
-        epoch = epoch + 1
-        for minibatch_index in xrange(n_train_batches):
-            minibatch_avg_cost = train_model(minibatch_index)
-            iter = (epoch - 1) * n_train_batches + minibatch_index
-
-            if (iter + 1) % validation_frequency == 0:
-                validation_losses = [validate_model(i) for i
-                                     in xrange(n_valid_batches)]
-                this_validation_loss = numpy.mean(validation_losses)
-
-                log(
-                    'epoch %i, minibatch %i/%i, validation error %f %%' %
-                    (epoch,
-                        minibatch_index + 1,
-                        n_train_batches,
-                        this_validation_loss * 100.)
-                )
-
-                if this_validation_loss < best_validation_loss:
-                    if (this_validation_loss <
-                            best_validation_loss * improvement_threshold):
-                        patience = max(patience, iter * patience_increase)
-
-                    best_validation_loss = this_validation_loss
-                    best_iter = iter
-
-            if patience <= iter:
-                done_looping = True
-                break
-
+    best_validation_loss, best_iter = (
+        train_model(f_train, f_validate, n_train_batches, n_valid_batches,
+                    n_epochs=n_epochs))
     end_time = time.clock()
+    training_time = (end_time - start_time) / 60.
+
     log(('Optimization complete. Best validation score of %f %% '
          'obtained at iteration %i, with test performance %f %%') %
-        (best_validation_loss * 100., best_iter + 1, test_score * 100.), True)
-    print >> sys.stderr, ('The code for file ' +
-                          os.path.split(__file__)[1] +
-                          ' ran for %.2fm' % ((end_time - start_time) / 60.))
-    return (best_validation_loss * 100., best_iter + 1, test_score * 100., iter)
+        (best_validation_loss * 100., best_iter + 1, 0.), True)
+    log('Code ran for ran for %.2fm' % (training_time))
+    return (best_validation_loss * 100., best_iter + 1, iter, training_time)
+
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="run a theano experiment on this computer")

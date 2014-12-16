@@ -26,7 +26,7 @@ def log(txt, also_print=False):
 
 
 def test_mlp(learning_rate=0.01, L1_reg=0.00, L2_reg=0.0001, n_epochs=1000,
-             dataset_name='mnist.pkl.gz', batch_size=30, n_hidden=500, dropout_p=0.0):
+             dataset_name='mnist.pkl.gz', batch_size=30, n_hidden=500, dropout_p=0.2):
     args, _, _, _ = inspect.getargvalues(inspect.currentframe())
     arg_summary = ', '.join(['{0}={1}'.format(arg, eval(arg)) for arg in args])
     log(arg_summary)
@@ -35,9 +35,14 @@ def test_mlp(learning_rate=0.01, L1_reg=0.00, L2_reg=0.0001, n_epochs=1000,
     # LOAD DATA  #
     ##############
     print '... loading data'
+
+    def make_shared(d, to_int=False):
+        sd = theano.shared(numpy.asarray(d, dtype=theano.config.floatX), borrow=True)
+        if to_int:
+            return T.cast(sd, 'int32')
+        return sd
     with gzip.open(dataset_name, 'rb') as f:
-        dataset = [theano.shared(numpy.asarray(d, dtype=theano.config.floatX), borrow=True)
-                   for d in cPickle.load(f)]
+        dataset = [make_shared(d) for d in cPickle.load(f)]
     skill_x, subject_x, correct_y = dataset
     correct_y = T.cast(correct_y, 'int32')
 
@@ -56,20 +61,26 @@ def test_mlp(learning_rate=0.01, L1_reg=0.00, L2_reg=0.0001, n_epochs=1000,
     # x = T.matrix('x')  # the data is presented as rasterized images
     y = T.ivector('y')
     rng = numpy.random.RandomState(1234)
-    vector_length = 50
-    vectors = VectorLayer(rng=rng,
-                          full_input=train_set_x,
-                          n_skills=4600,
-                          index=index,
-                          batch_size=batch_size,
-                          vector_length=50)
+    skill_vector_len = 50
+    skill_vectors = VectorLayer(rng=rng,
+                                full_input=skill_x,
+                                n_skills=4600,
+                                index=index,
+                                batch_size=batch_size,
+                                vector_length=skill_vector_len)
+    subject_vector_len = 50
+    subject_vectors = VectorLayer(rng=rng,
+                                  full_input=subject_x,
+                                  n_skills=4600,
+                                  index=index,
+                                  batch_size=batch_size,
+                                  vector_length=subject_vector_len)
 
-    classifier = MLP(
-        rng=rng,
-        n_in=vector_length,
-        input=vectors.output,
-        n_hidden=n_hidden,
-        n_out=3)
+    classifier = MLP(rng=rng,
+                     n_in=skill_vector_len + subject_vector_len,
+                     input=T.concatenate([skill_vectors.output, subject_vectors.output], axis=1),
+                     n_hidden=n_hidden,
+                     n_out=3)
 
     cost = (
         classifier.negative_log_likelihood(y)
@@ -95,8 +106,7 @@ def test_mlp(learning_rate=0.01, L1_reg=0.00, L2_reg=0.0001, n_epochs=1000,
         (param, param - learning_rate * gparam)
         for param, gparam in zip(classifier.params, gparams)
     ]
-    updates = updates + vectors.get_updates(cost, index, batch_size,
-                                            learning_rate)
+    updates = updates + skill_vectors.get_updates(cost, index, batch_size, learning_rate)
     train_model = theano.function(
         inputs=[index],
         outputs=[cost],

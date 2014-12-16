@@ -49,7 +49,6 @@ ALL_PARAMS['t1v1'] = {
     'learning_rate': GenVar(0.005, 0.02, scale=LOG_SCALE),
     'L1_reg': GenVar(0.000, 0.0001),
     'L2_reg': GenVar(0.000, 0.0002),
-    'batch_size': GenVar(20, 40, type=int),
     'n_hidden': GenVar(300, 900, type=int),
     'dropout_p': GenVar(0, 0.4)
 }

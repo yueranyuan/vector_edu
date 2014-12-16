@@ -5,16 +5,17 @@ from mlp import MLP
 
 
 class VectorLayer(object):
-    def __init__(self, rng, input, full_input, n_skills=4600, vector_length=30):
+    def __init__(self, rng, index, batch_size, full_input, n_skills=4600, vector_length=30):
         self.skills = theano.shared(numpy.asarray(rng.uniform(low=0, high=1,
                                                               size=(n_skills, vector_length)),
                                                   dtype=theano.config.floatX),
                                     borrow=True)
-        skill_i = T.cast(input, 'int32')
-        self.output = self.skills[skill_i[:, 0]]
         self.m = theano.shared(reindex(full_input.get_value(borrow=True),
                                        self.skills.get_value(borrow=True)),
                                borrow=True)
+        x = full_input[index * batch_size:(index + 1) * batch_size]
+        skill_i = T.cast(x, 'int32')
+        self.output = self.skills[skill_i[:, 0]]
 
     def get_updates(self, cost, index, batch_size, learning_rate):
         gx = T.grad(cost, self.output)

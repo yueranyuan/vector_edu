@@ -50,14 +50,14 @@ class Job():
 
 
 def _slow_print(num, consumer='[some consumer]'):
-    sleep(random() * 2)
+    sleep(20)
     Log('doing task {num} on {consumer}'.format(num=num, consumer=consumer))
 
 if __name__ == '__main__':
+    # should return in a minute exactly
     job_queue = multiprocessing.JoinableQueue()
 
-    consumers = [JobConsumer(job_queue, _slow_print,
-                             params={'consumer': str(i)}, id=str(i))
+    consumers = [JobConsumer(job_queue, _slow_print, id=str(i))
                  for i in range(5)]
     for c in consumers:
         c.start()

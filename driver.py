@@ -2,61 +2,74 @@ import os
 import sys
 import time
 import inspect
-
-import numpy
-
-#from sklearn.metrics import roc_curve, auc
-import theano
-import theano.tensor as T
-from vmlp import VMLP
-from data import load_data
+import cPickle
+import gzip
+import argparse
 import warnings
 warnings.filterwarnings("ignore", category=DeprecationWarning)
+
+import numpy
+import theano
+import theano.tensor as T
+
+from mlp import MLP
+from vmlp import VectorLayer
 import config
-import argparse
 from utils import gen_log_name
 
 
-def log(txt):
+def log(txt, also_print=False):
+    if also_print:
+        print txt
     with open(LOG_FILE, 'a+') as f:
         f.write('{0}\n'.format(txt))
 
 
 def test_mlp(learning_rate=0.01, L1_reg=0.00, L2_reg=0.0001, n_epochs=1000,
-             dataset='mnist.pkl.gz', batch_size=30, n_hidden=500, dropout_p=0.0):
+             dataset_name='mnist.pkl.gz', batch_size=30, n_hidden=500, dropout_p=0.0):
     args, _, _, _ = inspect.getargvalues(inspect.currentframe())
     arg_summary = ', '.join(['{0}={1}'.format(arg, eval(arg)) for arg in args])
     log(arg_summary)
-    datasets = load_data(dataset)
 
-    train_set_x, train_set_y = datasets[0]
-    valid_set_x, valid_set_y = datasets[1]
-    test_set_x, test_set_y = datasets[2]
+    ##############
+    # LOAD DATA  #
+    ##############
+    print '... loading data'
+    with gzip.open(dataset_name, 'rb') as f:
+        dataset = [theano.shared(numpy.asarray(d, dtype=theano.config.floatX), borrow=True)
+                   for d in cPickle.load(f)]
+    skill_x, subject_x, correct_y = dataset
+    correct_y = T.cast(correct_y, 'int32')
 
-    # compute number of minibatches for training, validation and testing
+    train_set_x, train_set_y = skill_x, correct_y
+    valid_set_x, valid_set_y = skill_x, correct_y
     n_train_batches = train_set_x.get_value(borrow=True).shape[0] / batch_size
     n_valid_batches = valid_set_x.get_value(borrow=True).shape[0] / batch_size
-    n_test_batches = test_set_x.get_value(borrow=True).shape[0] / batch_size
 
-    ######################
-    # BUILD ACTUAL MODEL #
-    ######################
-    log('... building the model')
+    ###############
+    # BUILD MODEL #
+    ###############
+    log('... building the model', True)
 
     # allocate symbolic variables for the data
     index = T.lscalar()  # index to a [mini]batch
-    x = T.matrix('x')  # the data is presented as rasterized images
+    # x = T.matrix('x')  # the data is presented as rasterized images
     y = T.ivector('y')
     rng = numpy.random.RandomState(1234)
-    classifier = VMLP(
+    vector_length = 50
+    vectors = VectorLayer(rng=rng,
+                          full_input=train_set_x,
+                          n_skills=4600,
+                          index=index,
+                          batch_size=batch_size,
+                          vector_length=50)
+
+    classifier = MLP(
         rng=rng,
-        input=x,
-        n_skills=4600,
-        vector_length=50,
+        n_in=vector_length,
+        input=vectors.output,
         n_hidden=n_hidden,
-        n_out=3,
-        full_input=train_set_x
-    )
+        n_out=3)
 
     cost = (
         classifier.negative_log_likelihood(y)
@@ -64,25 +77,17 @@ def test_mlp(learning_rate=0.01, L1_reg=0.00, L2_reg=0.0001, n_epochs=1000,
         + L2_reg * classifier.L2_sqr
     )
 
-    test_model = theano.function(
-        inputs=[index],
-        outputs=[classifier.errors(y), classifier.output],
-        givens={
-            x: test_set_x[index * batch_size:(index + 1) * batch_size],
-            y: test_set_y[index * batch_size:(index + 1) * batch_size],
+    def gen_givens(data_x, data_y):
+        return {
+            y: data_y[index * batch_size:(index + 1) * batch_size],
             classifier.dropout: dropout_p
-        },
-        mode='DebugMode'
-    )
+        }
 
     validate_model = theano.function(
         inputs=[index],
         outputs=[classifier.errors(y)],
-        givens={
-            x: valid_set_x[index * batch_size:(index + 1) * batch_size],
-            y: valid_set_y[index * batch_size:(index + 1) * batch_size],
-            classifier.dropout: dropout_p
-        }
+        givens=gen_givens(valid_set_x, valid_set_y),
+        on_unused_input="ignore"
     )
 
     gparams = [T.grad(cost, param) for param in classifier.params]
@@ -90,24 +95,20 @@ def test_mlp(learning_rate=0.01, L1_reg=0.00, L2_reg=0.0001, n_epochs=1000,
         (param, param - learning_rate * gparam)
         for param, gparam in zip(classifier.params, gparams)
     ]
-    updates = updates + classifier.get_updates(cost, index, batch_size,
-                                               learning_rate)
+    updates = updates + vectors.get_updates(cost, index, batch_size,
+                                            learning_rate)
     train_model = theano.function(
         inputs=[index],
         outputs=[cost],
         updates=updates,
-        givens={
-            x: train_set_x[index * batch_size: (index + 1) * batch_size],
-            y: train_set_y[index * batch_size: (index + 1) * batch_size],
-            classifier.dropout: dropout_p
-        },
+        givens=gen_givens(train_set_x, train_set_y),
         on_unused_input="ignore"
     )
 
     ###############
     # TRAIN MODEL #
     ###############
-    log('... training')
+    log('... training', True)
 
     patience = 20000  # look as this many examples regardless
     patience_increase = 2
@@ -121,8 +122,6 @@ def test_mlp(learning_rate=0.01, L1_reg=0.00, L2_reg=0.0001, n_epochs=1000,
 
     epoch = 0
     done_looping = False
-
-    temp_auc = 0
 
     while (epoch < n_epochs) and (not done_looping):
         epoch = epoch + 1
@@ -151,21 +150,6 @@ def test_mlp(learning_rate=0.01, L1_reg=0.00, L2_reg=0.0001, n_epochs=1000,
                     best_validation_loss = this_validation_loss
                     best_iter = iter
 
-                    # test it on the test set
-                    # test_losses, preds = zip(*[test_model(i) for i
-                    #                    in xrange(n_test_batches)])
-                    # test_score = numpy.mean(test_losses)
-                    # preds = numpy.array(preds).flatten()
-                    # print len(preds), preds
-                    # fpr, tpr, thresholds = roc_curve(
-                    # test_set_y.owner.inputs[0].get_value(borrow=True)[:len(preds)],
-                    #                                 preds, pos_label=2)
-                    # temp_auc = auc(fpr, tpr)
-                    # print(('     epoch %i, minibatch %i/%i, test error of '
-                    #       'best model %f %%') %
-                    #      (epoch, minibatch_index + 1, n_train_batches,
-                    #       test_score * 100.))
-
             if patience <= iter:
                 done_looping = True
                 break
@@ -173,7 +157,7 @@ def test_mlp(learning_rate=0.01, L1_reg=0.00, L2_reg=0.0001, n_epochs=1000,
     end_time = time.clock()
     log(('Optimization complete. Best validation score of %f %% '
          'obtained at iteration %i, with test performance %f %%') %
-        (best_validation_loss * 100., best_iter + 1, test_score * 100.))
+        (best_validation_loss * 100., best_iter + 1, test_score * 100.), True)
     print >> sys.stderr, ('The code for file ' +
                           os.path.split(__file__)[1] +
                           ' ran for %.2fm' % ((end_time - start_time) / 60.))
@@ -184,7 +168,7 @@ if __name__ == '__main__':
     parser.add_argument('param_set', type=str,
                         choices=config.all_param_set_keys,
                         help='the name of the parameter set that we want to use')
-    parser.add_argument('--f', dest='file', type=str, default='data/task_data.gz',
+    parser.add_argument('--f', dest='file', type=str, default='data/task_data2.gz',
                         help='the data file to use')
     parser.add_argument('-o', dest='outname', type=str, default=gen_log_name(),
                         help='name for the log file to be generated')
@@ -192,7 +176,7 @@ if __name__ == '__main__':
 
     params = config.get_config(args.param_set)
     LOG_FILE = args.outname
-    log(test_mlp(dataset=args.file, **params))
+    log(test_mlp(dataset_name=args.file, **params))
     print "finished"
     if sys.platform.startswith('win'):
         from win_utils import winalert

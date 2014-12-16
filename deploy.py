@@ -33,6 +33,11 @@ def reserve(conn, free=False, **kwargs):
     return reserve.instances[0].id
 
 
+def add_instances(instance_cnt=1, conn=None, **kwargs):
+    conn = conn or connect()
+    return [reserve(conn, **kwargs) for c in range(instance_cnt)]
+
+
 class NoInstanceException(BaseException):
     pass
 
@@ -87,26 +92,6 @@ def run_experiment(param_set):
                 log_name=log_name))
 
 
-def start_over(**kwargs):
-    conn = connect()
-    terminate_all(conn)  # clear all old reservations
-    reserve(conn, **kwargs)
-
-
-def add_instances(instance_cnt=1, conn=None, **kwargs):
-    conn = conn or connect()
-    return [reserve(conn, **kwargs) for c in range(instance_cnt)]
-
-
-def test_command(txt):
-    run('echo {txt}'.format(txt=txt))
-
-
-def full_command(param_set='default'):
-    install_all()
-    run_experiment(param_set)
-
-
 def deploy(addr, func=run_experiment, **kwargs):
     host_list = ['ubuntu@{0}'.format(addr)]
     return execute(func, hosts=host_list, **kwargs)
@@ -118,7 +103,9 @@ class TempWorkers():
 
     def __enter__(self):
         self.ids = add_instances(**self.args)
-        sleep(1)  # it could take a little time for the instances to boot
+        # wait to launch. if the server doesn't know about the instance yet
+        # it might cause boto to crash
+        sleep(5)
         return self.ids
 
     def __exit__(self, type, value, traceback):
@@ -157,14 +144,10 @@ def run_on_one(**kwargs):
     use_worker(conn=conn, ids=ids[:1], **kwargs)
 
 
-def use_worker(param_set, conn, ids, no_install=False, **kwargs):
+def use_worker(param_set, conn, ids, no_install=False, num_jobs=1, **kwargs):
     job_queue = multiprocessing.JoinableQueue()
 
-    # setup a jobConsumer for every worker
-    def gen_work(addr):
-        def _work(*args):
-            deploy([test_command], addr)
-        return _work
+    # setup a AWSConsumer for every worker
     consumers = [AWSConsumer(job_queue,
                              func=deploy,
                              addr=get_active_instance(ids=[id], conn=conn, **kwargs).ip_address,
@@ -175,7 +158,7 @@ def use_worker(param_set, conn, ids, no_install=False, **kwargs):
         c.start()
 
     # setup a bunch of jobs
-    jobs = [Job({'param_set': param_set}, id=str(i)) for i in range(15)]
+    jobs = [Job({'param_set': param_set}, id=str(i)) for i in range(num_jobs)]
     for j in jobs:
         job_queue.put(j)
     for i in range(len(consumers)):
@@ -193,7 +176,6 @@ def run_batch(param_set, **kwargs):
 
 if __name__ == "__main__":
     handlers = {
-        'restart': start_over,
         'start': add_instances,
         'run': run_on_one,
         'batch': run_batch,
@@ -216,6 +198,8 @@ if __name__ == "__main__":
                         help='[true] to start free micro instance')
     parser.add_argument('--ni', dest='no_install', action='store_true',
                         help='when running, do not do install phase')
+    parser.add_argument('-x', dest='num_jobs', type=int, default=1,
+                        help='how many experiments to run')
 
     cmd_args = vars(parser.parse_args())
     # if we're running an experiment, we need the parameter set

@@ -1,5 +1,5 @@
 import datetime
-from random import randint
+from random import randint, sample
 import theano
 import theano.tensor as T
 import numpy
@@ -18,3 +18,12 @@ def make_shared(d, to_int=False):
     if to_int:
         return T.cast(sd, 'int32')
     return sd
+
+
+def random_unique_subset(v, percentage=.8):
+    u_v = numpy.unique(v)
+    s_v = sample(u_v, int((1 - percentage) * len(u_v)))
+    return sum((v == s for s in s_v))
+
+if __name__ == '__main__':
+    print random_unique_subset(numpy.asarray([1, 2, 3, 3, 2, 1]), percentage=.6)

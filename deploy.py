@@ -26,7 +26,7 @@ def terminate_all(ids=None, conn=None, **kwargs):
 
 def reserve(conn, free=False, **kwargs):
     print 'launching instance'
-    size = 't2.micro' if free else 't2.medium'
+    size = 't2.micro' if free else 'm3.large'
     reserve = conn.run_instances('ami-9eaa1cf6', key_name='cmu-east-key1',
                                  instance_type=size, security_groups=['Aaron-CMU-East'],
                                  instance_profile_arn='arn:aws:iam::999933667566:instance-profile/Worker')

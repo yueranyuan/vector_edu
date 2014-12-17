@@ -118,7 +118,7 @@ def train_model(train_model, validate_model,
     n_train_batches = get_n_batches(train_idx)
     n_valid_batches = get_n_batches(valid_idx)
 
-    patience = 20000  # look as this many examples regardless
+    patience = 100000  # look as this many examples regardless
     patience_increase = 2
     improvement_threshold = 0.998
     validation_frequency = min(n_train_batches, patience / 2)

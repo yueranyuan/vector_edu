@@ -1,6 +1,6 @@
 import multiprocessing
 from time import sleep
-from random import random
+import traceback
 
 
 def Log(txt):
@@ -27,14 +27,19 @@ class JobConsumer(multiprocessing.Process):
         self.func = func
 
     def run(self):
-        while True:
-            with _PopJob(self.job_queue) as job:
-                if job is None:
-                    break
-                Log('consumer {id} is doing task {job.id}'.format(
-                    id=self.id, job=job))
-                self.func(**job.params)
-        self.shutdown()
+        try:
+            while True:
+                with _PopJob(self.job_queue) as job:
+                    if job is None:
+                        break
+                    Log('consumer {id} is doing task {job.id}'.format(
+                        id=self.id, job=job))
+                    self.func(**job.params)
+        except:
+            Log('consumer did not exit properly with error:\n {err}'.format(
+                err=traceback.format_exc()))
+        finally:
+            self.shutdown()
 
     def shutdown(self):
         Log('consumer {id} is shutting down'.format(id=self.id))

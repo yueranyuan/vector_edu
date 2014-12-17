@@ -87,7 +87,7 @@ def run_experiment(param_set):
     with hide('output'):
         with cd('vector_edu'):
             log_name = gen_log_name()
-            run('python driver.py {param_set} -o {log_name}'.format(
+            run('python driver.py -p {param_set} -o {log_name}'.format(
                 param_set=param_set, log_name=log_name))
             run('aws s3 cp --region us-east-1 {log_name} s3://cmu-data/vectoredu/results/'.format(
                 log_name=log_name))

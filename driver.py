@@ -159,7 +159,7 @@ def train_model(train_model, validate_model,
     return best_validation_loss, best_iter, iteration
 
 
-def run(learning_rate=0.01, L1_reg=0.00, L2_reg=0.0001, n_epochs=10,
+def run(learning_rate=0.01, L1_reg=0.00, L2_reg=0.0001, n_epochs=100,
         dataset_name='mnist.pkl.gz', batch_size=30, n_hidden=500, dropout_p=0.2):
     args, _, _, _ = inspect.getargvalues(inspect.currentframe())
     arg_summary = ', '.join(['{0}={1}'.format(arg, eval(arg)) for arg in args])

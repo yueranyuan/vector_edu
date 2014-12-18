@@ -11,8 +11,8 @@ import numpy
 import theano
 import theano.tensor as T
 
-from mlp import MLP, HiddenLayer, rectifier
-from vmlp import VectorLayer
+from model.mlp import MLP, HiddenLayer, rectifier
+from model.vector import VectorLayer
 import config
 from utils import gen_log_name, make_shared, random_unique_subset
 from data import gen_word_matrix

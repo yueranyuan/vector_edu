@@ -6,7 +6,7 @@ import numpy
 import theano
 import theano.tensor as T
 
-from logistic import LogisticRegression
+from model.logistic import LogisticRegression
 
 
 def rectifier(x):

@@ -4,6 +4,7 @@ import csv
 import time
 import datetime
 
+
 class DynamicRecArray(object):
     def __init__(self, dtype):
         self.dtype = np.dtype(dtype)
@@ -16,7 +17,7 @@ class DynamicRecArray(object):
 
     def append(self, rec):
         if self.length == self.size:
-            self.size = int(1.5*self.size)
+            self.size = int(1.5 * self.size)
             self._data = np.resize(self._data, self.size)
         self._data[self.length] = rec
         self.length += 1
@@ -29,14 +30,16 @@ class DynamicRecArray(object):
     def data(self):
         return self._data[:self.length]
 
+
 def parse_time(time_str):
     t = datetime.datetime.strptime(time_str, "%Y-%m-%d %H:%M:%S.%f")
     return int((time.mktime(t.timetuple()) + t.microsecond / 1000000) * 100)
 
+
 def load(fname):
     with open(fname, 'r') as f:
         reader = csv.reader(f, delimiter='\t')
-        reader.next() # pop header
+        reader.next()  # pop header
         m = DynamicRecArray([('subject', 'i4'), ('stim', 'i4'), ('block', 'i4'),
                             ('start_time', 'i8'), ('end_time', 'i8'), ('cond', 'i4')])
         subjects = {}
@@ -46,13 +49,16 @@ def load(fname):
         for r in reader:
             rows.append(r)
             machine, subject, start_time, end_time, stim, block, correct, latency, cond = r
-            if not subject in subjects: subjects[subject] = len(subjects)
-            if not stim in stims: stims[stim] = len(stims)
-            if not block in blocks: blocks[block] = len(blocks)
+            if subject not in subjects:
+                subjects[subject] = len(subjects)
+            if stim not in stims:
+                stims[stim] = len(stims)
+            if block not in blocks:
+                blocks[block] = len(blocks)
         for r in rows:
             machine, subject, start_time, end_time, stim, block, correct, latency, cond = r
             m.append((subjects[subject], stims[stim], blocks[block], parse_time(start_time), parse_time(end_time), cond))
-        return m.data
+        return m.data, list(stims.iteritems())
 
 if __name__ == "__main__":
     print(load('task_large.xls'))

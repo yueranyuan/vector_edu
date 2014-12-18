@@ -15,6 +15,7 @@ from mlp import MLP
 from vmlp import VectorLayer
 import config
 from utils import gen_log_name, make_shared, random_unique_subset
+from data import gen_word_matrix
 
 
 def log(txt, also_print=False):
@@ -29,7 +30,7 @@ def prepare_data(dataset_name, batch_size):
 
     with gzip.open(dataset_name, 'rb') as f:
         dataset = cPickle.load(f)
-    skill_x, subject_x, correct_y = dataset
+    skill_x, subject_x, correct_y, stim_pairs = dataset
 
     validation = random_unique_subset(subject_x) & random_unique_subset(skill_x)
     train_idx, _ = numpy.nonzero(numpy.logical_not(validation))
@@ -38,28 +39,33 @@ def prepare_data(dataset_name, batch_size):
     skill_x = make_shared(skill_x)
     subject_x = make_shared(subject_x)
     correct_y = make_shared(correct_y, to_int=True)
-    return (skill_x, subject_x, correct_y), (train_idx, valid_idx)
+    return (skill_x, subject_x, correct_y, stim_pairs), (train_idx, valid_idx)
 
 
 def build_model(prepared_data, L1_reg, L2_reg, n_hidden, dropout_p,
                 learning_rate):
     log('... building the model', True)
-    skill_x, subject_x, correct_y = prepared_data
+    skill_x, subject_x, correct_y, stim_pairs = prepared_data
 
     rng = numpy.random.RandomState(1234)
     skill_vector_len = 50
     indices = T.ivector('idx')
     y = correct_y[indices]
+    skill_matrix = numpy.asarray(gen_word_matrix(skill_x.get_value(borrow=True),
+                                                 stim_pairs,
+                                                 vector_length=skill_vector_len),
+                                 dtype=theano.config.floatX)
     skill_vectors = VectorLayer(rng=rng,
-                                full_input=skill_x,
-                                n_skills=4600,
                                 indices=indices,
-                                vector_length=skill_vector_len)
+                                full_input=skill_x,
+                                # n_skills=max(skill_x.get_value(borrow=True)) + 1,
+                                # vector_length=skill_vector_len)
+                                vectors=skill_matrix)
     subject_vector_len = 50
     subject_vectors = VectorLayer(rng=rng,
-                                  full_input=subject_x,
-                                  n_skills=4600,
                                   indices=indices,
+                                  full_input=subject_x,
+                                  n_skills=max(subject_x.get_value(borrow=True)) + 1,
                                   vector_length=subject_vector_len)
 
     classifier = MLP(rng=rng,
@@ -95,7 +101,11 @@ def build_model(prepared_data, L1_reg, L2_reg, n_hidden, dropout_p,
         (param, param - learning_rate * gparam)
         for param, gparam in zip(classifier.params, gparams)
     ]
-    updates = updates + skill_vectors.get_updates(cost, learning_rate)
+    updates = (
+        updates
+        + skill_vectors.get_updates(cost, learning_rate)
+        + subject_vectors.get_updates(cost, learning_rate)
+    )
     f_train = theano.function(
         inputs=[indices],
         outputs=[cost],

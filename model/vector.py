@@ -6,10 +6,9 @@ from mlp import MLP
 
 class VectorLayer(object):
     def __init__(self, rng, indices, full_input, vectors=None, n_skills=4600,
-                 vector_length=30, mutable=True, learning_rate=None):
+                 vector_length=30, mutable=True):
         self.indices = indices
         self.mutable = mutable
-        self.learning_rate = learning_rate
 
         if vectors is None:
             vectors = numpy.asarray(rng.uniform(low=0, high=1, size=(n_skills, vector_length)),
@@ -17,22 +16,9 @@ class VectorLayer(object):
         else:
             vectors = vectors.astype(dtype=theano.config.floatX)
         self.skills = theano.shared(vectors, borrow=True)
-
-        self.m = theano.shared(reindex(full_input.get_value(borrow=True),
-                                       self.skills.get_value(borrow=True)),
-                               borrow=True)
         skill_i = T.cast(full_input[self.indices], 'int32')
         self.output = self.skills[skill_i[:, 0]]
-
-    def get_updates(self, cost, learning_rate=None):
-        if not self.mutable:
-            return []
-        if learning_rate is None:
-            learning_rate = self.learning_rate
-        gx = T.grad(cost, self.output)
-        width = self.m.get_value(borrow=True).shape[1]
-        gskills = T.dot(self.m[self.indices, 0:width:1].T, gx)
-        return [(self.skills, self.skills - learning_rate * gskills)]
+        self.params = [self.skills] if mutable else []
 
 
 class VMLP(object):
@@ -60,13 +46,3 @@ class VMLP(object):
         self.params = self.MLP.params
         self.get_updates = self.vectors.get_updates
         self.dropout = self.MLP.dropout
-
-
-def reindex(skills, skillVecs, y=None):
-    y = y or numpy.zeros([len(skillVecs), len(skills)])
-    for si in range(len(skillVecs)):
-        x = numpy.array(skills)
-        i = numpy.where(x == si)[0]
-        y[si][i] = 1
-    y = y.T
-    return y

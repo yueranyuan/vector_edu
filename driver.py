@@ -11,7 +11,7 @@ import numpy
 import theano
 import theano.tensor as T
 
-from mlp import MLP
+from mlp import MLP, HiddenLayer, rectifier
 from vmlp import VectorLayer
 import config
 from utils import gen_log_name, make_shared, random_unique_subset
@@ -58,16 +58,16 @@ def build_model(prepared_data, L1_reg, L2_reg, n_hidden, dropout_p,
     skill_vectors = VectorLayer(rng=rng,
                                 indices=indices,
                                 full_input=skill_x,
-                                # n_skills=max(skill_x.get_value(borrow=True)) + 1,
-                                # vector_length=skill_vector_len)
+                                n_skills=max(skill_x.get_value(borrow=True)) + 1,
+                                vector_length=skill_vector_len,
                                 vectors=skill_matrix)
     subject_vector_len = 50
     subject_vectors = VectorLayer(rng=rng,
                                   indices=indices,
                                   full_input=subject_x,
                                   n_skills=max(subject_x.get_value(borrow=True)) + 1,
-                                  vector_length=subject_vector_len)
-
+                                  vector_length=subject_vector_len,
+                                  mutable=False)
     classifier = MLP(rng=rng,
                      n_in=skill_vector_len + subject_vector_len,
                      input=T.concatenate([skill_vectors.output, subject_vectors.output], axis=1),
@@ -96,16 +96,12 @@ def build_model(prepared_data, L1_reg, L2_reg, n_hidden, dropout_p,
         allow_input_downcast=True
     )
 
-    gparams = [T.grad(cost, param) for param in classifier.params]
+    params = classifier.params + skill_vectors.params + subject_vectors.params
+    gparams = [T.grad(cost, param) for param in params]
     updates = [
         (param, param - learning_rate * gparam)
-        for param, gparam in zip(classifier.params, gparams)
+        for param, gparam in zip(params, gparams)
     ]
-    updates = (
-        updates
-        + skill_vectors.get_updates(cost, learning_rate)
-        + subject_vectors.get_updates(cost, learning_rate)
-    )
     f_train = theano.function(
         inputs=[indices],
         outputs=[cost],

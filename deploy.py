@@ -2,9 +2,9 @@ import boto.ec2
 from fabric.api import run, hide, execute, env, cd
 from time import sleep
 import multiprocessing
-from multijob import Job, JobConsumer
+from libs.multijob import Job, JobConsumer
 from config import all_param_set_keys
-from utils import gen_log_name
+from libs.utils import gen_log_name
 
 
 env.key_filename = "cmu-east-key1.pem"

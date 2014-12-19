@@ -4,6 +4,9 @@ import theano
 import theano.tensor as T
 import numpy
 
+# I should probably split these into separate files but it would kind of be a
+# waste of a files right now since they'll probably all be in separate ones
+
 
 def gen_log_name(uid=None):
     if uid is None:

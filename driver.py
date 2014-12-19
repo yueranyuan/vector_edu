@@ -13,9 +13,14 @@ import theano.tensor as T
 
 from model.mlp import MLP, HiddenLayer, rectifier
 from model.vector import VectorLayer
+from libs.utils import gen_log_name, make_shared, random_unique_subset
 import config
-from utils import gen_log_name, make_shared, random_unique_subset
 from data import gen_word_matrix
+from itertools import islice, groupby, chain
+
+
+def get_val(tensor):
+    return tensor.get_value(borrow=True)
 
 
 def log(txt, also_print=False):
@@ -31,15 +36,7 @@ def prepare_data(dataset_name, batch_size):
     with gzip.open(dataset_name, 'rb') as f:
         dataset = cPickle.load(f)
     skill_x, subject_x, correct_y, stim_pairs = dataset
-
-    validation = random_unique_subset(subject_x) & random_unique_subset(skill_x)
-    train_idx, _ = numpy.nonzero(numpy.logical_not(validation))
-    valid_idx, _ = numpy.nonzero(validation)
-
-    skill_x = make_shared(skill_x)
-    subject_x = make_shared(subject_x)
-    correct_y = make_shared(correct_y, to_int=True)
-    return (skill_x, subject_x, correct_y, stim_pairs), (train_idx, valid_idx)
+    return (skill_x, subject_x, correct_y, stim_pairs)
 
 
 def build_model(prepared_data, L1_reg, L2_reg, n_hidden, dropout_p,
@@ -47,72 +44,98 @@ def build_model(prepared_data, L1_reg, L2_reg, n_hidden, dropout_p,
     log('... building the model', True)
     skill_x, subject_x, correct_y, stim_pairs = prepared_data
 
+    # reorder indices so that each index can be fed as a 'base_index' into the
+    # full model. This means lining up by subjects and removing the first few indices.
+    # first we sort by subject
+    sorted_i = [i for (i, v) in
+        sorted(enumerate(subject_x), key=lambda (i, v): v)]
+    skill_x = skill_x[sorted_i]
+    subject_x = subject_x[sorted_i]
+    correct_y = correct_y[sorted_i]
+    # then we get rid of the first few indices per subject
+    valid_indices = list(chain.from_iterable(
+        list(islice(g, 2, None)) for _, g in
+        groupby(range(len(subject_x)), lambda (i): subject_x[i, 0])))
+
+    t_valid_indicies = make_shared(valid_indices, to_int=True)
+    master_indices = T.ivector('idx')
+    base_indices = t_valid_indicies[master_indices]
+
+    # create cv folds
+    validation = (random_unique_subset(subject_x[valid_indices, 0]) &
+                  random_unique_subset(skill_x[valid_indices, 0]))
+    train_idx = numpy.nonzero(numpy.logical_not(validation))[0]
+    valid_idx = numpy.nonzero(validation)[0]
+
+    skill_x = make_shared(skill_x)
+    subject_x = make_shared(subject_x)
+    correct_y = make_shared(correct_y, to_int=True)
+
     rng = numpy.random.RandomState(1234)
     skill_vector_len = 50
-    indices = T.ivector('idx')
-    y = correct_y[indices]
+    t_dropout = T.scalar('dropout')
+    y = correct_y[base_indices]
+
     skill_matrix = numpy.asarray(gen_word_matrix(skill_x.get_value(borrow=True),
                                                  stim_pairs,
                                                  vector_length=skill_vector_len),
                                  dtype=theano.config.floatX)
     skill_vectors = VectorLayer(rng=rng,
-                                indices=indices,
+                                indices=base_indices,
                                 full_input=skill_x,
-                                n_skills=max(skill_x.get_value(borrow=True)) + 1,
-                                vector_length=skill_vector_len,
                                 vectors=skill_matrix)
+    skill_vectors1 = VectorLayer(rng=rng,
+                                 indices=base_indices - 1,
+                                 full_input=skill_x,
+                                 vectors=skill_matrix)
+    skill_vectors2 = VectorLayer(rng=rng,
+                                 indices=base_indices - 2,
+                                 full_input=skill_x,
+                                 vectors=skill_matrix)
+    '''
     subject_vector_len = 50
     subject_vectors = VectorLayer(rng=rng,
-                                  indices=indices,
+                                  indices=base_indices,
                                   full_input=subject_x,
                                   n_skills=max(subject_x.get_value(borrow=True)) + 1,
                                   vector_length=subject_vector_len,
                                   mutable=False)
+    '''
+    combiner = HiddenLayer(
+        rng=rng,
+        input=T.concatenate([skill_vectors1.output, skill_vectors2.output], axis=1),
+        n_in=2 * skill_vector_len,
+        n_out=n_hidden,
+        activation=rectifier,
+        dropout=t_dropout
+    )
     classifier = MLP(rng=rng,
-                     n_in=skill_vector_len + subject_vector_len,
-                     input=T.concatenate([skill_vectors.output, subject_vectors.output], axis=1),
+                     n_in=n_hidden + skill_vector_len,
+                     input=T.concatenate([combiner.output, skill_vectors.output], axis=1),
                      n_hidden=n_hidden,
-                     n_out=3)
-
+                     n_out=3,
+                     dropout=t_dropout)
+    subnets = (combiner, classifier)
     cost = (
         classifier.negative_log_likelihood(y)
-        + L1_reg * classifier.L1
-        + L2_reg * classifier.L2_sqr
+        + L1_reg * sum([n.L1 for n in subnets])
+        + L2_reg * sum([n.L2_sqr for n in subnets])
     )
 
-    def gen_givens(data_x=None, data_y=None):
-        return {
-            y: data_y[indices],
-            classifier.dropout: dropout_p
-        }
+    func_args = {
+        'inputs': [base_indices],
+        'outputs': [classifier.errors(y)],
+        'givens': {t_dropout: dropout_p},
+        'on_unused_input': 'ignore',
+        'allow_input_downcast': True
+    }
 
-    f_valid = theano.function(
-        inputs=[indices],
-        outputs=[classifier.errors(y)],
-        givens={
-            classifier.dropout: dropout_p
-        },
-        on_unused_input="ignore",
-        allow_input_downcast=True
-    )
-
-    params = classifier.params + skill_vectors.params + subject_vectors.params
-    gparams = [T.grad(cost, param) for param in params]
-    updates = [
-        (param, param - learning_rate * gparam)
-        for param, gparam in zip(params, gparams)
-    ]
-    f_train = theano.function(
-        inputs=[indices],
-        outputs=[cost],
-        updates=updates,
-        givens={
-            classifier.dropout: dropout_p
-        },
-        on_unused_input="ignore",
-        allow_input_downcast=True
-    )
-    return f_train, f_valid
+    params = classifier.params + skill_vectors.params + combiner.params
+    updates = [(param, param - learning_rate * T.grad(cost, param))
+               for param in params]
+    f_valid = theano.function(**func_args)
+    f_train = theano.function(updates=updates, **func_args)
+    return f_train, f_valid, train_idx, valid_idx
 
 
 def train_model(train_model, validate_model,
@@ -171,10 +194,10 @@ def run(learning_rate=0.01, L1_reg=0.00, L2_reg=0.0001, n_epochs=100,
     arg_summary = ', '.join(['{0}={1}'.format(arg, eval(arg)) for arg in args])
     log(arg_summary)
 
-    prepared_data, (train_idx, valid_idx) = (
+    prepared_data = (
         prepare_data(dataset_name, batch_size=batch_size))
 
-    f_train, f_validate = (
+    f_train, f_validate, train_idx, valid_idx = (
         build_model(prepared_data, L1_reg=L1_reg, L2_reg=L2_reg,
                     n_hidden=n_hidden, dropout_p=dropout_p,
                     learning_rate=learning_rate))

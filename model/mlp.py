@@ -15,12 +15,13 @@ def rectifier(x):
 
 # inspired by https://github.com/mdenil/dropout/blob/master/mlp.py
 class HiddenLayer(object):
-    def __init__(self, rng, input, n_in, n_out, W=None, b=None,
-                 activation=rectifier, dropout=0.0):
+    def __init__(self, rng, input, n_in, n_out=None, W=None, b=None,
+                 activation=rectifier, dropout=None):
+        self.dropout = T.scalar('dropout') if dropout is None else dropout
         # dropouts on input
         srng = theano.tensor.shared_randomstreams.RandomStreams(
             rng.randint(999999))
-        mask = srng.binomial(n=1, p=1 - dropout, size=input.shape)
+        mask = srng.binomial(n=1, p=1 - self.dropout, size=input.shape)
         # cast because int * float32 = float64 which does not run on GPU
         self.input = input * T.cast(mask, theano.config.floatX)
 
@@ -45,7 +46,7 @@ class HiddenLayer(object):
         self.W = W
         self.b = b
 
-        lin_output = (T.dot(input, self.W) + self.b) * (1 / (1 - dropout))
+        lin_output = (T.dot(input, self.W) + self.b) * (1 / (1 - self.dropout))
         self.output = (
             lin_output if activation is None
             else activation(lin_output)
@@ -57,8 +58,9 @@ class HiddenLayer(object):
 
 
 class MLP(object):
-    def __init__(self, rng, input, n_in, n_hidden, n_out, activation=rectifier):
-        self.dropout = T.scalar('dropout')
+    def __init__(self, rng, input, n_in, n_hidden, n_out, activation=rectifier,
+                 dropout=None):
+        self.dropout = T.scalar('dropout') if dropout is None else dropout
         self.hiddenLayer = HiddenLayer(
             rng=rng,
             input=input,
@@ -81,5 +83,4 @@ class MLP(object):
         )
         self.errors = self.logRegressionLayer.errors
         self.output = self.logRegressionLayer.p_y_given_x[:, 1] - self.logRegressionLayer.p_y_given_x[:, 2]
-
         self.params = self.hiddenLayer.params + self.logRegressionLayer.params

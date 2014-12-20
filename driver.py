@@ -16,7 +16,8 @@ from model.vector import VectorLayer
 from libs.utils import gen_log_name, make_shared, random_unique_subset
 import config
 from data import gen_word_matrix
-from itertools import islice, groupby, chain
+from itertools import imap, islice, groupby, chain
+from libs.auc import auc
 
 
 def get_val(tensor):
@@ -53,17 +54,17 @@ def build_model(prepared_data, L1_reg, L2_reg, n_hidden, dropout_p,
     subject_x = subject_x[sorted_i]
     correct_y = correct_y[sorted_i]
     # then we get rid of the first few indices per subject
-    valid_indices = list(chain.from_iterable(
-        list(islice(g, 2, None)) for _, g in
-        groupby(range(len(subject_x)), lambda (i): subject_x[i, 0])))
+    subject_groups = groupby(range(len(subject_x)), lambda (i): subject_x[i, 0])
+    good_indices = list(chain.from_iterable(
+        imap(lambda (_, g): islice(g, 2, None), subject_groups)))
 
-    t_valid_indicies = make_shared(valid_indices, to_int=True)
+    t_good_indicies = make_shared(good_indices, to_int=True)
     master_indices = T.ivector('idx')
-    base_indices = t_valid_indicies[master_indices]
+    base_indices = t_good_indicies[master_indices]
 
     # create cv folds
-    validation = (random_unique_subset(subject_x[valid_indices, 0]) &
-                  random_unique_subset(skill_x[valid_indices, 0]))
+    validation = (random_unique_subset(subject_x[good_indices, 0]) &
+                  random_unique_subset(skill_x[good_indices, 0]))
     train_idx = numpy.nonzero(numpy.logical_not(validation))[0]
     valid_idx = numpy.nonzero(validation)[0]
 
@@ -71,6 +72,7 @@ def build_model(prepared_data, L1_reg, L2_reg, n_hidden, dropout_p,
     subject_x = make_shared(subject_x)
     correct_y = make_shared(correct_y, to_int=True)
 
+    # setup the layers
     rng = numpy.random.RandomState(1234)
     skill_vector_len = 50
     t_dropout = T.scalar('dropout')
@@ -124,7 +126,7 @@ def build_model(prepared_data, L1_reg, L2_reg, n_hidden, dropout_p,
 
     func_args = {
         'inputs': [base_indices],
-        'outputs': [classifier.errors(y)],
+        'outputs': [classifier.errors(y), classifier.output],
         'givens': {t_dropout: dropout_p},
         'on_unused_input': 'ignore',
         'allow_input_downcast': True
@@ -135,11 +137,15 @@ def build_model(prepared_data, L1_reg, L2_reg, n_hidden, dropout_p,
                for param in params]
     f_valid = theano.function(**func_args)
     f_train = theano.function(updates=updates, **func_args)
-    return f_train, f_valid, train_idx, valid_idx
+
+    def validator_func(pred):
+        _y = correct_y.owner.inputs[0].get_value(borrow=True)[valid_idx]
+        return auc(_y[:len(pred)], pred, pos_label=2)
+    return f_train, f_valid, train_idx, valid_idx, validator_func
 
 
-def train_model(train_model, validate_model,
-                batch_size, train_idx, valid_idx, n_epochs):
+def train_model(train_model, validate_model, train_idx, valid_idx, validator_func,
+                batch_size, n_epochs):
     log('... training', True)
 
     def get_n_batches(v):
@@ -151,7 +157,7 @@ def train_model(train_model, validate_model,
     patience_increase = 2
     improvement_threshold = 0.998
     validation_frequency = min(n_train_batches, patience / 2)
-    best_validation_loss = numpy.inf
+    best_valid_error = numpy.inf
     best_iter = 0
 
     try:
@@ -161,31 +167,33 @@ def train_model(train_model, validate_model,
                 iteration = (epoch) * n_train_batches + minibatch_index
 
                 if (iteration + 1) % validation_frequency == 0:
-                    validation_losses = [validate_model(valid_idx[i * batch_size: (i + 1) * batch_size])
-                                         for i in xrange(n_valid_batches)]
-                    this_validation_loss = numpy.mean(validation_losses)
+                    results = [validate_model(valid_idx[i * batch_size: (i + 1) * batch_size])
+                               for i in xrange(n_valid_batches)]
+                    # this_validation_loss = numpy.mean([r[0] for r in results])
+                    # this is not really a speed critical part of the code but we
+                    # can come back and redo AUC in theano if we want to make this suck less
+                    predictions = list(chain.from_iterable(imap(lambda r: r[1], results)))
+                    valid_error = validator_func(predictions)
 
                     log(
                         'epoch %i, minibatch %i/%i, validation error %f %%' %
                         (epoch,
                             minibatch_index + 1,
                             n_train_batches,
-                            this_validation_loss * 100.)
+                            valid_error * 100.)
                     )
 
-                    if this_validation_loss < best_validation_loss:
-                        if (this_validation_loss <
-                                best_validation_loss * improvement_threshold):
+                    if valid_error < best_valid_error:
+                        if (valid_error < best_valid_error * improvement_threshold):
                             patience = max(patience, iteration * patience_increase)
-
-                        best_validation_loss = this_validation_loss
+                        best_valid_error = valid_error
                         best_iter = iteration
 
                 if patience <= iteration:
                     raise StopIteration('out of patience for training')
     except StopIteration:
         pass
-    return best_validation_loss, best_iter, iteration
+    return best_valid_error, best_iter, iteration
 
 
 def run(learning_rate=0.01, L1_reg=0.00, L2_reg=0.0001, n_epochs=100,
@@ -197,15 +205,15 @@ def run(learning_rate=0.01, L1_reg=0.00, L2_reg=0.0001, n_epochs=100,
     prepared_data = (
         prepare_data(dataset_name, batch_size=batch_size))
 
-    f_train, f_validate, train_idx, valid_idx = (
+    f_train, f_validate, train_idx, valid_idx, validator_func = (
         build_model(prepared_data, L1_reg=L1_reg, L2_reg=L2_reg,
                     n_hidden=n_hidden, dropout_p=dropout_p,
                     learning_rate=learning_rate))
 
     start_time = time.clock()
     best_validation_loss, best_iter, iteration = (
-        train_model(f_train, f_validate, batch_size, train_idx, valid_idx,
-                    n_epochs=n_epochs))
+        train_model(f_train, f_validate, train_idx, valid_idx, validator_func,
+                    batch_size, n_epochs=n_epochs))
     end_time = time.clock()
     training_time = (end_time - start_time) / 60.
 

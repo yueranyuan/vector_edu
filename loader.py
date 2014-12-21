@@ -1,15 +1,16 @@
 from __future__ import division
 import numpy as np
 import csv
-import time
-import datetime
+from time import mktime
+from datetime import datetime
+from itertools import chain
 
 
 class DynamicRecArray(object):
-    def __init__(self, dtype):
+    def __init__(self, dtype, size=10):
         self.dtype = np.dtype(dtype)
         self.length = 0
-        self.size = 10
+        self.size = size
         self._data = np.empty(self.size, dtype=self.dtype)
 
     def __len__(self):
@@ -32,33 +33,56 @@ class DynamicRecArray(object):
 
 
 def parse_time(time_str):
-    t = datetime.datetime.strptime(time_str, "%Y-%m-%d %H:%M:%S.%f")
-    return int((time.mktime(t.timetuple()) + t.microsecond / 1000000) * 100)
+    t = datetime.strptime(time_str, "%Y-%m-%d %H:%M:%S.%f")
+    return int((mktime(t.timetuple()) + t.microsecond / 1000000) * 100)
 
 
-def load(fname):
+def load(fname, numeric=[], time=[], enum=[], text=[]):
     with open(fname, 'r') as f:
         reader = csv.reader(f, delimiter='\t')
-        reader.next()  # pop header
-        m = DynamicRecArray([('subject', 'i4'), ('stim', 'i4'), ('block', 'i4'),
-                            ('start_time', 'i8'), ('end_time', 'i8'), ('cond', 'i4')])
-        subjects = {}
-        stims = {}
-        blocks = {}
+        header = reader.next()
+        # translate string to index for speed
+        try:
+            for hs in [numeric, time, enum, text]:
+                for i, h in enumerate(hs):
+                    hs[i] = (header.index(h), h)
+        except ValueError:
+            raise Exception('header {h} not in file {fname}'.format(h=h, fname=fname))
+
+        # build enum ids and remove all unneeded columns
         rows = []
-        for r in reader:
-            rows.append(r)
-            machine, subject, start_time, end_time, stim, block, correct, latency, cond = r
-            if subject not in subjects:
-                subjects[subject] = len(subjects)
-            if stim not in stims:
-                stims[stim] = len(stims)
-            if block not in blocks:
-                blocks[block] = len(blocks)
-        for r in rows:
-            machine, subject, start_time, end_time, stim, block, correct, latency, cond = r
-            m.append((subjects[subject], stims[stim], blocks[block], parse_time(start_time), parse_time(end_time), cond))
-        return m.data, list(stims.iteritems())
+        columns = list(chain(numeric, time, enum))
+        enum_dict = {e:{} for i, e in enum}
+        for row in reader:
+            for i, e in enum:
+                if row[i] not in enum_dict[e]:
+                    enum_dict[e][row[i]] = len(enum_dict[e])
+            rows.append([row[i] for i, h in columns])
+
+        # create data structures to hold the loaded data
+        def add_type(arr, type_):
+            return [(v, type_) for i, v in arr]
+        column_dtypes = list(chain(*[add_type(*args) for args in
+                   [(numeric, 'i4'), (time, 'i8'), (enum, 'i4')]]))
+        m = np.empty(len(rows), dtype=column_dtypes)
+        # reindex headers because the unneeded columns have been removed
+        # we have to do it this way because python doesn't support direct pointer access :(
+        j = 0
+        for hs in [numeric, time, enum]:
+            for i, h in enumerate(hs):
+                hs[i] = (j, h[1])
+                j += 1
+        # load data into our structure in the proper format
+        for row_num, row in enumerate(rows):
+            for i, e in enum:
+                row[i] = enum_dict[e][row[i]]
+            for i, t in time:
+                row[i] = parse_time(row[i])
+            for i, n in numeric:
+                row[i] = int(row[i])
+            m[row_num] = tuple(row)
+        return m, list(enum_dict['stim'].iteritems())
 
 if __name__ == "__main__":
-    print(load('task_large.xls'))
+    load('raw_data/task_large.xls', numeric=['cond'], enum=['subject', 'stim', 'block'],
+        time=['start_time', 'end_time'])

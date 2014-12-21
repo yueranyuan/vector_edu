@@ -1,4 +1,3 @@
-import sys
 import gzip
 import cPickle
 from collections import Counter
@@ -24,7 +23,10 @@ def gen_data(fname):
 
 def convert_from_xls(fname, outname):
     from loader import load
-    data, stim_pairs = load(fname)
+    data, stim_pairs = load(fname,
+        numeric=['cond'],
+        enum=['subject', 'stim', 'block'],
+        time=['start_time', 'end_time'])
     skill = data['stim'][:, None]
     subject = data['subject'][:, None]
     correct = data['cond']
@@ -63,5 +65,5 @@ def gen_word_matrix(stims, pairs, vector_length=100):
 
 
 if __name__ == "__main__":
-    fname = 'data/task_data2.gz'
+    fname = 'data/task_data3.gz'
     convert_from_xls('raw_data/task_large.xls', fname)

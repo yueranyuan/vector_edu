@@ -31,7 +31,7 @@ def log(txt, also_print=False):
         f.write('{0}\n'.format(txt))
 
 
-def prepare_data(dataset_name, batch_size):
+def prepare_data(dataset_name):
     log('... loading data', True)
 
     with gzip.open(dataset_name, 'rb') as f:
@@ -63,8 +63,9 @@ def build_model(prepared_data, L1_reg, L2_reg, n_hidden, dropout_p,
     base_indices = t_good_indicies[master_indices]
 
     # create cv folds
-    validation = (random_unique_subset(subject_x[good_indices, 0]) &
-                  random_unique_subset(skill_x[good_indices, 0]))
+    #validation = (random_unique_subset(subject_x[good_indices, 0]) &
+    #              random_unique_subset(skill_x[good_indices, 0]))
+    validation = random_unique_subset(subject_x[good_indices, 0])
     train_idx = numpy.nonzero(numpy.logical_not(validation))[0]
     valid_idx = numpy.nonzero(validation)[0]
 
@@ -74,7 +75,7 @@ def build_model(prepared_data, L1_reg, L2_reg, n_hidden, dropout_p,
 
     # setup the layers
     rng = numpy.random.RandomState(1234)
-    skill_vector_len = 50
+    skill_vector_len = 100
     t_dropout = T.scalar('dropout')
     y = correct_y[base_indices]
 
@@ -86,14 +87,14 @@ def build_model(prepared_data, L1_reg, L2_reg, n_hidden, dropout_p,
                                 indices=base_indices,
                                 full_input=skill_x,
                                 vectors=skill_matrix)
-    # skill_vectors1 = VectorLayer(rng=rng,
-    #                             indices=base_indices - 1,
-    #                             full_input=skill_x,
-    #                             vectors=skill_matrix)
-    skill_vectors2 = VectorLayer(rng=rng,
-                                 indices=base_indices - 2,
+    skill_vectors1 = VectorLayer(rng=rng,
+                                 indices=base_indices - 1,
                                  full_input=skill_x,
                                  vectors=skill_matrix)
+    # skill_vectors2 = VectorLayer(rng=rng,
+    #                             indices=base_indices - 2,
+    #                             full_input=skill_x,
+    #                             vectors=skill_matrix)
     '''
     subject_vector_len = 50
     subject_vectors = VectorLayer(rng=rng,
@@ -103,18 +104,19 @@ def build_model(prepared_data, L1_reg, L2_reg, n_hidden, dropout_p,
                                   vector_length=subject_vector_len,
                                   mutable=False)
     '''
+    knowledge_vector_len = 100
     skill_accumulator = make_shared(numpy.zeros(
-        (skill_x.get_value(borrow=True).shape[0], skill_vector_len)))
+        (skill_x.get_value(borrow=True).shape[0], knowledge_vector_len)))
     combiner = HiddenLayer(
         rng=rng,
-        input=T.concatenate([skill_accumulator[base_indices - 2], skill_vectors2.output], axis=1),
-        n_in=2 * skill_vector_len,
-        n_out=skill_vector_len,
+        input=T.concatenate([skill_accumulator[base_indices - 2], skill_vectors1.output], axis=1),
+        n_in=skill_vector_len + knowledge_vector_len,
+        n_out=knowledge_vector_len,
         activation=rectifier,
         dropout=t_dropout
     )
     classifier = MLP(rng=rng,
-                     n_in=2 * skill_vector_len,
+                     n_in=knowledge_vector_len + skill_vector_len,
                      input=T.concatenate([combiner.output, skill_vectors.output], axis=1),
                      n_hidden=n_hidden,
                      n_out=3,
@@ -195,8 +197,7 @@ def run(learning_rate=0.01, L1_reg=0.00, L2_reg=0.0001, n_epochs=100,
     arg_summary = ', '.join(['{0}={1}'.format(arg, eval(arg)) for arg in args])
     log(arg_summary)
 
-    prepared_data = (
-        prepare_data(dataset_name, batch_size=batch_size))
+    prepared_data = prepare_data(dataset_name)
 
     f_train, f_validate, train_idx, valid_idx, validator_func = (
         build_model(prepared_data, L1_reg=L1_reg, L2_reg=L2_reg,

@@ -86,10 +86,10 @@ def build_model(prepared_data, L1_reg, L2_reg, n_hidden, dropout_p,
                                 indices=base_indices,
                                 full_input=skill_x,
                                 vectors=skill_matrix)
-    skill_vectors1 = VectorLayer(rng=rng,
-                                 indices=base_indices - 1,
-                                 full_input=skill_x,
-                                 vectors=skill_matrix)
+    # skill_vectors1 = VectorLayer(rng=rng,
+    #                             indices=base_indices - 1,
+    #                             full_input=skill_x,
+    #                             vectors=skill_matrix)
     skill_vectors2 = VectorLayer(rng=rng,
                                  indices=base_indices - 2,
                                  full_input=skill_x,
@@ -103,16 +103,18 @@ def build_model(prepared_data, L1_reg, L2_reg, n_hidden, dropout_p,
                                   vector_length=subject_vector_len,
                                   mutable=False)
     '''
+    skill_accumulator = make_shared(numpy.zeros(
+        (skill_x.get_value(borrow=True).shape[0], skill_vector_len)))
     combiner = HiddenLayer(
         rng=rng,
-        input=T.concatenate([skill_vectors1.output, skill_vectors2.output], axis=1),
+        input=T.concatenate([skill_accumulator[base_indices - 2], skill_vectors2.output], axis=1),
         n_in=2 * skill_vector_len,
-        n_out=n_hidden,
+        n_out=skill_vector_len,
         activation=rectifier,
         dropout=t_dropout
     )
     classifier = MLP(rng=rng,
-                     n_in=n_hidden + skill_vector_len,
+                     n_in=2 * skill_vector_len,
                      input=T.concatenate([combiner.output, skill_vectors.output], axis=1),
                      n_hidden=n_hidden,
                      n_out=3,
@@ -133,10 +135,12 @@ def build_model(prepared_data, L1_reg, L2_reg, n_hidden, dropout_p,
     }
 
     params = classifier.params + skill_vectors.params + combiner.params
-    updates = [(param, param - learning_rate * T.grad(cost, param))
-               for param in params]
-    f_valid = theano.function(**func_args)
-    f_train = theano.function(updates=updates, **func_args)
+    update_parameters = [(param, param - learning_rate * T.grad(cost, param))
+                         for param in params]
+    update_accumulator = [(skill_accumulator,
+        T.set_subtensor(skill_accumulator[base_indices - 1], combiner.output))]
+    f_valid = theano.function(updates=update_accumulator, **func_args)
+    f_train = theano.function(updates=update_parameters + update_accumulator, **func_args)
 
     def validator_func(pred):
         _y = correct_y.owner.inputs[0].get_value(borrow=True)[valid_idx]
@@ -148,51 +152,40 @@ def train_model(train_model, validate_model, train_idx, valid_idx, validator_fun
                 batch_size, n_epochs):
     log('... training', True)
 
-    def get_n_batches(v):
-        return len(v) / batch_size
-    n_train_batches = get_n_batches(train_idx)
-    n_valid_batches = get_n_batches(valid_idx)
-
     patience = 100000  # look as this many examples regardless
     patience_increase = 2
     improvement_threshold = 0.998
-    validation_frequency = min(n_train_batches, patience / 2)
+    validation_frequency = 5
     best_valid_error = numpy.inf
     best_iter = 0
+    iteration = 0
 
-    try:
-        for epoch in range(n_epochs):
-            for minibatch_index in xrange(n_train_batches):
-                train_model(train_idx[minibatch_index * batch_size: (minibatch_index + 1) * batch_size])
-                iteration = (epoch) * n_train_batches + minibatch_index
+    for epoch in range(n_epochs):
+        # before the skill_accumulator is setup properly, train one at a time
+        _batch_size = 1 if epoch == 0 else batch_size
+        for minibatch_index in xrange(int(len(train_idx) / _batch_size)):
+            train_model(train_idx[minibatch_index * _batch_size: (minibatch_index + 1) * _batch_size])
+            iteration = iteration + 1
 
-                if (iteration + 1) % validation_frequency == 0:
-                    results = [validate_model(valid_idx[i * batch_size: (i + 1) * batch_size])
-                               for i in xrange(n_valid_batches)]
-                    # this_validation_loss = numpy.mean([r[0] for r in results])
-                    # this is not really a speed critical part of the code but we
-                    # can come back and redo AUC in theano if we want to make this suck less
-                    predictions = list(chain.from_iterable(imap(lambda r: r[1], results)))
-                    valid_error = validator_func(predictions)
+        if (epoch + 1) % validation_frequency == 0:
+            _batch_size = 1  # recreate the skill_accumulator each time
+            results = [validate_model(valid_idx[i * _batch_size: (i + 1) * _batch_size])
+                       for i in xrange(int(len(train_idx) / _batch_size))]
+            # Aaron: this is not really a speed critical part of the code but we
+            # can come back and redo AUC in theano if we want to make this suck less
+            predictions = list(chain.from_iterable(imap(lambda r: r[1], results)))
+            valid_error = validator_func(predictions)
+            log('epoch {epoch}, validation error {err:.2%}'.format(
+                epoch=epoch, err=valid_error))
 
-                    log(
-                        'epoch %i, minibatch %i/%i, validation error %f %%' %
-                        (epoch,
-                            minibatch_index + 1,
-                            n_train_batches,
-                            valid_error * 100.)
-                    )
+            if valid_error < best_valid_error:
+                if (valid_error < best_valid_error * improvement_threshold):
+                    patience = max(patience, iteration * patience_increase)
+                best_valid_error = valid_error
+                best_iter = iteration
 
-                    if valid_error < best_valid_error:
-                        if (valid_error < best_valid_error * improvement_threshold):
-                            patience = max(patience, iteration * patience_increase)
-                        best_valid_error = valid_error
-                        best_iter = iteration
-
-                if patience <= iteration:
-                    raise StopIteration('out of patience for training')
-    except StopIteration:
-        pass
+            if patience <= iteration:
+                break
     return best_valid_error, best_iter, iteration
 
 

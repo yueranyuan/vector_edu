@@ -89,5 +89,7 @@ def load(fname, numeric=[], time=[], enum=[], text=[]):
         return m, enum_dict, text_store
 
 if __name__ == "__main__":
-    load('raw_data/task_large.xls', numeric=['cond'], enum=['subject', 'stim', 'block'],
-        time=['start_time', 'end_time'], text=['latency'])
+    #load('raw_data/task_large.xls', numeric=['cond'], enum=['subject', 'stim', 'block'],
+    #    time=['start_time', 'end_time'], text=['latency'])
+    a, b, c = load('raw_data/eeg_single.xls', numeric=['sigqual'], enum=['subject'],
+        time=['start_time', 'end_time'], text=['rawwave'])

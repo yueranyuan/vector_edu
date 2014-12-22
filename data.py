@@ -21,12 +21,13 @@ def gen_data(fname):
         cPickle.dump((set_, set_, set_), f)
 
 
-def convert_from_xls(fname, outname):
+def convert_task_from_xls(fname, outname):
     from loader import load
-    data, stim_pairs = load(fname,
+    data, enum_dict = load(fname,
         numeric=['cond'],
         enum=['subject', 'stim', 'block'],
         time=['start_time', 'end_time'])
+    stim_pairs = list(enum_dict['stim'].iteritems())
     skill = data['stim'][:, None]
     subject = data['subject'][:, None]
     correct = data['cond']
@@ -66,4 +67,4 @@ def gen_word_matrix(stims, pairs, vector_length=100):
 
 if __name__ == "__main__":
     fname = 'data/task_data3.gz'
-    convert_from_xls('raw_data/task_large.xls', fname)
+    convert_task_from_xls('raw_data/task_large.xls', fname)

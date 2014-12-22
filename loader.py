@@ -4,6 +4,7 @@ import csv
 from time import mktime
 from datetime import datetime
 from itertools import chain
+from collections import namedtuple
 
 
 class DynamicRecArray(object):
@@ -42,8 +43,9 @@ def load(fname, numeric=[], time=[], enum=[], text=[]):
         reader = csv.reader(f, delimiter='\t')
         header = reader.next()
         # translate string to index for speed
+        column_types = [numeric, time, enum, text]
         try:
-            for hs in [numeric, time, enum, text]:
+            for hs in column_types:
                 for i, h in enumerate(hs):
                     hs[i] = (header.index(h), h)
         except ValueError:
@@ -51,7 +53,7 @@ def load(fname, numeric=[], time=[], enum=[], text=[]):
 
         # build enum ids and remove all unneeded columns
         rows = []
-        columns = list(chain(numeric, time, enum))
+        columns = list(chain(numeric, time, enum, text))
         enum_dict = {e:{} for i, e in enum}
         for row in reader:
             for i, e in enum:
@@ -65,24 +67,27 @@ def load(fname, numeric=[], time=[], enum=[], text=[]):
         column_dtypes = list(chain(*[add_type(*args) for args in
                    [(numeric, 'i4'), (time, 'i8'), (enum, 'i4')]]))
         m = np.empty(len(rows), dtype=column_dtypes)
+        TextStore = namedtuple('Text', [h for i, h in text])
+        text_store = TextStore(*[[None] * len(rows) for i in xrange(len(text))])
         # reindex headers because the unneeded columns have been removed
         # we have to do it this way because python doesn't support direct pointer access :(
         j = 0
-        for hs in [numeric, time, enum]:
+        for hs in column_types:
             for i, h in enumerate(hs):
                 hs[i] = (j, h[1])
                 j += 1
         # load data into our structure in the proper format
         for row_num, row in enumerate(rows):
             for i, e in enum:
-                row[i] = enum_dict[e][row[i]]
+                m[row_num][i] = enum_dict[e][row[i]]
             for i, t in time:
-                row[i] = parse_time(row[i])
+                m[row_num][i] = parse_time(row[i])
             for i, n in numeric:
-                row[i] = int(row[i])
-            m[row_num] = tuple(row)
-        return m, list(enum_dict['stim'].iteritems())
+                m[row_num][i] = int(row[i])
+            for t_i, (i, n) in enumerate(text):
+                text_store[t_i][row_num] = str(row[i])
+        return m, enum_dict, text_store
 
 if __name__ == "__main__":
     load('raw_data/task_large.xls', numeric=['cond'], enum=['subject', 'stim', 'block'],
-        time=['start_time', 'end_time'])
+        time=['start_time', 'end_time'], text=['latency'])

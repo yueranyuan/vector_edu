@@ -35,7 +35,7 @@ def convert_task_from_xls(fname, outname):
         cPickle.dump((skill, subject, correct, stim_pairs), f)
 
 
-def convert_eeg_from_xls(fname, outname):
+def convert_eeg_from_xls(fname, outname, cutoffs=(0.5, 4.0, 7.0, 12.0, 30.0)):
     from loader import load
     from eeg import signal_to_freq_bins
     data, enum_dict, text = load('raw_data/eeg_single.xls',
@@ -44,13 +44,14 @@ def convert_eeg_from_xls(fname, outname):
         time=['start_time', 'end_time'],
         text=['rawwave'])
     subject = data['subject'][:, None]
-    cutoffs = [0.5, 4.0, 7.0, 12.0, 30.0]
+    sigqual = data['sigqual'][:, None]
+    cutoffs = list(cutoffs)
     eeg_freq = numpy.empty((len(text.rawwave), len(cutoffs) - 1))
     for i, eeg_str in enumerate(text.rawwave):
         eeg = [float(d) for d in eeg_str.strip().split(' ')]
         eeg_freq[i] = tuple(signal_to_freq_bins(eeg, cutoffs=cutoffs, sampling_rate=512))
     with gzip.open(outname, 'w') as f:
-        cPickle.dump((subject, eeg_freq), f)
+        cPickle.dump((subject, sigqual, eeg_freq), f)
 
 
 def _get_ngrams(stims, pairs):

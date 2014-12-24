@@ -31,27 +31,31 @@ def convert_task_from_xls(fname, outname):
     skill = data['stim'][:, None]
     subject = data['subject'][:, None]
     correct = data['cond']
+    start_time = data['start_time']
+    end_time = data['end_time']
     with gzip.open(outname, 'w') as f:
-        cPickle.dump((skill, subject, correct, stim_pairs), f)
+        cPickle.dump((subject, start_time, end_time, skill, correct, stim_pairs), f)
 
 
 def convert_eeg_from_xls(fname, outname, cutoffs=(0.5, 4.0, 7.0, 12.0, 30.0)):
     from loader import load
     from eeg import signal_to_freq_bins
-    data, enum_dict, text = load('raw_data/eeg_single.xls',
+    data, enum_dict, text = load(fname,
         numeric=['sigqual'],
         enum=['subject'],
         time=['start_time', 'end_time'],
         text=['rawwave'])
     subject = data['subject'][:, None]
     sigqual = data['sigqual'][:, None]
+    start_time = data['start_time']
+    end_time = data['end_time']
     cutoffs = list(cutoffs)
     eeg_freq = numpy.empty((len(text.rawwave), len(cutoffs) - 1))
     for i, eeg_str in enumerate(text.rawwave):
         eeg = [float(d) for d in eeg_str.strip().split(' ')]
         eeg_freq[i] = tuple(signal_to_freq_bins(eeg, cutoffs=cutoffs, sampling_rate=512))
     with gzip.open(outname, 'w') as f:
-        cPickle.dump((subject, sigqual, eeg_freq), f)
+        cPickle.dump((subject, start_time, end_time, sigqual, eeg_freq), f)
 
 
 def _get_ngrams(stims, pairs):
@@ -86,5 +90,5 @@ def gen_word_matrix(stims, pairs, vector_length=100):
 
 if __name__ == "__main__":
     task_name, eeg_name = 'data/task_data3.gz', 'data/eeg_data.gz'
-    convert_task_from_xls('raw_data/task_large.xls', task_name)
-    convert_eeg_from_xls('raw_data/eeg_single.xls', eeg_name)
+    # convert_task_from_xls('raw_data/task_large.xls', task_name)
+    convert_eeg_from_xls('raw_data/eeg_data_thinkgear_2013_2014.xls', eeg_name)

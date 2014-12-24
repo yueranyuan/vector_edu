@@ -223,7 +223,7 @@ if __name__ == '__main__':
     parser.add_argument('-p', dest='param_set', type=str, default='default',
                         choices=config.all_param_set_keys,
                         help='the name of the parameter set that we want to use')
-    parser.add_argument('--f', dest='file', type=str, default='data/task_data2.gz',
+    parser.add_argument('--f', dest='file', type=str, default='data/task_data3.gz',
                         help='the data file to use')
     parser.add_argument('-o', dest='outname', type=str, default=gen_log_name(),
                         help='name for the log file to be generated')

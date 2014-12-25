@@ -1,2 +1,7 @@
 import os
-os.system('del *.log')
+import sys
+
+if sys.platform.startswith('win'):
+    os.system('del *.log')
+else:
+    os.system('rm *.log')

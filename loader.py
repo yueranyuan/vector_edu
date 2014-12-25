@@ -54,7 +54,7 @@ def load(fname, numeric=[], time=[], enum=[], text=[]):
         # build enum ids and remove all unneeded columns
         rows = []
         columns = list(chain(numeric, time, enum, text))
-        enum_dict = {e:{} for i, e in enum}
+        enum_dict = {e: {} for i, e in enum}
         for row in reader:
             for i, e in enum:
                 if row[i] not in enum_dict[e]:
@@ -92,4 +92,4 @@ if __name__ == "__main__":
     #load('raw_data/task_large.xls', numeric=['cond'], enum=['subject', 'stim', 'block'],
     #    time=['start_time', 'end_time'], text=['latency'])
     a, b, c = load('raw_data/eeg_single.xls', numeric=['sigqual'], enum=['subject'],
-        time=['start_time', 'end_time'], text=['rawwave'])
+                   time=['start_time', 'end_time'], text=['rawwave'])

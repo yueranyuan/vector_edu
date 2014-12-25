@@ -4,3 +4,4 @@
 *.pem
 *.log
 .hidden
+.DS_Store

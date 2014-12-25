@@ -28,4 +28,5 @@ def load_one(key_name):
     print key.get_contents_as_string()
 
 
-load_one('vectoredu/results/2014_12_16_23_09_25_8606.log')
+#load_one('vectoredu/results/2014_12_16_23_09_25_8606.log')
+load_all()

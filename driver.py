@@ -16,7 +16,7 @@ from model.vector import VectorLayer
 from libs.utils import gen_log_name, make_shared, random_unique_subset
 import config
 from data import gen_word_matrix
-from itertools import imap, islice, groupby, chain
+from itertools import imap, islice, groupby, chain, compress
 from libs.auc import auc
 
 
@@ -37,6 +37,33 @@ def build_model(prepared_data, L1_reg, L2_reg, n_hidden, dropout_p,
     subject_x, skill_x, correct_y, eeg_x, stim_pairs = prepared_data
     subject_x = subject_x[:, None]  # add extra dimension as a 'feature vector'
     skill_x = skill_x[:, None]  # add extra dimension as a 'feature vector'
+
+    # look up tables are cheaper memory-wise.
+    # TODO: unify this implementation with VectorLayer
+    def to_lookup_table(x, access_idxs):
+        mask = numpy.not_equal(x, None)
+        if not mask.any():
+            raise Exception("can't create lookup table from no data")
+
+        # create lookup table
+        valid_idxs = numpy.nonzero(mask)[0]
+        width = len(x[valid_idxs[0]])
+        table = numpy.zeros((1 + len(valid_idxs), width))  # leave the first row for "None"
+        for i, l in enumerate(compress(x, mask)):
+            table[i + 1] = numpy.asarray(l)
+        mins = table[1:].min(axis=0)
+        maxs = table[1:].max(axis=0)
+        table[1:] = (table[1:] - mins) / (maxs - mins)  # normalize the table
+        table[0] = table[1:].mean(axis=0)  # set the "None" vector to the average of all vectors
+
+        # create a way to index into lookup table
+        idxs = numpy.zeros(len(x))
+        idxs[valid_idxs] = xrange(1, len(valid_idxs) + 1)
+
+        # convert to theano
+        t_table = make_shared(table)
+        t_idxs = make_shared(idxs, to_int=True)
+        return t_table[t_idxs[access_idxs]], table.shape
 
     # reorder indices so that each index can be fed as a 'base_index' into the
     # full model. This means lining up by subjects and removing the first few indices.
@@ -108,9 +135,10 @@ def build_model(prepared_data, L1_reg, L2_reg, n_hidden, dropout_p,
         activation=rectifier,
         dropout=t_dropout
     )
+    eeg_vector1, (_, eeg_vector_len) = to_lookup_table(eeg_x, base_indices)
     classifier = MLP(rng=rng,
-                     n_in=knowledge_vector_len + skill_vector_len,
-                     input=T.concatenate([combiner.output, skill_vectors.output], axis=1),
+                     n_in=knowledge_vector_len + skill_vector_len + eeg_vector_len,
+                     input=T.concatenate([combiner.output, skill_vectors.output, eeg_vector1], axis=1),
                      n_hidden=n_hidden,
                      n_out=3,
                      dropout=t_dropout)

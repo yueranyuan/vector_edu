@@ -1,6 +1,7 @@
 import gzip
 import cPickle
 from collections import Counter
+from itertools import count, izip, groupby
 import itertools
 import heapq
 
@@ -23,30 +24,34 @@ def gen_data(fname):
 
 def convert_task_from_xls(fname, outname):
     from loader import load
-    data, enum_dict, _ = load(fname,
+    data, enum_dict, _ = load(
+        fname,
         numeric=['cond'],
         enum=['subject', 'stim', 'block'],
         time=['start_time', 'end_time'])
     stim_pairs = list(enum_dict['stim'].iteritems())
-    skill = data['stim'][:, None]
-    subject = data['subject'][:, None]
+    subject_pairs = list(enum_dict['subject'].iteritems())
+    skill = data['stim']
+    subject = data['subject']
     correct = data['cond']
     start_time = data['start_time']
     end_time = data['end_time']
     with gzip.open(outname, 'w') as f:
-        cPickle.dump((subject, start_time, end_time, skill, correct, stim_pairs), f)
+        cPickle.dump((subject, start_time, end_time, skill, correct, subject_pairs, stim_pairs), f)
 
 
 def convert_eeg_from_xls(fname, outname, cutoffs=(0.5, 4.0, 7.0, 12.0, 30.0)):
     from loader import load
     from eeg import signal_to_freq_bins
-    data, enum_dict, text = load(fname,
+    data, enum_dict, text = load(
+        fname,
         numeric=['sigqual'],
         enum=['subject'],
         time=['start_time', 'end_time'],
         text=['rawwave'])
-    subject = data['subject'][:, None]
-    sigqual = data['sigqual'][:, None]
+    subject_pairs = list(enum_dict['subject'].iteritems())
+    subject = data['subject']
+    sigqual = data['sigqual']
     start_time = data['start_time']
     end_time = data['end_time']
     cutoffs = list(cutoffs)
@@ -55,7 +60,70 @@ def convert_eeg_from_xls(fname, outname, cutoffs=(0.5, 4.0, 7.0, 12.0, 30.0)):
         eeg = [float(d) for d in eeg_str.strip().split(' ')]
         eeg_freq[i] = tuple(signal_to_freq_bins(eeg, cutoffs=cutoffs, sampling_rate=512))
     with gzip.open(outname, 'w') as f:
-        cPickle.dump((subject, start_time, end_time, sigqual, eeg_freq), f)
+        cPickle.dump((subject, start_time, end_time, sigqual, eeg_freq, subject_pairs), f)
+
+
+def align_data(task_name, eeg_name, out_name):
+    with gzip.open(task_name, 'rb') as task_f, gzip.open(eeg_name, 'rb') as eeg_f:
+        task_subject, task_start, task_end, skill, correct, task_subject_pairs, stim_pairs = cPickle.load(task_f)
+        eeg_subject, eeg_start, eeg_end, sigqual, eeg_freq, eeg_subject_pairs = cPickle.load(eeg_f)
+    eeg_freq = numpy.asarray(eeg_freq, dtype='float32')
+    num_tasks = len(task_start)
+
+    # Step1: convert to dictionary with subject_id as keys and rows sorted by
+    # start_time as values
+    def convert_format(subject, start, *rest, **kwargs):
+        data_sorted = sorted(izip(subject, start, *rest), key=lambda v: v[:2])
+        data_by_subject = {k: list(v) for k, v in groupby(data_sorted, lambda v: v[0])}
+        if 'subject_pairs' in kwargs:
+            subject_dict = {k: v for v, k in kwargs['subject_pairs']}
+            data_by_subject = {subject_dict[k]: v for k, v in data_by_subject.iteritems()}
+        return data_by_subject
+    task_by_subject = convert_format(task_subject, task_start, task_end, count(0),
+                                     subject_pairs=task_subject_pairs)
+    eeg_by_subject = convert_format(eeg_subject, eeg_start, eeg_end, count(0),
+                                    subject_pairs=eeg_subject_pairs)
+
+    # Step2: efficiently create mapping between task and eeg using the structured data
+    task_eeg_mapping = [None] * num_tasks
+    for sub, task in task_by_subject.iteritems():
+        if sub not in eeg_by_subject:
+            continue
+        eeg = eeg_by_subject[sub]
+        num_sub_eegs = len(eeg)
+        eeg_pointer = 0
+        try:
+            for t in task:
+                _, t_start, t_end, t_i = t
+                # throw away eeg before the current task
+                # this works because the tasks are sorted by start_time
+                while eeg_pointer < num_sub_eegs and eeg[eeg_pointer][2] < t_start:
+                    eeg_pointer += 1
+                    if eeg_pointer > num_sub_eegs:
+                        raise StopIteration
+                # map eeg onto the current task
+                temp_pointer = eeg_pointer
+                task_eeg = []
+                # TODO: refactor this while loop into a itertools.takewhile
+                while temp_pointer < num_sub_eegs and eeg[temp_pointer][1] < t_end:
+                    # TODO: add sigqual cutoff
+                    task_eeg.append(eeg[temp_pointer][3])
+                    temp_pointer += 1
+                if task_eeg:
+                    task_eeg_mapping[t_i] = task_eeg
+        except StopIteration:
+            pass
+
+    # Step3: compute eeg features for each task based on aligned eeg
+    def compute_eeg_features(eeg_idxs):
+        if eeg_idxs is None:
+            return None
+        return numpy.mean(eeg_freq[eeg_idxs], axis=0)
+    features = [compute_eeg_features(ei) if ei else None for ei in task_eeg_mapping]
+
+    # Step4: write data file for use by classifier
+    with gzip.open(out_name, 'w') as f:
+        cPickle.dump((task_subject, skill, correct, features, stim_pairs), f)
 
 
 def _get_ngrams(stims, pairs):
@@ -89,6 +157,7 @@ def gen_word_matrix(stims, pairs, vector_length=100):
 
 
 if __name__ == "__main__":
-    task_name, eeg_name = 'data/task_data3.gz', 'data/eeg_data.gz'
+    # task_name, eeg_name = 'data/task_data3.gz', 'data/eeg_data.gz'
     # convert_task_from_xls('raw_data/task_large.xls', task_name)
-    convert_eeg_from_xls('raw_data/eeg_data_thinkgear_2013_2014.xls', eeg_name)
+    # convert_eeg_from_xls('raw_data/eeg_data_thinkgear_2013_2014.xls', eeg_name)
+    align_data('data/task_data3.gz', 'data/eeg_data.gz', 'data/data.gz')

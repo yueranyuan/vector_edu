@@ -31,19 +31,12 @@ def log(txt, also_print=False):
         f.write('{0}\n'.format(txt))
 
 
-def prepare_data(dataset_name):
-    log('... loading data', True)
-
-    with gzip.open(dataset_name, 'rb') as f:
-        dataset = cPickle.load(f)
-    skill_x, subject_x, correct_y, stim_pairs = dataset
-    return (skill_x, subject_x, correct_y, stim_pairs)
-
-
 def build_model(prepared_data, L1_reg, L2_reg, n_hidden, dropout_p,
                 learning_rate):
     log('... building the model', True)
-    skill_x, subject_x, correct_y, stim_pairs = prepared_data
+    subject_x, skill_x, correct_y, eeg_x, stim_pairs = prepared_data
+    subject_x = subject_x[:, None]  # add extra dimension as a 'feature vector'
+    skill_x = skill_x[:, None]  # add extra dimension as a 'feature vector'
 
     # reorder indices so that each index can be fed as a 'base_index' into the
     # full model. This means lining up by subjects and removing the first few indices.
@@ -197,7 +190,8 @@ def run(learning_rate=0.01, L1_reg=0.00, L2_reg=0.0001, n_epochs=100,
     arg_summary = ', '.join(['{0}={1}'.format(arg, eval(arg)) for arg in args])
     log(arg_summary)
 
-    prepared_data = prepare_data(dataset_name)
+    with gzip.open(dataset_name, 'rb') as f:
+        prepared_data = cPickle.load(f)
 
     f_train, f_validate, train_idx, valid_idx, validator_func = (
         build_model(prepared_data, L1_reg=L1_reg, L2_reg=L2_reg,
@@ -223,7 +217,7 @@ if __name__ == '__main__':
     parser.add_argument('-p', dest='param_set', type=str, default='default',
                         choices=config.all_param_set_keys,
                         help='the name of the parameter set that we want to use')
-    parser.add_argument('--f', dest='file', type=str, default='data/task_data3.gz',
+    parser.add_argument('--f', dest='file', type=str, default='data/data.gz',
                         help='the data file to use')
     parser.add_argument('-o', dest='outname', type=str, default=gen_log_name(),
                         help='name for the log file to be generated')

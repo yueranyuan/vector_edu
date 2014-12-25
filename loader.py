@@ -3,7 +3,7 @@ import numpy as np
 import csv
 from time import mktime
 from datetime import datetime
-from itertools import chain
+from itertools import chain, starmap
 from collections import namedtuple
 
 
@@ -64,8 +64,8 @@ def load(fname, numeric=[], time=[], enum=[], text=[]):
         # create data structures to hold the loaded data
         def add_type(arr, type_):
             return [(v, type_) for i, v in arr]
-        column_dtypes = list(chain(*[add_type(*args) for args in
-                   [(numeric, 'i4'), (time, 'i8'), (enum, 'i4')]]))
+        column_dtypes = list(chain.from_iterable(
+            starmap(add_type, [(numeric, 'i4'), (time, 'i8'), (enum, 'i4')])))
         m = np.empty(len(rows), dtype=column_dtypes)
         TextStore = namedtuple('Text', [h for i, h in text])
         text_store = TextStore(*[[None] * len(rows) for i in xrange(len(text))])

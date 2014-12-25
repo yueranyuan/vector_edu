@@ -48,13 +48,15 @@ ALL_PARAMS['default'] = {}
 ALL_PARAMS['t1v1'] = {
     'learning_rate': GenVar(0.005, 0.02, scale=LOG_SCALE),
     'L1_reg': GenVar(0.000, 0.0001),
-    'L2_reg': GenVar(0.000, 0.0002),
-    'n_hidden': GenVar(300, 900, type=int),
+    'L2_reg': GenVar(0.00005, 0.0002),
+    'n_hidden': GenVar(300, 700, type=int),
     'dropout_p': GenVar(0, 0.4)
 }
 ALL_PARAMS['tiny'] = {
     'n_epochs': GenVar(2)
 }
+ALL_PARAMS['t1v1small'] = ALL_PARAMS['t1v1'] + {'n_epochs': GenVar(12)}
+
 
 all_param_set_keys = ALL_PARAMS.keys()
 

@@ -127,15 +127,16 @@ def build_model(prepared_data, L1_reg, L2_reg, n_hidden, dropout_p,
     knowledge_vector_len = 100
     skill_accumulator = make_shared(numpy.zeros(
         (skill_x.get_value(borrow=True).shape[0], knowledge_vector_len)))
+    eeg_vector1, (_, eeg_vector_len) = to_lookup_table(eeg_x, base_indices - 1)
     combiner = HiddenLayer(
         rng=rng,
-        input=T.concatenate([skill_accumulator[base_indices - 2], skill_vectors1.output], axis=1),
-        n_in=skill_vector_len + knowledge_vector_len,
+        input=T.concatenate([skill_accumulator[base_indices - 2], skill_vectors1.output, eeg_vector1], axis=1),
+        n_in=skill_vector_len + knowledge_vector_len + eeg_vector_len,
         n_out=knowledge_vector_len,
         activation=rectifier,
         dropout=t_dropout
     )
-    eeg_vector1, (_, eeg_vector_len) = to_lookup_table(eeg_x, base_indices)
+    eeg_vector, (_, eeg_vector_len) = to_lookup_table(eeg_x, base_indices)
     classifier = MLP(rng=rng,
                      n_in=knowledge_vector_len + skill_vector_len + eeg_vector_len,
                      input=T.concatenate([combiner.output, skill_vectors.output, eeg_vector1], axis=1),

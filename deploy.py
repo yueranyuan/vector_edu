@@ -188,7 +188,7 @@ if __name__ == "__main__":
     parser.add_argument('mode', metavar="mode", type=str, default='exp',
                         choices=handlers.keys(),
                         help='choices are {modes}'.format(modes='/'.join(handlers.keys())))
-    parser.add_argument('-p', dest='param_set', type=str, default=None,
+    parser.add_argument('-p', dest='param_set', type=str, default='default',
                         choices=all_param_set_keys,
                         help='the name of the parameter set to use')
     parser.add_argument('--wait', dest='wait', default=600, type=int,

@@ -55,8 +55,6 @@ ALL_PARAMS['t1v1'] = {
 ALL_PARAMS['tiny'] = {
     'n_epochs': GenVar(2)
 }
-ALL_PARAMS['t1v1small'] = ALL_PARAMS['t1v1'] + {'n_epochs': GenVar(12)}
-
 
 all_param_set_keys = ALL_PARAMS.keys()
 

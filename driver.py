@@ -256,7 +256,7 @@ def train_model(train_model, validate_model, train_idx, valid_idx, validator_fun
     return best_valid_error, best_iter, iteration
 
 
-def log_args(currentframe, include_kwargs):
+def log_args(currentframe, include_kwargs=False):
     _, _, _, arg_dict = inspect.getargvalues(currentframe)
     explicit_args = [(k, v) for k, v in arg_dict.iteritems()
                      if isinstance(v, (int, long, float))]

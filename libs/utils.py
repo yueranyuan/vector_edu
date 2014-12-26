@@ -28,5 +28,12 @@ def random_unique_subset(v, percentage=.8):
     s_v = sample(u_v, int((1 - percentage) * len(u_v)))
     return sum((v == s for s in s_v))
 
+
+def combine_dict(*dicts):
+    out = {}
+    for d in dicts:
+        out.update(d)
+    return out
+
 if __name__ == '__main__':
     print random_unique_subset(numpy.asarray([1, 2, 3, 3, 2, 1]), percentage=.6)

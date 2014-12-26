@@ -2,6 +2,7 @@ from random import random
 from collections import namedtuple
 from math import log as ln
 from math import exp
+from libs.utils import combine_dict
 
 LOG_SCALE = 1
 LINEAR_SCALE = 2
@@ -55,6 +56,8 @@ ALL_PARAMS['t1v1'] = {
 ALL_PARAMS['tiny'] = {
     'n_epochs': GenVar(2)
 }
+ALL_PARAMS['t1v1small'] = combine_dict(ALL_PARAMS['t1v1'], {'n_epochs': GenVar(12)})
+
 
 all_param_set_keys = ALL_PARAMS.keys()
 

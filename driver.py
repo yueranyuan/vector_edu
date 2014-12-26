@@ -153,7 +153,6 @@ def build_model(prepared_data, L1_reg, L2_reg, n_hidden, dropout_p,
     func_args = {
         'inputs': [base_indices],
         'outputs': [classifier.errors(y), classifier.output],
-        'givens': {t_dropout: dropout_p},
         'on_unused_input': 'ignore',
         'allow_input_downcast': True
     }
@@ -161,10 +160,18 @@ def build_model(prepared_data, L1_reg, L2_reg, n_hidden, dropout_p,
     params = classifier.params + skill_vectors.params + combiner.params
     update_parameters = [(param, param - learning_rate * T.grad(cost, param))
                          for param in params]
-    update_accumulator = [(skill_accumulator,
-        T.set_subtensor(skill_accumulator[base_indices - 1], combiner.output))]
-    f_valid = theano.function(updates=update_accumulator, **func_args)
-    f_train = theano.function(updates=update_parameters + update_accumulator, **func_args)
+    update_accumulator = [(
+        skill_accumulator,
+        T.set_subtensor(skill_accumulator[base_indices - 1], combiner.output)
+    )]
+    f_valid = theano.function(
+        updates=update_accumulator,
+        givens={t_dropout: 0.},
+        **func_args)
+    f_train = theano.function(
+        updates=update_parameters + update_accumulator,
+        givens={t_dropout: dropout_p},
+        **func_args)
 
     def validator_func(pred):
         _y = correct_y.owner.inputs[0].get_value(borrow=True)[valid_idx]

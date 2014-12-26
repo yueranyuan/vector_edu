@@ -31,9 +31,13 @@ def log(txt, also_print=False):
         f.write('{0}\n'.format(txt))
 
 
-def build_model(prepared_data, L1_reg, L2_reg, n_hidden, dropout_p,
-                learning_rate):
+def build_model(prepared_data, L1_reg, L2_reg, dropout_p, learning_rate,
+                skill_vector_len=100, combiner_depth=1,
+                combiner_width=200, main_net_depth=1, main_net_width=500):
     log('... building the model', True)
+    args, _, _, _ = inspect.getargvalues(inspect.currentframe())
+    log(', '.join(['{0}={1}'.format(arg, eval(arg)) for arg in args if arg != 'prepared_data']))
+
     subject_x, skill_x, correct_y, eeg_x, stim_pairs = prepared_data
     subject_x = subject_x[:, None]  # add extra dimension as a 'feature vector'
     skill_x = skill_x[:, None]  # add extra dimension as a 'feature vector'
@@ -95,7 +99,6 @@ def build_model(prepared_data, L1_reg, L2_reg, n_hidden, dropout_p,
 
     # setup the layers
     rng = numpy.random.RandomState(1234)
-    skill_vector_len = 100
     t_dropout = T.scalar('dropout')
     y = correct_y[base_indices]
 
@@ -124,9 +127,8 @@ def build_model(prepared_data, L1_reg, L2_reg, n_hidden, dropout_p,
                                   vector_length=subject_vector_len,
                                   mutable=False)
     '''
-    knowledge_vector_len = 200
     skill_accumulator = make_shared(numpy.zeros(
-        (skill_x.get_value(borrow=True).shape[0], knowledge_vector_len)))
+        (skill_x.get_value(borrow=True).shape[0], combiner_width)))
     eeg_vector1, (_, eeg_vector_len) = to_lookup_table(eeg_x, base_indices - 1)
     correct_feature = make_shared([[0], [1]])[correct_y[base_indices - 1] - 1]
     combiner = HiddenNetwork(
@@ -135,16 +137,16 @@ def build_model(prepared_data, L1_reg, L2_reg, n_hidden, dropout_p,
                              skill_vectors1.output,
                              eeg_vector1,
                              correct_feature], axis=1),
-        n_in=skill_vector_len + knowledge_vector_len + eeg_vector_len + 1,
-        size=[knowledge_vector_len],
+        n_in=skill_vector_len + combiner_width + eeg_vector_len + 1,
+        size=[combiner_width] * combiner_depth,
         activation=rectifier,
         dropout=t_dropout
     )
     eeg_vector, (_, eeg_vector_len) = to_lookup_table(eeg_x, base_indices)
     classifier = MLP(rng=rng,
-                     n_in=knowledge_vector_len + skill_vector_len + eeg_vector_len,
+                     n_in=combiner_width + skill_vector_len + eeg_vector_len,
                      input=T.concatenate([combiner.output, skill_vectors.output, eeg_vector1], axis=1),
-                     size=[n_hidden],
+                     size=[main_net_width] * main_net_depth,
                      n_out=3,
                      dropout=t_dropout)
     subnets = (combiner, classifier)
@@ -225,9 +227,12 @@ def train_model(train_model, validate_model, train_idx, valid_idx, validator_fun
 
 
 def run(learning_rate=0.01, L1_reg=0.00, L2_reg=0.0001, n_epochs=100,
-        dataset_name='data/data.gz', batch_size=30, n_hidden=500, dropout_p=0.2):
+        dataset_name='data/data.gz', batch_size=30, dropout_p=0.2, **kwargs):
     args, _, _, _ = inspect.getargvalues(inspect.currentframe())
-    arg_summary = ', '.join(['{0}={1}'.format(arg, eval(arg)) for arg in args])
+    explicit_args = [(arg, eval(arg)) for arg in args]
+    keyword_args = list(kwargs.iteritems())
+    arg_summary = ', '.join(['{0}={1}'.format(*v) for v in
+                            explicit_args + keyword_args])
     log(arg_summary)
 
     with gzip.open(dataset_name, 'rb') as f:
@@ -235,8 +240,7 @@ def run(learning_rate=0.01, L1_reg=0.00, L2_reg=0.0001, n_epochs=100,
 
     f_train, f_validate, train_idx, valid_idx, validator_func = (
         build_model(prepared_data, L1_reg=L1_reg, L2_reg=L2_reg,
-                    n_hidden=n_hidden, dropout_p=dropout_p,
-                    learning_rate=learning_rate))
+                    dropout_p=dropout_p, learning_rate=learning_rate, **kwargs))
 
     start_time = time.clock()
     best_validation_loss, best_iter, iteration = (

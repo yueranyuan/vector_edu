@@ -35,6 +35,8 @@ def get_config(param_set='default'):
 
         if var.scale == LOG_SCALE:
             val = exp(val)  # reverse log
+        if var.type == int:
+            val += 0.5
         return var.type(val)
 
     return {n: instance_var(v) for n, v in ALL_PARAMS[param_set].iteritems()}
@@ -50,7 +52,11 @@ ALL_PARAMS['t1v1'] = {
     'learning_rate': GenVar(0.005, 0.02, scale=LOG_SCALE),
     'L1_reg': GenVar(0.000, 0.0001),
     'L2_reg': GenVar(0.00005, 0.0002),
-    'n_hidden': GenVar(300, 700, type=int),
+    'main_net_width': GenVar(300, 700, type=int),
+    'main_net_depth': GenVar(1, 2, type=int),
+    'combiner_width': GenVar(100, 300, type=int),
+    'combiner_depth': GenVar(1, 2, type=int),
+    'skill_vector_len': GenVar(50, 200, type=int),
     'dropout_p': GenVar(0, 0.4)
 }
 ALL_PARAMS['tiny'] = {

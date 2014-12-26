@@ -14,10 +14,9 @@ def rectifier(x):
 
 
 class HiddenNetwork(object):
-    def __init__(self, input, n_in, sizes, n_out=None,
-                 **kwargs):
+    def __init__(self, input, n_in, size, **kwargs):
         self.layers = []
-        for i, (n_in_, n_out_) in enumerate(zip([n_in] + sizes, sizes)):
+        for i, (n_in_, n_out_) in enumerate(zip([n_in] + size, size)):
             input_ = self.layers[-1].output if self.layers else input
             self.layers.append(HiddenLayer(input=input_,
                                            n_in=n_in_,

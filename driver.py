@@ -136,7 +136,7 @@ def build_model(prepared_data, L1_reg, L2_reg, n_hidden, dropout_p,
                              eeg_vector1,
                              correct_feature], axis=1),
         n_in=skill_vector_len + knowledge_vector_len + eeg_vector_len + 1,
-        sizes=[knowledge_vector_len],
+        size=[knowledge_vector_len],
         activation=rectifier,
         dropout=t_dropout
     )

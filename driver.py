@@ -18,6 +18,7 @@ import config
 from data import gen_word_matrix
 from itertools import imap, islice, groupby, chain, compress
 from libs.auc import auc
+from operator import or_
 
 
 def get_val(tensor):
@@ -31,12 +32,41 @@ def log(txt, also_print=False):
         f.write('{0}\n'.format(txt))
 
 
+def prepare_data(dataset_name, top_n=None, top_eeg_n=None, **kwargs):
+    log('... loading data', True)
+    log_args(inspect.currentframe())
+
+    with gzip.open(dataset_name, 'rb') as f:
+        subject_x, skill_x, correct_y, eeg_x, stim_pairs = cPickle.load(f)
+    subjects = numpy.unique(subject_x)
+    indexable_eeg = numpy.asarray(eeg_x)
+
+    def row_count(subj):
+        return sum(numpy.equal(subject_x, subj))
+
+    def eeg_count(subj):
+        arr = indexable_eeg[numpy.equal(subject_x, subj)]
+        return sum(numpy.not_equal(arr, None))
+
+    if top_n is not None:
+        subjects = sorted(subjects, key=row_count)[-top_n:]
+    if top_eeg_n is not None:
+        subjects = sorted(subjects, key=eeg_count)[-top_eeg_n:]
+
+    # select only the subjects that have enough data
+    mask = reduce(or_, imap(lambda s: numpy.equal(subject_x, s), subjects))
+    subject_x = subject_x[mask]
+    skill_x = skill_x[mask]
+    correct_y = correct_y[mask]
+    eeg_x = list(compress(eeg_x, mask))
+    return (subject_x, skill_x, correct_y, eeg_x, stim_pairs)
+
+
 def build_model(prepared_data, L1_reg, L2_reg, dropout_p, learning_rate,
-                skill_vector_len=100, combiner_depth=1,
-                combiner_width=200, main_net_depth=1, main_net_width=500):
+                skill_vector_len=100, combiner_depth=1, combiner_width=200,
+                main_net_depth=1, main_net_width=500, **kwargs):
     log('... building the model', True)
-    args, _, _, _ = inspect.getargvalues(inspect.currentframe())
-    log(', '.join(['{0}={1}'.format(arg, eval(arg)) for arg in args if arg != 'prepared_data']))
+    log_args(inspect.currentframe())
 
     subject_x, skill_x, correct_y, eeg_x, stim_pairs = prepared_data
     subject_x = subject_x[:, None]  # add extra dimension as a 'feature vector'
@@ -226,17 +256,21 @@ def train_model(train_model, validate_model, train_idx, valid_idx, validator_fun
     return best_valid_error, best_iter, iteration
 
 
-def run(learning_rate=0.01, L1_reg=0.00, L2_reg=0.0001, n_epochs=100,
-        dataset_name='data/data.gz', batch_size=30, dropout_p=0.2, **kwargs):
-    args, _, _, _ = inspect.getargvalues(inspect.currentframe())
-    explicit_args = [(arg, eval(arg)) for arg in args]
-    keyword_args = list(kwargs.iteritems())
+def log_args(currentframe, include_kwargs):
+    _, _, _, arg_dict = inspect.getargvalues(currentframe)
+    explicit_args = [(k, v) for k, v in arg_dict.iteritems()
+                     if isinstance(v, (int, long, float))]
+    keyword_args = arg_dict.get('kwargs', {}).items() if include_kwargs else []
     arg_summary = ', '.join(['{0}={1}'.format(*v) for v in
-                            explicit_args + keyword_args])
+                             explicit_args + keyword_args])
     log(arg_summary)
 
-    with gzip.open(dataset_name, 'rb') as f:
-        prepared_data = cPickle.load(f)
+
+def run(learning_rate=0.01, L1_reg=0.00, L2_reg=0.0001, n_epochs=100,
+        dataset_name='data/data.gz', batch_size=30, dropout_p=0.2, **kwargs):
+    log_args(inspect.currentframe())
+
+    prepared_data = prepare_data(dataset_name, **kwargs)
 
     f_train, f_validate, train_idx, valid_idx, validator_func = (
         build_model(prepared_data, L1_reg=L1_reg, L2_reg=L2_reg,

@@ -59,10 +59,11 @@ ALL_PARAMS['t1v1'] = {
     'skill_vector_len': GenVar(50, 200, type=int),
     'dropout_p': GenVar(0, 0.4)
 }
+ALL_PARAMS['eeg1'] = combine_dict(ALL_PARAMS['t1v1'], {'top_eeg_n': GenVar(14, type=int)})
 ALL_PARAMS['tiny'] = {
     'n_epochs': GenVar(2)
 }
-ALL_PARAMS['t1v1small'] = combine_dict(ALL_PARAMS['t1v1'], {'n_epochs': GenVar(12)})
+ALL_PARAMS['t1v1small'] = combine_dict(ALL_PARAMS['t1v1'], {'n_epochs': GenVar(12, type=int)})
 
 
 all_param_set_keys = ALL_PARAMS.keys()

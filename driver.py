@@ -11,7 +11,7 @@ import numpy
 import theano
 import theano.tensor as T
 
-from model.mlp import MLP, HiddenLayer, rectifier
+from model.mlp import MLP, HiddenNetwork, rectifier
 from model.vector import VectorLayer
 from libs.utils import gen_log_name, make_shared, random_unique_subset
 import config
@@ -69,7 +69,7 @@ def build_model(prepared_data, L1_reg, L2_reg, n_hidden, dropout_p,
     # full model. This means lining up by subjects and removing the first few indices.
     # first we sort by subject
     sorted_i = [i for (i, v) in
-        sorted(enumerate(subject_x), key=lambda (i, v): v)]
+                sorted(enumerate(subject_x), key=lambda (i, v): v)]
     skill_x = skill_x[sorted_i]
     subject_x = subject_x[sorted_i]
     correct_y = correct_y[sorted_i]
@@ -124,15 +124,19 @@ def build_model(prepared_data, L1_reg, L2_reg, n_hidden, dropout_p,
                                   vector_length=subject_vector_len,
                                   mutable=False)
     '''
-    knowledge_vector_len = 100
+    knowledge_vector_len = 200
     skill_accumulator = make_shared(numpy.zeros(
         (skill_x.get_value(borrow=True).shape[0], knowledge_vector_len)))
     eeg_vector1, (_, eeg_vector_len) = to_lookup_table(eeg_x, base_indices - 1)
-    combiner = HiddenLayer(
+    correct_feature = make_shared([[0], [1]])[correct_y[base_indices - 1] - 1]
+    combiner = HiddenNetwork(
         rng=rng,
-        input=T.concatenate([skill_accumulator[base_indices - 2], skill_vectors1.output, eeg_vector1], axis=1),
-        n_in=skill_vector_len + knowledge_vector_len + eeg_vector_len,
-        n_out=knowledge_vector_len,
+        input=T.concatenate([skill_accumulator[base_indices - 2],
+                             skill_vectors1.output,
+                             eeg_vector1,
+                             correct_feature], axis=1),
+        n_in=skill_vector_len + knowledge_vector_len + eeg_vector_len + 1,
+        sizes=[knowledge_vector_len],
         activation=rectifier,
         dropout=t_dropout
     )
@@ -140,7 +144,7 @@ def build_model(prepared_data, L1_reg, L2_reg, n_hidden, dropout_p,
     classifier = MLP(rng=rng,
                      n_in=knowledge_vector_len + skill_vector_len + eeg_vector_len,
                      input=T.concatenate([combiner.output, skill_vectors.output, eeg_vector1], axis=1),
-                     n_hidden=n_hidden,
+                     size=[n_hidden],
                      n_out=3,
                      dropout=t_dropout)
     subnets = (combiner, classifier)

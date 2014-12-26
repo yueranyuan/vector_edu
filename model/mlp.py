@@ -13,6 +13,23 @@ def rectifier(x):
     return T.maximum(x, 0)
 
 
+class HiddenNetwork(object):
+    def __init__(self, input, n_in, sizes, n_out=None,
+                 **kwargs):
+        self.layers = []
+        for i, (n_in_, n_out_) in enumerate(zip([n_in] + sizes, sizes)):
+            input_ = self.layers[-1].output if self.layers else input
+            self.layers.append(HiddenLayer(input=input_,
+                                           n_in=n_in_,
+                                           n_out=n_out_,
+                                           **kwargs))
+        self.n_out = n_out_
+        self.params = sum([l.params for l in self.layers], [])
+        self.L1 = sum([l.L1 for l in self.layers])
+        self.L2_sqr = sum([l.L2_sqr for l in self.layers])
+        self.output = self.layers[-1].output
+
+
 # inspired by https://github.com/mdenil/dropout/blob/master/mlp.py
 class HiddenLayer(object):
     def __init__(self, rng, input, n_in, n_out=None, W=None, b=None,
@@ -58,29 +75,29 @@ class HiddenLayer(object):
 
 
 class MLP(object):
-    def __init__(self, rng, input, n_in, n_hidden, n_out, activation=rectifier,
+    def __init__(self, rng, input, n_in, size, n_out, activation=rectifier,
                  dropout=None):
         self.dropout = T.scalar('dropout') if dropout is None else dropout
-        self.hiddenLayer = HiddenLayer(
+        self.hidden = HiddenNetwork(
             rng=rng,
             input=input,
             n_in=n_in,
-            n_out=n_hidden,
+            size=size,
             activation=activation,
             dropout=self.dropout
         )
 
         self.logRegressionLayer = LogisticRegression(
-            input=self.hiddenLayer.output,
-            n_in=n_hidden,
+            input=self.hidden.output,
+            n_in=size[-1],
             n_out=n_out
         )
-        self.L1 = self.hiddenLayer.L1 + self.logRegressionLayer.L1
-        self.L2_sqr = self.hiddenLayer.L2_sqr + self.logRegressionLayer.L2_sqr
+        self.L1 = self.hidden.L1 + self.logRegressionLayer.L1
+        self.L2_sqr = self.hidden.L2_sqr + self.logRegressionLayer.L2_sqr
 
         self.negative_log_likelihood = (
             self.logRegressionLayer.negative_log_likelihood
         )
         self.errors = self.logRegressionLayer.errors
         self.output = self.logRegressionLayer.p_y_given_x[:, 1] - self.logRegressionLayer.p_y_given_x[:, 2]
-        self.params = self.hiddenLayer.params + self.logRegressionLayer.params
+        self.params = self.hidden.params + self.logRegressionLayer.params

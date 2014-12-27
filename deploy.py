@@ -195,7 +195,7 @@ if __name__ == "__main__":
                         help='how long to wait for a connection')
     parser.add_argument('-i', dest='instance_cnt', metavar="i", default=1,
                         type=int, help='how many instances')
-    parser.add_argument('-it', dest='instance_type', default='m3.xlarge',
+    parser.add_argument('-it', dest='instance_type', default='c3.2xlarge',
                         help='what type of ec2 instance to use')
     parser.add_argument('--ni', dest='no_install', action='store_true',
                         help='when running, do not do install phase')

@@ -1,4 +1,3 @@
-import boto.ec2
 from fabric.api import run, hide, execute, env, cd
 from time import sleep
 import multiprocessing

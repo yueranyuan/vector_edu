@@ -24,11 +24,12 @@ def terminate_all(ids=None, conn=None, **kwargs):
         conn.terminate_instances(instance_ids=to_stop)
 
 
-def reserve(conn, free=False, **kwargs):
+def reserve(conn, instance_type, **kwargs):
     print 'launching instance'
-    size = 't2.micro' if free else 'm3.xlarge'
+    if instance_type == 'free':
+        instance_type = 't2.micro'
     reserve = conn.run_instances('ami-9eaa1cf6', key_name='cmu-east-key1',
-                                 instance_type=size, security_groups=['Aaron-CMU-East'],
+                                 instance_type=instance_type, security_groups=['Aaron-CMU-East'],
                                  instance_profile_arn='arn:aws:iam::999933667566:instance-profile/Worker')
     print 'launched instance ' + reserve.instances[0].id
     return reserve.instances[0].id
@@ -84,13 +85,12 @@ def install_all():
 
 
 def run_experiment(param_set):
-    with hide('output'):
-        with cd('vector_edu'):
-            log_name = gen_log_name()
-            run('python driver.py -p {param_set} -o {log_name}'.format(
-                param_set=param_set, log_name=log_name))
-            run('aws s3 cp --region us-east-1 {log_name} s3://cmu-data/vectoredu/results/'.format(
-                log_name=log_name))
+    with cd('vector_edu'):
+        log_name = gen_log_name()
+        run('python driver.py -p {param_set} -o {log_name}'.format(
+            param_set=param_set, log_name=log_name))
+        run('aws s3 cp --region us-east-1 {log_name} s3://cmu-data/vectoredu/results/'.format(
+            log_name=log_name))
 
 
 def deploy(addr, func=run_experiment, **kwargs):
@@ -195,8 +195,8 @@ if __name__ == "__main__":
                         help='how long to wait for a connection')
     parser.add_argument('-i', dest='instance_cnt', metavar="i", default=1,
                         type=int, help='how many instances')
-    parser.add_argument('--free', dest='free', action='store_true',
-                        help='[true] to start free micro instance')
+    parser.add_argument('-it', dest='instance_type', default='m3.xlarge',
+                        help='what type of ec2 instance to use')
     parser.add_argument('--ni', dest='no_install', action='store_true',
                         help='when running, do not do install phase')
     parser.add_argument('-x', dest='num_jobs', type=int, default=1,
@@ -206,4 +206,6 @@ if __name__ == "__main__":
     # if we're running an experiment, we need the parameter set
     if cmd_args['mode'] in ('batch', 'run') and not cmd_args['param_set']:
         raise Exception('batch mode requires a parameter set')
+    if cmd_args['num_jobs'] < cmd_args['instance_cnt']:
+        raise Exception("don't launch more instances than jobs to run")
     handlers[cmd_args['mode']](**cmd_args)

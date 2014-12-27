@@ -77,6 +77,8 @@ ALL_PARAMS['basic_eeg_toggle'] = combine_dict(ALL_PARAMS['basic_eeg'],
 ALL_PARAMS['eeg_off'] = {'previous_eeg_on': GenVar(0, type=int),
                          'current_eeg_on': GenVar(0, type=int)}
 ALL_PARAMS['basic_eeg_off'] = combine_dict(ALL_PARAMS['basic_eeg'], ALL_PARAMS['eeg_off'])
+ALL_PARAMS['medium_batch'] = {'batch_size': 60}
+ALL_PARAMS['big_batch'] = {'batch_size': 90}
 
 
 all_param_set_keys = ALL_PARAMS.keys()

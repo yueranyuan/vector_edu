@@ -47,7 +47,8 @@ def get_config(param_set='default'):
 ##########################
 
 ALL_PARAMS = {}
-ALL_PARAMS['default'] = {}
+
+# legacy configurations
 ALL_PARAMS['t1v1'] = {
     'learning_rate': GenVar(0.005, 0.02, scale=LOG_SCALE),
     'L1_reg': GenVar(0.000, 0.0001),
@@ -63,9 +64,19 @@ ALL_PARAMS['eeg1'] = combine_dict(ALL_PARAMS['t1v1'], {'top_eeg_n': GenVar(14, t
 ALL_PARAMS['tiny'] = {
     'n_epochs': GenVar(2)
 }
+ALL_PARAMS['t1v1small'] = combine_dict(ALL_PARAMS['t1v1'], {'n_epochs': GenVar(12, type=int)})
+
+# current configurations
+ALL_PARAMS['default'] = {}
+ALL_PARAMS['basic'] = ALL_PARAMS['t1v1']
+ALL_PARAMS['basic_eeg'] = ALL_PARAMS['eeg1']
+ALL_PARAMS['eeg_toggle'] = {'previous_eeg_on': GenVar(0, 1, type=int),
+                            'current_eeg_on': GenVar(0, 1, type=int)}
+ALL_PARAMS['basic_eeg_toggle'] = combine_dict(ALL_PARAMS['basic_eeg'],
+                                              ALL_PARAMS['eeg_toggle'])
 ALL_PARAMS['eeg_off'] = {'previous_eeg_on': GenVar(0, type=int),
                          'current_eeg_on': GenVar(0, type=int)}
-ALL_PARAMS['t1v1small'] = combine_dict(ALL_PARAMS['t1v1'], {'n_epochs': GenVar(12, type=int)})
+ALL_PARAMS['basic_eeg_off'] = combine_dict(ALL_PARAMS['basic_eeg'], ALL_PARAMS['eeg_off'])
 
 
 all_param_set_keys = ALL_PARAMS.keys()

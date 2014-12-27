@@ -242,9 +242,9 @@ def train_model(train_model, validate_model, train_idx, valid_idx, validator_fun
                 batch_size, n_epochs):
     log('... training', True)
 
-    patience = 100000  # look as this many examples regardless
-    patience_increase = 2
-    improvement_threshold = 0.998
+    patience = 30  # look as this many examples regardless
+    patience_increase = 20
+    improvement_threshold = 1
     validation_frequency = 5
     best_valid_error = numpy.inf
     best_iter = 0
@@ -270,11 +270,11 @@ def train_model(train_model, validate_model, train_idx, valid_idx, validator_fun
 
             if valid_error < best_valid_error:
                 if (valid_error < best_valid_error * improvement_threshold):
-                    patience = max(patience, iteration * patience_increase)
+                    patience = max(patience, epoch + patience_increase)
                 best_valid_error = valid_error
                 best_iter = iteration
 
-            if patience <= iteration:
+            if patience <= epoch:
                 break
     return best_valid_error, best_iter, iteration
 

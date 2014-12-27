@@ -65,6 +65,9 @@ ALL_PARAMS['tiny'] = {
     'n_epochs': GenVar(2)
 }
 ALL_PARAMS['t1v1small'] = combine_dict(ALL_PARAMS['t1v1'], {'n_epochs': GenVar(12, type=int)})
+ALL_PARAMS['medium_batch'] = {'batch_size': GenVar(90, type=int)}
+ALL_PARAMS['big_batch2'] = {'batch_size': GenVar(150, type=int)}
+ALL_PARAMS['big_batch3'] = {'batch_size': GenVar(180, type=int)}
 
 # current configurations
 ALL_PARAMS['default'] = {}
@@ -77,10 +80,9 @@ ALL_PARAMS['basic_eeg_toggle'] = combine_dict(ALL_PARAMS['basic_eeg'],
 ALL_PARAMS['eeg_off'] = {'previous_eeg_on': GenVar(0, type=int),
                          'current_eeg_on': GenVar(0, type=int)}
 ALL_PARAMS['basic_eeg_off'] = combine_dict(ALL_PARAMS['basic_eeg'], ALL_PARAMS['eeg_off'])
-ALL_PARAMS['medium_batch'] = {'batch_size': GenVar(90, type=int)}
 ALL_PARAMS['big_batch'] = {'batch_size': GenVar(120, type=int)}
-ALL_PARAMS['big_batch2'] = {'batch_size': GenVar(150, type=int)}
-ALL_PARAMS['big_batch3'] = {'batch_size': GenVar(180, type=int)}
+ALL_PARAMS['basic_eeg_toggle_big_batch'] = combine_dict(ALL_PARAMS['basic_eeg_toggle'],
+                                                        ALL_PARAMS['big_batch'])
 
 
 all_param_set_keys = ALL_PARAMS.keys()

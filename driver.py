@@ -279,7 +279,7 @@ def train_model(train_model, validate_model, train_idx, valid_idx, validator_fun
     return best_valid_error, best_iter, iteration
 
 
-def run(learning_rate=0.01, L1_reg=0.00, L2_reg=0.0001, n_epochs=100,
+def run(learning_rate=0.01, L1_reg=0.00, L2_reg=0.0001, n_epochs=200,
         dataset_name='data/data.gz', batch_size=30, dropout_p=0.2, **kwargs):
     log_args(inspect.currentframe())
 

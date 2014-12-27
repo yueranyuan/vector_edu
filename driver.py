@@ -242,8 +242,8 @@ def train_model(train_model, validate_model, train_idx, valid_idx, validator_fun
                 batch_size, n_epochs):
     log('... training', True)
 
-    patience = 30  # look as this many examples regardless
-    patience_increase = 20
+    patience = 50  # look as this many examples regardless
+    patience_increase = 40
     improvement_threshold = 1
     validation_frequency = 5
     best_valid_error = numpy.inf
@@ -279,7 +279,7 @@ def train_model(train_model, validate_model, train_idx, valid_idx, validator_fun
     return best_valid_error, best_epoch, iteration
 
 
-def run(learning_rate=0.01, L1_reg=0.00, L2_reg=0.0001, n_epochs=300,
+def run(learning_rate=0.01, L1_reg=0.00, L2_reg=0.0001, n_epochs=500,
         dataset_name='data/data.gz', batch_size=30, dropout_p=0.2, **kwargs):
     log_args(inspect.currentframe())
 

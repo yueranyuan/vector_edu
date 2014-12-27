@@ -247,7 +247,7 @@ def train_model(train_model, validate_model, train_idx, valid_idx, validator_fun
     improvement_threshold = 1
     validation_frequency = 5
     best_valid_error = numpy.inf
-    best_iter = 0
+    best_epoch = 0
     iteration = 0
 
     for epoch in range(n_epochs):
@@ -272,14 +272,14 @@ def train_model(train_model, validate_model, train_idx, valid_idx, validator_fun
                 if (valid_error < best_valid_error * improvement_threshold):
                     patience = max(patience, epoch + patience_increase)
                 best_valid_error = valid_error
-                best_iter = iteration
+                best_epoch = epoch
 
             if patience <= epoch:
                 break
-    return best_valid_error, best_iter, iteration
+    return best_valid_error, best_epoch, iteration
 
 
-def run(learning_rate=0.01, L1_reg=0.00, L2_reg=0.0001, n_epochs=200,
+def run(learning_rate=0.01, L1_reg=0.00, L2_reg=0.0001, n_epochs=300,
         dataset_name='data/data.gz', batch_size=30, dropout_p=0.2, **kwargs):
     log_args(inspect.currentframe())
 
@@ -290,7 +290,7 @@ def run(learning_rate=0.01, L1_reg=0.00, L2_reg=0.0001, n_epochs=200,
                     dropout_p=dropout_p, learning_rate=learning_rate, **kwargs))
 
     start_time = time.clock()
-    best_validation_loss, best_iter, iteration = (
+    best_validation_loss, best_epoch, iteration = (
         train_model(f_train, f_validate, train_idx, valid_idx, validator_func,
                     batch_size, n_epochs=n_epochs))
     end_time = time.clock()
@@ -298,9 +298,9 @@ def run(learning_rate=0.01, L1_reg=0.00, L2_reg=0.0001, n_epochs=200,
 
     log(('Optimization complete. Best validation score of %f %% '
          'obtained at iteration %i, with test performance %f %%') %
-        (best_validation_loss * 100., best_iter + 1, 0.), True)
+        (best_validation_loss * 100., best_epoch + 1, 0.), True)
     log('Code ran for ran for %.2fm' % (training_time))
-    return (best_validation_loss * 100., best_iter + 1, iteration, training_time)
+    return (best_validation_loss * 100., best_epoch + 1, iteration, training_time)
 
 
 if __name__ == '__main__':

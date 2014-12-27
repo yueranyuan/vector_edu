@@ -25,8 +25,8 @@ def load_all():
         lines = content.split('\n')
         # params = lines[0]
         results = lines[-2]
-        acc, best_iter, all_iter, run_time = eval(results)
-        print key_name, acc, all_iter, run_time
+        acc, best_epoch, all_iter, run_time = eval(results)
+        print key_name, acc, best_epoch, all_iter, run_time
 
 
 def load_one(key_name):

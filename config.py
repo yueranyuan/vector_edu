@@ -109,6 +109,12 @@ ALL_PARAMS['fix2'] = combine_dict(ALL_PARAMS['eeg2'],
 ALL_PARAMS['config2'] = combine_dict(ALL_PARAMS['basic_eeg_toggle'],
                                      ALL_PARAMS['fix1'],
                                      ALL_PARAMS['fix2'])
+ALL_PARAMS['fix3'] = {'learning_rate': GenVar(0.012, 0.02),
+                      'L2_reg': GenVar(0.0003, 0.0005)}
+ALL_PARAMS['config3'] = combine_dict(ALL_PARAMS['basic_eeg_toggle'],
+                                     ALL_PARAMS['fix1'],
+                                     ALL_PARAMS['fix2'],
+                                     ALL_PARAMS['fix3'])
 
 all_param_set_keys = ALL_PARAMS.keys()
 

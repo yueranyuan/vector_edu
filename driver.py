@@ -43,7 +43,7 @@ def log_args(currentframe, include_kwargs=False):
     log(arg_summary)
 
 
-def prepare_data(dataset_name, top_n=None, top_eeg_n=None, **kwargs):
+def prepare_data(dataset_name, top_n=0, top_eeg_n=0, eeg_only=0, **kwargs):
     log('... loading data', True)
     log_args(inspect.currentframe())
 
@@ -59,13 +59,20 @@ def prepare_data(dataset_name, top_n=None, top_eeg_n=None, **kwargs):
         arr = indexable_eeg[numpy.equal(subject_x, subj)]
         return sum(numpy.not_equal(arr, None))
 
-    if top_n is not None:
+    if top_n:
         subjects = sorted(subjects, key=row_count)[-top_n:]
-    if top_eeg_n is not None:
+    if top_eeg_n:
         subjects = sorted(subjects, key=eeg_count)[-top_eeg_n:]
+
+    print 'eeg_count', sum(imap(eeg_count, subjects))
 
     # select only the subjects that have enough data
     mask = reduce(or_, imap(lambda s: numpy.equal(subject_x, s), subjects))
+    print 'masked_count1', sum(mask), len(mask)
+    if eeg_only:
+        eeg_mask = numpy.not_equal(indexable_eeg, None)
+        mask &= eeg_mask
+    print 'masked_count2', sum(mask), len(mask)
     subject_x = subject_x[mask]
     skill_x = skill_x[mask]
     correct_y = correct_y[mask]
@@ -161,11 +168,13 @@ def build_model(prepared_data, L1_reg, L2_reg, dropout_p, learning_rate,
     current_skill = VectorLayer(rng=rng,
                                 indices=base_indices,
                                 full_input=skill_x,
-                                vectors=skill_matrix)
+                                vectors=skill_matrix,
+                                mutable=mutable_skill)
     previous_skill = VectorLayer(rng=rng,
                                  indices=base_indices - 1,
                                  full_input=skill_x,
-                                 vectors=skill_matrix)
+                                 vectors=skill_matrix,
+                                 mutable=mutable_skill)
 
     # setup combiner component
     skill_accumulator = make_shared(numpy.zeros(

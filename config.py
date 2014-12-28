@@ -90,6 +90,16 @@ ALL_PARAMS['fix1'] = {'L1_reg': GenVar(0., 0.000005),
 ALL_PARAMS['config1'] = combine_dict(ALL_PARAMS['basic_eeg_toggle'],
                                      ALL_PARAMS['mutable'],
                                      ALL_PARAMS['fix1'])
+ALL_PARAMS['eeg2'] = {'previous_eeg_on': GenVar(0, 1, type=int),
+                      'current_eeg_on': GenVar(1, type=int),
+                      'eeg_only': GenVar(1, type=int)}
+ALL_PARAMS['eeg_off2'] = {'previous_eeg_on': GenVar(0, type=int),
+                          'current_eeg_on': GenVar(0, type=int),
+                          'eeg_only': GenVar(0, type=int)}
+ALL_PARAMS['config1_noeeg'] = combine_dict(ALL_PARAMS['config1'],
+                                           ALL_PARAMS['eeg_off2'])
+ALL_PARAMS['config1_eeg'] = combine_dict(ALL_PARAMS['config1'],
+                                         ALL_PARAMS['eeg2'])
 
 
 all_param_set_keys = ALL_PARAMS.keys()

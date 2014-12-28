@@ -107,5 +107,5 @@ def analyze(bucket=None, subfolder=None, cache_dir=None, start_time=None,
 
 if __name__ == '__main__':
     start_time = datetime(2014, 12, 27, 00, 35)
-    analyze('cmu-data', 'vectoredu/results', cache_dir='results', start_time=start_time)
+    # analyze('cmu-data', 'vectoredu/results', cache_dir='results', start_time=start_time)
     analyze(cache_dir='results', start_time=start_time, print_individual_trials=True)

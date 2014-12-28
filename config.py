@@ -83,6 +83,13 @@ ALL_PARAMS['basic_eeg_off'] = combine_dict(ALL_PARAMS['basic_eeg'], ALL_PARAMS['
 ALL_PARAMS['big_batch'] = {'batch_size': GenVar(120, type=int)}
 ALL_PARAMS['basic_eeg_toggle_big_batch'] = combine_dict(ALL_PARAMS['basic_eeg_toggle'],
                                                         ALL_PARAMS['big_batch'])
+ALL_PARAMS['mutable'] = {'mutable_skill': GenVar(0, 1, type=int)}
+ALL_PARAMS['fix1'] = {'L1_reg': GenVar(0., 0.000005),
+                      'main_net_width': GenVar(500, 700, type=int),
+                      'combiner_depth': GenVar(1, type=int)}
+ALL_PARAMS['config1'] = combine_dict(ALL_PARAMS['basic_eeg_toggle'],
+                                     ALL_PARAMS['mutable'],
+                                     ALL_PARAMS['fix1'])
 
 
 all_param_set_keys = ALL_PARAMS.keys()

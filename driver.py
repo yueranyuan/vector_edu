@@ -104,7 +104,7 @@ def to_lookup_table(x, access_idxs):
 def build_model(prepared_data, L1_reg, L2_reg, dropout_p, learning_rate,
                 skill_vector_len=100, combiner_depth=1, combiner_width=200,
                 main_net_depth=1, main_net_width=500, previous_eeg_on=1,
-                current_eeg_on=1, **kwargs):
+                current_eeg_on=1, mutable_skill=1, **kwargs):
     log('... building the model', True)
     log_args(inspect.currentframe())
 

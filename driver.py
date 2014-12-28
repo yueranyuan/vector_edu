@@ -79,7 +79,7 @@ def prepare_data(dataset_name, top_n=0, top_eeg_n=0, eeg_only=0, **kwargs):
 # look up tables are cheaper memory-wise.
 # TODO: unify this implementation with VectorLayer
 def to_lookup_table(x, access_idxs):
-    mask = numpy.not_equal(x, None)
+    mask = numpy.asarray([v is not None for v in x], dtype=bool)
     if not mask.any():
         raise Exception("can't create lookup table from no data")
 

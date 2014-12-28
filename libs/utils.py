@@ -3,6 +3,7 @@ from random import randint, sample
 import theano
 import theano.tensor as T
 import numpy
+import operator
 
 # I should probably split these into separate files but it would kind of be a
 # waste of a files right now since they'll probably all be in separate ones
@@ -34,6 +35,27 @@ def combine_dict(*dicts):
     for d in dicts:
         out.update(d)
     return out
+
+
+# transposes a 2d array of arbitrary elements without numpy
+def transpose(arr):
+    if len(arr) == 0:  # incidentally, this line also checks that arr is a list
+        return []
+    width = len(arr[0])
+    out = [None] * width
+    for i in range(width):
+        out[i] = [a[i] for a in arr]
+    return out
+
+
+# returns min index and min value
+def min_idx(arr):
+    return min(enumerate(arr), key=operator.itemgetter(1))
+
+
+# returns max index and max value
+def max_idx(arr):
+    return max(enumerate(arr), key=operator.itemgetter(1))
 
 if __name__ == '__main__':
     print random_unique_subset(numpy.asarray([1, 2, 3, 3, 2, 1]), percentage=.6)

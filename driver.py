@@ -64,15 +64,11 @@ def prepare_data(dataset_name, top_n=0, top_eeg_n=0, eeg_only=0, **kwargs):
     if top_eeg_n:
         subjects = sorted(subjects, key=eeg_count)[-top_eeg_n:]
 
-    print 'eeg_count', sum(imap(eeg_count, subjects))
-
     # select only the subjects that have enough data
     mask = reduce(or_, imap(lambda s: numpy.equal(subject_x, s), subjects))
-    print 'masked_count1', sum(mask), len(mask)
     if eeg_only:
         eeg_mask = numpy.not_equal(indexable_eeg, None)
         mask &= eeg_mask
-    print 'masked_count2', sum(mask), len(mask)
     subject_x = subject_x[mask]
     skill_x = skill_x[mask]
     correct_y = correct_y[mask]

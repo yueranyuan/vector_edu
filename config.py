@@ -100,7 +100,15 @@ ALL_PARAMS['config1_noeeg'] = combine_dict(ALL_PARAMS['config1'],
                                            ALL_PARAMS['eeg_off2'])
 ALL_PARAMS['config1_eeg'] = combine_dict(ALL_PARAMS['config1'],
                                          ALL_PARAMS['eeg2'])
-
+ALL_PARAMS['fix2'] = combine_dict(ALL_PARAMS['eeg2'],
+                                  {'L2_reg': GenVar(0.00015, 0.0004),
+                                   'mutable_skill': GenVar(0, type=int),
+                                   'main_net_width': GenVar(470, 630, type=int),
+                                   'main_net_depth': GenVar(1, type=int),
+                                   'skill_vector_len': GenVar(80, 160, type=int)})
+ALL_PARAMS['config2'] = combine_dict(ALL_PARAMS['basic_eeg_toggle'],
+                                     ALL_PARAMS['fix1'],
+                                     ALL_PARAMS['fix2'])
 
 all_param_set_keys = ALL_PARAMS.keys()
 

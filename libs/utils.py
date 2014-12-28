@@ -48,6 +48,13 @@ def transpose(arr):
     return out
 
 
+def get_divisors(n):
+    for i in xrange(1, int(n / 2 + 1)):
+        if n % i == 0:
+            yield i
+    yield n
+
+
 # returns min index and min value
 def min_idx(arr):
     return min(enumerate(arr), key=operator.itemgetter(1))

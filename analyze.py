@@ -7,6 +7,8 @@ from scipy import stats
 from collections import defaultdict
 import numpy as np
 from datetime import datetime
+import matplotlib.pyplot as plt
+from math import sqrt, ceil
 
 
 # not using iterators in this code because log files are small
@@ -93,7 +95,13 @@ def analyze(bucket=None, subfolder=None, cache_dir=None, start_time=None,
         if (ones | zeros).all():
             test_type = 't-test'
             _on, _off = error_all[ones], error_all[zeros]
-            t, p = stats.ttest_ind(_on, _off)
+            try:
+                t, p = stats.ttest_ind(_on, _off)
+            except:
+                if len(_on) == 0 or len(_off) == 0:
+                    p = 1
+                else:
+                    raise
             better = 'on' if np.mean(_on) < np.mean(_off) else 'off'
         else:
             test_type = 'pearson r'
@@ -105,7 +113,23 @@ def analyze(bucket=None, subfolder=None, cache_dir=None, start_time=None,
     for o in sorted(outcomes):
         print o
 
+    plot_args = [arg for arg in arg_all.keys() if max(arg_all[arg]) != min(arg_all[arg])]
+    h = int(sqrt(len(plot_args)))
+    w = ceil(len(plot_args) / h)
+    for i, arg in enumerate(plot_args):
+        xs = arg_all[arg]
+        min_, max_ = min(xs), max(xs)
+        margin = (max_ - min_) * 0.1
+
+        plt.subplot(h, w, i + 1)
+        plt.scatter(xs, error_all)
+        plt.xlabel(arg)
+        plt.ylabel('error')
+        plt.xlim(min_ - margin, max_ + margin)
+    plt.show()
+
+
 if __name__ == '__main__':
-    start_time = datetime(2014, 12, 27, 00, 35)
+    start_time = datetime(2014, 12, 28, 02)
     # analyze('cmu-data', 'vectoredu/results', cache_dir='results', start_time=start_time)
-    analyze(cache_dir='results', start_time=start_time, print_individual_trials=True)
+    analyze(cache_dir='results', start_time=start_time)

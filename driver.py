@@ -143,6 +143,8 @@ def build_model(prepared_data, L1_reg, L2_reg, dropout_p, learning_rate,
                                       percentage=valid_percentage)
     train_idx = numpy.nonzero(numpy.logical_not(validation))[0]
     valid_idx = numpy.nonzero(validation)[0]
+    log('training set size: {}'.format(len(train_idx)))
+    log('validation set size: {}'.format(len(valid_idx)))
 
     skill_x = make_shared(skill_x)
     subject_x = make_shared(subject_x)

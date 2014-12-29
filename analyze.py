@@ -22,6 +22,13 @@ def parse_log(content):
         imap(lambda l: re.split(r', ', l), arg_lines))
     args = dict(re.match(r'(.+)=(.+)', arg).groups() for arg in arg_tokens)
 
+    # parse CV
+    for l in lines[:10]:
+        m = re.match(r'subjects \[(\d+)\] are held out', l)
+        if m:
+            print m.group(1)
+            args['held_out'] = m.group(1)
+
     # parse history
     history_matches = imap(
         lambda l: re.match(r'epoch (\d+), validation error (.*)%', l),
@@ -132,10 +139,10 @@ def analyze(bucket=None, subfolder=None, cache_dir=None, start_time=None,
         plt.xlabel(arg)
         plt.ylabel('error')
         plt.xlim(min_ - margin, max_ + margin)
-    plt.show()
+    # plt.show()
 
 
 if __name__ == '__main__':
-    start_time = datetime(2014, 12, 28, 18, 30)
-    analyze('cmu-data', 'vectoredu/results', cache_dir='results', start_time=start_time)
-    # analyze(cache_dir='results', start_time=start_time)
+    start_time = datetime(2014, 12, 29, 00, 00)
+    # analyze('cmu-data', 'vectoredu/results', cache_dir='results', start_time=start_time)
+    analyze(cache_dir='results', start_time=start_time)

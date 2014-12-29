@@ -4,6 +4,7 @@ import theano
 import theano.tensor as T
 import numpy
 import operator
+from itertools import imap
 
 # I should probably split these into separate files but it would kind of be a
 # waste of a files right now since they'll probably all be in separate ones
@@ -27,7 +28,7 @@ def make_shared(d, to_int=False):
 def random_unique_subset(v, percentage=.8):
     u_v = numpy.unique(v)
     s_v = sample(u_v, int((1 - percentage) * len(u_v)))
-    return sum((v == s for s in s_v))
+    return reduce(operator.or_, imap(lambda s: v == s, s_v))
 
 
 def combine_dict(*dicts):

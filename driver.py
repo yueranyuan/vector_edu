@@ -94,7 +94,7 @@ def prepare_data(dataset_name, top_n=0, top_eeg_n=0, eeg_only=0, normalize=0, **
     eeg_x = list(compress(indexable_eeg, mask))
 
     # break cv folds
-    valid_subj_mask = random_unique_subset(subject_x)
+    valid_subj_mask = random_unique_subset(subject_x, .9)
     log('subjects {} are held out'.format(numpy.unique(subject_x[valid_subj_mask])), True)
     train_idx = numpy.nonzero(numpy.logical_not(valid_subj_mask))[0]
     valid_idx = numpy.nonzero(valid_subj_mask)[0]

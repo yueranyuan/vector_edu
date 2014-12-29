@@ -43,7 +43,14 @@ def log_args(currentframe, include_kwargs=False):
     log(arg_summary)
 
 
-def prepare_data(dataset_name, top_n=0, top_eeg_n=0, eeg_only=0, **kwargs):
+def normalize_table(table):
+    table = numpy.array(table)
+    mins = table.min(axis=0)
+    maxs = table.max(axis=0)
+    return (table - mins) / (maxs - mins)
+
+
+def prepare_data(dataset_name, top_n=0, top_eeg_n=0, eeg_only=0, normalize=0, **kwargs):
     log('... loading data', True)
     log_args(inspect.currentframe())
 
@@ -59,20 +66,32 @@ def prepare_data(dataset_name, top_n=0, top_eeg_n=0, eeg_only=0, **kwargs):
         arr = indexable_eeg[numpy.equal(subject_x, subj)]
         return sum(numpy.not_equal(arr, None))
 
+    # select only the subjects that have enough data
     if top_n:
         subjects = sorted(subjects, key=row_count)[-top_n:]
     if top_eeg_n:
         subjects = sorted(subjects, key=eeg_count)[-top_eeg_n:]
-
-    # select only the subjects that have enough data
     mask = reduce(or_, imap(lambda s: numpy.equal(subject_x, s), subjects))
+
+    # normalize eegs
+    eeg_mask = numpy.not_equal(indexable_eeg, None)
+    if normalize:
+        for s in subjects:
+            subj_mask = numpy.equal(subject_x, s)
+            subj_eeg_mask = subj_mask & eeg_mask
+            table = numpy.array([list(l) for l in indexable_eeg[subj_eeg_mask]])
+            table = normalize_table(table)
+            idxs = numpy.nonzero(subj_eeg_mask)
+            for i in range(len(idxs)):
+                eeg_x[i] = table[i]
+
+    # mask out unselected data
     if eeg_only:
-        eeg_mask = numpy.not_equal(indexable_eeg, None)
         mask &= eeg_mask
     subject_x = subject_x[mask]
     skill_x = skill_x[mask]
     correct_y = correct_y[mask]
-    eeg_x = list(compress(eeg_x, mask))
+    eeg_x = list(compress(indexable_eeg, mask))
     return (subject_x, skill_x, correct_y, eeg_x, stim_pairs)
 
 
@@ -89,9 +108,7 @@ def to_lookup_table(x, access_idxs):
     table = numpy.zeros((1 + len(valid_idxs), width))  # leave the first row for "None"
     for i, l in enumerate(compress(x, mask)):
         table[i + 1] = numpy.asarray(l)
-    mins = table[1:].min(axis=0)
-    maxs = table[1:].max(axis=0)
-    table[1:] = (table[1:] - mins) / (maxs - mins)  # normalize the table
+    table[1:] = normalize_table(table[1:])
     table[0] = table[1:].mean(axis=0)  # set the "None" vector to the average of all vectors
 
     # create a way to index into lookup table
@@ -139,10 +156,10 @@ def build_model(prepared_data, L1_reg, L2_reg, dropout_p, learning_rate,
     # create cv folds
     # validation = (random_unique_subset(subject_x[good_indices, 0]) &
     #              random_unique_subset(skill_x[good_indices, 0]))
-    validation = random_unique_subset(subject_x[good_indices, 0],
-                                      percentage=valid_percentage)
-    train_idx = numpy.nonzero(numpy.logical_not(validation))[0]
-    valid_idx = numpy.nonzero(validation)[0]
+    valid_subj_mask = random_unique_subset(subject_x[good_indices, 0])
+    valid_skill_mask = random_unique_subset(skill_x[good_indices, 0], 0.4)
+    train_idx = numpy.nonzero(numpy.logical_not(valid_subj_mask | valid_skill_mask))[0]
+    valid_idx = numpy.nonzero(valid_subj_mask & valid_skill_mask)[0]
     log('training set size: {}'.format(len(train_idx)))
     log('validation set size: {}'.format(len(valid_idx)))
 

@@ -72,7 +72,10 @@ def analyze(bucket=None, subfolder=None, cache_dir=None, start_time=None,
     for i, (key_name, content) in enumerate(chronological):
         args, history, run_time = parse_log(content)
 
+        # TODO: turn string args into enums rather than discarding
         for arg, v in args.iteritems():
+            if arg == 'dataset_name':
+                continue
             arg_all[arg][i] = v
         times, errors = transpose(history)
         best_epoch_idx, best_error = min_idx(errors)
@@ -133,6 +136,6 @@ def analyze(bucket=None, subfolder=None, cache_dir=None, start_time=None,
 
 
 if __name__ == '__main__':
-    start_time = datetime(2014, 12, 28, 15, 45)
+    start_time = datetime(2014, 12, 28, 18, 30)
     analyze('cmu-data', 'vectoredu/results', cache_dir='results', start_time=start_time)
     # analyze(cache_dir='results', start_time=start_time)

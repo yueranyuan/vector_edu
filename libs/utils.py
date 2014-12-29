@@ -64,5 +64,15 @@ def min_idx(arr):
 def max_idx(arr):
     return max(enumerate(arr), key=operator.itemgetter(1))
 
+
+# converts an index array into the corresponding mask
+# example: [1, 3, 4] -> [False, True, False, True, True]
+def idx_to_mask(idxs, mask_len=None):
+    if not mask_len:
+        mask_len = max(idxs) + 1
+    mask = numpy.array([False] * mask_len)
+    mask[idxs] = True
+    return mask
+
 if __name__ == '__main__':
     print random_unique_subset(numpy.asarray([1, 2, 3, 3, 2, 1]), percentage=.6)

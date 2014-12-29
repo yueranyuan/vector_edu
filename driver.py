@@ -15,7 +15,7 @@ import theano.tensor as T
 
 from model.mlp import MLP, HiddenNetwork, rectifier
 from model.vector import VectorLayer
-from libs.utils import gen_log_name, make_shared, random_unique_subset
+from libs.utils import gen_log_name, make_shared, random_unique_subset, idx_to_mask
 import config
 from data import gen_word_matrix
 from itertools import imap, islice, groupby, chain, compress
@@ -92,7 +92,14 @@ def prepare_data(dataset_name, top_n=0, top_eeg_n=0, eeg_only=0, normalize=0, **
     skill_x = skill_x[mask]
     correct_y = correct_y[mask]
     eeg_x = list(compress(indexable_eeg, mask))
-    return (subject_x, skill_x, correct_y, eeg_x, stim_pairs)
+
+    # break cv folds
+    valid_subj_mask = random_unique_subset(subject_x)
+    log('subjects {} are held out'.format(numpy.unique(subject_x[valid_subj_mask])), True)
+    train_idx = numpy.nonzero(numpy.logical_not(valid_subj_mask))[0]
+    valid_idx = numpy.nonzero(valid_subj_mask)[0]
+
+    return (subject_x, skill_x, correct_y, eeg_x, stim_pairs, train_idx, valid_idx)
 
 
 # look up tables are cheaper memory-wise.
@@ -132,9 +139,11 @@ def build_model(prepared_data, L1_reg, L2_reg, dropout_p, learning_rate,
     # STEP1: order the data properly so that we can read from it sequentially
     # when training the model
 
-    subject_x, skill_x, correct_y, eeg_x, stim_pairs = prepared_data
+    subject_x, skill_x, correct_y, eeg_x, stim_pairs, train_idx, valid_idx = prepared_data
     subject_x = subject_x[:, None]  # add extra dimension as a 'feature vector'
     skill_x = skill_x[:, None]  # add extra dimension as a 'feature vector'
+    train_mask = idx_to_mask(train_idx, len(subject_x))
+    valid_mask = idx_to_mask(valid_idx, len(subject_x))
 
     # reorder indices so that each index can be fed as a 'base_index' into the
     # full model. This means lining up by subjects and removing the first few indices.
@@ -144,22 +153,22 @@ def build_model(prepared_data, L1_reg, L2_reg, dropout_p, learning_rate,
     skill_x = skill_x[sorted_i]
     subject_x = subject_x[sorted_i]
     correct_y = correct_y[sorted_i]
+    train_mask = train_mask[sorted_i]
+    valid_mask = valid_mask[sorted_i]
     # then we get rid of the first few indices per subject
     subject_groups = groupby(range(len(subject_x)), lambda (i): subject_x[i, 0])
     good_indices = list(chain.from_iterable(
         imap(lambda (_, g): islice(g, 2, None), subject_groups)))
 
-    t_good_indicies = make_shared(good_indices, to_int=True)
+    t_good_indices = make_shared(good_indices, to_int=True)
     master_indices = T.ivector('idx')
-    base_indices = t_good_indicies[master_indices]
+    base_indices = t_good_indices[master_indices]
 
-    # create cv folds
-    # validation = (random_unique_subset(subject_x[good_indices, 0]) &
-    #              random_unique_subset(skill_x[good_indices, 0]))
-    valid_subj_mask = random_unique_subset(subject_x[good_indices, 0])
-    valid_skill_mask = random_unique_subset(skill_x[good_indices, 0], 0.4)
-    train_idx = numpy.nonzero(numpy.logical_not(valid_subj_mask | valid_skill_mask))[0]
-    valid_idx = numpy.nonzero(valid_subj_mask & valid_skill_mask)[0]
+    # select only the good indices from CV indices
+    good_mask = idx_to_mask(good_indices, len(subject_x))
+    train_idx = numpy.nonzero(good_mask & train_mask)[0]
+    valid_idx = numpy.nonzero(good_mask & valid_mask)[0]
+
     log('training set size: {}'.format(len(train_idx)))
     log('validation set size: {}'.format(len(valid_idx)))
 

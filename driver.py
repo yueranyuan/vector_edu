@@ -36,7 +36,7 @@ def log(txt, also_print=False):
 def log_args(currentframe, include_kwargs=False):
     _, _, _, arg_dict = inspect.getargvalues(currentframe)
     explicit_args = [(k, v) for k, v in arg_dict.iteritems()
-                     if isinstance(v, (int, long, float))]
+                     if isinstance(v, (int, long, float, str))]
     keyword_args = arg_dict.get('kwargs', {}).items() if include_kwargs else []
     arg_summary = ', '.join(['{0}={1}'.format(*v) for v in
                              explicit_args + keyword_args])
@@ -107,7 +107,7 @@ def to_lookup_table(x, access_idxs):
 def build_model(prepared_data, L1_reg, L2_reg, dropout_p, learning_rate,
                 skill_vector_len=100, combiner_depth=1, combiner_width=200,
                 main_net_depth=1, main_net_width=500, previous_eeg_on=1,
-                current_eeg_on=1, mutable_skill=1, **kwargs):
+                current_eeg_on=1, mutable_skill=1, valid_percentage=0.8, **kwargs):
     log('... building the model', True)
     log_args(inspect.currentframe())
 
@@ -139,7 +139,8 @@ def build_model(prepared_data, L1_reg, L2_reg, dropout_p, learning_rate,
     # create cv folds
     # validation = (random_unique_subset(subject_x[good_indices, 0]) &
     #              random_unique_subset(skill_x[good_indices, 0]))
-    validation = random_unique_subset(subject_x[good_indices, 0])
+    validation = random_unique_subset(subject_x[good_indices, 0],
+                                      percentage=valid_percentage)
     train_idx = numpy.nonzero(numpy.logical_not(validation))[0]
     valid_idx = numpy.nonzero(validation)[0]
 
@@ -237,14 +238,18 @@ def build_model(prepared_data, L1_reg, L2_reg, dropout_p, learning_rate,
         givens={t_dropout: dropout_p},
         **func_args)
 
-    def validator_func(pred):
+    def train_eval(pred):
+        _y = correct_y.owner.inputs[0].get_value(borrow=True)[train_idx]
+        return auc(_y[:len(pred)], pred, pos_label=2)
+
+    def valid_eval(pred):
         _y = correct_y.owner.inputs[0].get_value(borrow=True)[valid_idx]
         return auc(_y[:len(pred)], pred, pos_label=2)
-    return f_train, f_valid, train_idx, valid_idx, validator_func
+    return f_train, f_valid, train_idx, valid_idx, train_eval, valid_eval
 
 
-def train_model(train_model, validate_model, train_idx, valid_idx, validator_func,
-                batch_size, n_epochs):
+def train_model(train_model, validate_model, train_idx, valid_idx,
+                train_eval, valid_eval, batch_size, n_epochs):
     log('... training', True)
 
     patience = 50  # look as this many examples regardless
@@ -253,23 +258,27 @@ def train_model(train_model, validate_model, train_idx, valid_idx, validator_fun
     validation_frequency = 5
     best_valid_error = numpy.inf
     best_epoch = 0
-    iteration = 0
 
     for epoch in range(n_epochs):
         # before the skill_accumulator is setup properly, train one at a time
         _batch_size = 1 if epoch == 0 else batch_size
-        for minibatch_index in xrange(int(len(train_idx) / _batch_size)):
-            train_model(train_idx[minibatch_index * _batch_size: (minibatch_index + 1) * _batch_size])
-            iteration = iteration + 1
+        train_results = [train_model(train_idx[i * _batch_size: (i + 1) * _batch_size])
+                         for i in xrange(int(len(train_idx) / _batch_size))]
+        # Aaron: this is not really a speed critical part of the code but we
+        # can come back and redo AUC in theano if we want to make this suck less
+        train_preds = list(chain.from_iterable(imap(lambda r: r[1], train_results)))
+        train_error = train_eval(train_preds)
+        log('epoch {epoch}, train error {err:.2%}'.format(
+            epoch=epoch, err=train_error), True)
 
         if (epoch + 1) % validation_frequency == 0:
             _batch_size = 1  # recreate the skill_accumulator each time
             results = [validate_model(valid_idx[i * _batch_size: (i + 1) * _batch_size])
-                       for i in xrange(int(len(train_idx) / _batch_size))]
+                       for i in xrange(int(len(valid_idx) / _batch_size))]
             # Aaron: this is not really a speed critical part of the code but we
             # can come back and redo AUC in theano if we want to make this suck less
-            predictions = list(chain.from_iterable(imap(lambda r: r[1], results)))
-            valid_error = validator_func(predictions)
+            preds = list(chain.from_iterable(imap(lambda r: r[1], results)))
+            valid_error = valid_eval(preds)
             log('epoch {epoch}, validation error {err:.2%}'.format(
                 epoch=epoch, err=valid_error), True)
 
@@ -281,7 +290,7 @@ def train_model(train_model, validate_model, train_idx, valid_idx, validator_fun
 
             if patience <= epoch:
                 break
-    return best_valid_error, best_epoch, iteration
+    return best_valid_error, best_epoch
 
 
 def run(learning_rate=0.01, L1_reg=0.00, L2_reg=0.0001, n_epochs=500,
@@ -290,22 +299,21 @@ def run(learning_rate=0.01, L1_reg=0.00, L2_reg=0.0001, n_epochs=500,
 
     prepared_data = prepare_data(dataset_name, **kwargs)
 
-    f_train, f_validate, train_idx, valid_idx, validator_func = (
+    f_train, f_validate, train_idx, valid_idx, train_eval, valid_eval = (
         build_model(prepared_data, L1_reg=L1_reg, L2_reg=L2_reg,
                     dropout_p=dropout_p, learning_rate=learning_rate, **kwargs))
 
     start_time = time.clock()
-    best_validation_loss, best_epoch, iteration = (
-        train_model(f_train, f_validate, train_idx, valid_idx, validator_func,
+    best_validation_loss, best_epoch = (
+        train_model(f_train, f_validate, train_idx, valid_idx, train_eval, valid_eval,
                     batch_size, n_epochs=n_epochs))
     end_time = time.clock()
     training_time = (end_time - start_time) / 60.
 
-    log(('Optimization complete. Best validation score of %f %% '
-         'obtained at iteration %i, with test performance %f %%') %
-        (best_validation_loss * 100., best_epoch + 1, 0.), True)
+    log(('Optimization complete. Best validation score of %f %%') %
+        (best_validation_loss * 100.), True)
     log('Code ran for ran for %.2fm' % (training_time))
-    return (best_validation_loss * 100., best_epoch + 1, iteration, training_time)
+    return (best_validation_loss * 100., best_epoch + 1, training_time)
 
 
 if __name__ == '__main__':
@@ -313,7 +321,7 @@ if __name__ == '__main__':
     parser.add_argument('-p', dest='param_set', type=str, default='default',
                         choices=config.all_param_set_keys,
                         help='the name of the parameter set that we want to use')
-    parser.add_argument('--f', dest='file', type=str, default='data/data.gz',
+    parser.add_argument('--f', dest='file', type=str, default='data/data4.gz',
                         help='the data file to use')
     parser.add_argument('-o', dest='outname', type=str, default=gen_log_name(),
                         help='name for the log file to be generated')

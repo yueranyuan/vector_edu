@@ -110,8 +110,8 @@ def analyze(bucket=None, subfolder=None, cache_dir=None, start_time=None,
         outcomes[i] = 'p={p} for {test_type} of {key}: {better} is better'.format(
             test_type=test_type, key=k, p=p, better=better)
     print "# Descriptive #"
-    print 'mean: {mean} variance: {variance}'.format(mean=np.mean(error_all),
-                                                     variance=np.var(error_all))
+    print 'n: {n} mean: {mean} variance: {variance}'.format(
+        n=len(error_all), mean=np.mean(error_all), variance=np.var(error_all))
     print "# Parameter Analysis #"
     for o in sorted(outcomes):
         print o
@@ -133,6 +133,6 @@ def analyze(bucket=None, subfolder=None, cache_dir=None, start_time=None,
 
 
 if __name__ == '__main__':
-    start_time = datetime(2014, 12, 28, 12)
+    start_time = datetime(2014, 12, 28, 15, 45)
     analyze('cmu-data', 'vectoredu/results', cache_dir='results', start_time=start_time)
     # analyze(cache_dir='results', start_time=start_time)

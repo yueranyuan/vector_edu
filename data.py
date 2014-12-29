@@ -63,7 +63,7 @@ def convert_eeg_from_xls(fname, outname, cutoffs=(0.5, 4.0, 7.0, 12.0, 30.0)):
         cPickle.dump((subject, start_time, end_time, sigqual, eeg_freq, subject_pairs), f)
 
 
-def align_data(task_name, eeg_name, out_name):
+def align_data(task_name, eeg_name, out_name, sigqual_cutoff=200):
     with gzip.open(task_name, 'rb') as task_f, gzip.open(eeg_name, 'rb') as eeg_f:
         task_subject, task_start, task_end, skill, correct, task_subject_pairs, stim_pairs = cPickle.load(task_f)
         eeg_subject, eeg_start, eeg_end, sigqual, eeg_freq, eeg_subject_pairs = cPickle.load(eeg_f)
@@ -106,8 +106,9 @@ def align_data(task_name, eeg_name, out_name):
                 task_eeg = []
                 # TODO: refactor this while loop into a itertools.takewhile
                 while temp_pointer < num_sub_eegs and eeg[temp_pointer][1] < t_end:
-                    # TODO: add sigqual cutoff
-                    task_eeg.append(eeg[temp_pointer][3])
+                    eeg_i = eeg[temp_pointer][3]
+                    if sigqual[eeg_i] < sigqual_cutoff:
+                        task_eeg.append(eeg_i)
                     temp_pointer += 1
                 if task_eeg:
                     task_eeg_mapping[t_i] = task_eeg
@@ -157,7 +158,7 @@ def gen_word_matrix(stims, pairs, vector_length=100):
 
 
 if __name__ == "__main__":
-    # task_name, eeg_name = 'data/task_data3.gz', 'data/eeg_data.gz'
-    # convert_task_from_xls('raw_data/task_large.xls', task_name)
-    # convert_eeg_from_xls('raw_data/eeg_data_thinkgear_2013_2014.xls', eeg_name)
-    align_data('data/task_data3.gz', 'data/eeg_data.gz', 'data/data.gz')
+    task_name, eeg_name = 'data/task_data4.gz', 'data/eeg_data4.gz'
+    convert_task_from_xls('raw_data/task_large.xls', task_name)
+    convert_eeg_from_xls('raw_data/eeg_data_thinkgear_2013_2014.xls', eeg_name)
+    align_data('data/task_data4.gz', 'data/eeg_data4.gz', 'data/data4.gz')

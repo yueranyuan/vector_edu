@@ -115,6 +115,9 @@ ALL_PARAMS['config3'] = combine_dict(ALL_PARAMS['basic_eeg_toggle'],
                                      ALL_PARAMS['fix1'],
                                      ALL_PARAMS['fix2'],
                                      ALL_PARAMS['fix3'])
+ALL_PARAMS['top12'] = {'top_eeg_n': GenVar(12, type=int)}
+ALL_PARAMS['config3_top12'] = combine_dict(ALL_PARAMS['config3'],
+                                           ALL_PARAMS['top12'])
 
 all_param_set_keys = ALL_PARAMS.keys()
 

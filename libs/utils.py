@@ -4,7 +4,7 @@ import theano
 import theano.tensor as T
 import numpy
 import operator
-from itertools import imap
+from itertools import imap, chain
 
 # I should probably split these into separate files but it would kind of be a
 # waste of a files right now since they'll probably all be in separate ones
@@ -64,6 +64,10 @@ def min_idx(arr):
 # returns max index and max value
 def max_idx(arr):
     return max(enumerate(arr), key=operator.itemgetter(1))
+
+
+def flatten(arr):
+    return list(chain.from_iterable(arr))
 
 
 # converts an index array into the corresponding mask

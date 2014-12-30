@@ -15,7 +15,8 @@ import theano.tensor as T
 
 from model.mlp import MLP, HiddenNetwork, rectifier
 from model.vector import VectorLayer
-from libs.utils import gen_log_name, make_shared, random_unique_subset, idx_to_mask
+from libs.utils import (gen_log_name, make_shared, random_unique_subset,
+                        idx_to_mask, transpose)
 import config
 from data import gen_word_matrix
 from itertools import imap, islice, groupby, chain, compress
@@ -48,6 +49,55 @@ def normalize_table(table):
     mins = table.min(axis=0)
     maxs = table.max(axis=0)
     return (table - mins) / (maxs - mins)
+
+
+def prepare_eeglrkt_data(dataset_name='raw_data/eeglrkt/evidence.2013_2014.txt', held_out_subj=3):
+    log('... loading data', True)
+    log_args(inspect.currentframe())
+
+    from libs.loader import load
+    eeg_headers = ('kc_med', 'kc_att', 'kc_raww', 'kc_delta', 'kc_theta',
+                   'kc_alpha', 'kc_beta')
+    data, enum_dict, _ = load(
+        dataset_name,
+        numeric=['fluent'],
+        time=['start_time'],
+        numeric_float=eeg_headers,
+        enum=['user', 'skill'],
+        time_format='%m/%d/%y %I:%M %p')
+    sorted_idxs, _ = transpose(sorted(enumerate(data['start_time']),
+                                      key=lambda v: v[1]))
+    subject_x = data['user'][sorted_idxs]
+    skill_x = data['skill'][sorted_idxs]
+    correct_y = data['fluent'][sorted_idxs]
+    eeg_x = numpy.column_stack([data[eh] for eh in eeg_headers])[sorted_idxs, :]
+    stim_pairs = list(enum_dict['skill'].iteritems())
+
+    valid_subj_mask = numpy.equal(subject_x, held_out_subj)
+    log('subjects {} are held out'.format(held_out_subj), True)
+    train_idx = numpy.nonzero(numpy.logical_not(valid_subj_mask))[0]
+    valid_idx = numpy.nonzero(valid_subj_mask)[0]
+
+    return (subject_x, skill_x, correct_y, eeg_x, stim_pairs, train_idx, valid_idx)
+
+
+def save_prepared_data_to_eeglrkt(fname, prepared_data):
+    from libs.loader import save
+    from libs.utils import combine_dict
+
+    (subject_x, skill_x, correct_y, eeg_x, stim_pairs, train_idx, valid_idx) = prepared_data
+    # Aaron: I need to convert eeg_x to a proper numpy int array in general but I haven't done it yet
+    eeg_x = numpy.array([list(e) for e in eeg_x])
+    eeg_columns = {}
+    eeg_bands = ('kc_delta', 'kc_theta', 'kc_alpha', 'kc_beta')
+    for i, band in enumerate(eeg_bands):
+        eeg_columns[band] = eeg_x[:, i]
+    save(fname,
+         numeric=combine_dict(eeg_columns, {'user': subject_x, 'fluent': correct_y}),
+         enum={'skill': skill_x},
+         enum_dict={'skill': dict(stim_pairs)},
+         header=['user', 'skill', 'fluent'] + list(eeg_bands))
+    sys.exit()
 
 
 def prepare_data(dataset_name, top_n=0, top_eeg_n=0, eeg_only=0, normalize=0, **kwargs):
@@ -98,6 +148,10 @@ def prepare_data(dataset_name, top_n=0, top_eeg_n=0, eeg_only=0, normalize=0, **
     log('subjects {} are held out'.format(numpy.unique(subject_x[valid_subj_mask])), True)
     train_idx = numpy.nonzero(numpy.logical_not(valid_subj_mask))[0]
     valid_idx = numpy.nonzero(valid_subj_mask)[0]
+
+    import random
+    # train_idx = random.sample(train_idx, 6000)
+    valid_idx = random.sample(valid_idx, min(len(valid_idx), 400))
 
     return (subject_x, skill_x, correct_y, eeg_x, stim_pairs, train_idx, valid_idx)
 
@@ -325,7 +379,9 @@ def run(learning_rate=0.01, L1_reg=0.00, L2_reg=0.0001, n_epochs=500,
         dataset_name='data/data.gz', batch_size=30, dropout_p=0.2, **kwargs):
     log_args(inspect.currentframe())
 
+    # prepared_data = prepare_eeglrkt_data()
     prepared_data = prepare_data(dataset_name, **kwargs)
+    # save_prepared_data_to_eeglrkt('evidence_rebuilt.2012_2013.xls', prepared_data)
 
     f_train, f_validate, train_idx, valid_idx, train_eval, valid_eval = (
         build_model(prepared_data, L1_reg=L1_reg, L2_reg=L2_reg,

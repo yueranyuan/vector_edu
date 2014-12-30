@@ -139,10 +139,10 @@ def analyze(bucket=None, subfolder=None, cache_dir=None, start_time=None,
         plt.xlabel(arg)
         plt.ylabel('error')
         plt.xlim(min_ - margin, max_ + margin)
-    # plt.show()
+    plt.show()
 
 
 if __name__ == '__main__':
-    start_time = datetime(2014, 12, 29, 00, 00)
-    # analyze('cmu-data', 'vectoredu/results', cache_dir='results', start_time=start_time)
-    analyze(cache_dir='results', start_time=start_time)
+    start_time = datetime(2014, 12, 29, 14, 00)
+    analyze('cmu-data', 'vectoredu/results', cache_dir='results', start_time=start_time)
+    # analyze(cache_dir='results', start_time=start_time)

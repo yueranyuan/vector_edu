@@ -118,6 +118,14 @@ ALL_PARAMS['config3'] = combine_dict(ALL_PARAMS['basic_eeg_toggle'],
 ALL_PARAMS['top12'] = {'top_eeg_n': GenVar(12, type=int)}
 ALL_PARAMS['config3_top12'] = combine_dict(ALL_PARAMS['config3'],
                                            ALL_PARAMS['top12'])
+ALL_PARAMS['wide_search'] = {'learning_rate': GenVar(0.005, 0.02, scale=LOG_SCALE),
+                             'L2_reg': GenVar(0.00005, 0.0003),
+                             'main_net_width': GenVar(300, 700, type=int),
+                             'combiner_width': GenVar(100, 300, type=int),
+                             'skill_vector_len': GenVar(50, 200, type=int),
+                             'dropout_p': GenVar(0, 0.4)}
+ALL_PARAMS['config4'] = combine_dict(ALL_PARAMS['config3'],
+                                     ALL_PARAMS['wide_search'])
 
 all_param_set_keys = ALL_PARAMS.keys()
 

@@ -6,6 +6,7 @@ import gzip
 import argparse
 from operator import or_
 from collections import namedtuple
+import random
 import warnings
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 
@@ -72,7 +73,9 @@ def prepare_eeglrkt_data(dataset_name='raw_data/eeglrkt/evidence.2013_2014.txt',
     correct_y = data['fluent'][sorted_idxs]
     eeg_x = numpy.column_stack([data[eh] for eh in eeg_headers])[sorted_idxs, :]
     stim_pairs = list(enum_dict['skill'].iteritems())
-
+    sorted_subj = sorted(numpy.unique(subject_x),
+                         key=lambda s: sum(numpy.equal(subject_x, s)))
+    held_out_subj = sorted_subj[random.randint(1, 10)]
     valid_subj_mask = numpy.equal(subject_x, held_out_subj)
     log('subjects {} are held out'.format(held_out_subj), True)
     train_idx = numpy.nonzero(numpy.logical_not(valid_subj_mask))[0]
@@ -379,8 +382,8 @@ def run(learning_rate=0.01, L1_reg=0.00, L2_reg=0.0001, n_epochs=500,
         dataset_name='data/data.gz', batch_size=30, dropout_p=0.2, **kwargs):
     log_args(inspect.currentframe())
 
-    # prepared_data = prepare_eeglrkt_data()
-    prepared_data = prepare_data(dataset_name, **kwargs)
+    prepared_data = prepare_eeglrkt_data(dataset_name)
+    # prepared_data = prepare_data(dataset_name, **kwargs)
     # save_prepared_data_to_eeglrkt('evidence_rebuilt.2012_2013.xls', prepared_data)
 
     f_train, f_validate, train_idx, valid_idx, train_eval, valid_eval = (
@@ -405,7 +408,7 @@ if __name__ == '__main__':
     parser.add_argument('-p', dest='param_set', type=str, default='default',
                         choices=config.all_param_set_keys,
                         help='the name of the parameter set that we want to use')
-    parser.add_argument('--f', dest='file', type=str, default='data/data4.gz',
+    parser.add_argument('--f', dest='file', type=str, default='data/eeglrkt.txt',
                         help='the data file to use')
     parser.add_argument('-o', dest='outname', type=str, default=gen_log_name(),
                         help='name for the log file to be generated')

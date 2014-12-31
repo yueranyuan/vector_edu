@@ -24,7 +24,7 @@ def parse_log(content):
 
     # parse CV
     for l in lines[:10]:
-        m = re.match(r'subjects \[(\d+)\] are held out', l)
+        m = re.match(r'subjects (\d+) are held out', l)
         if m:
             print m.group(1)
             args['held_out'] = m.group(1)
@@ -143,6 +143,6 @@ def analyze(bucket=None, subfolder=None, cache_dir=None, start_time=None,
 
 
 if __name__ == '__main__':
-    start_time = datetime(2014, 12, 29, 14, 00)
+    start_time = datetime(2014, 12, 30, 00, 00)
     analyze('cmu-data', 'vectoredu/results', cache_dir='results', start_time=start_time)
     # analyze(cache_dir='results', start_time=start_time)

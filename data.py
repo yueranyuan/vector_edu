@@ -124,7 +124,7 @@ def align_data(task_name, eeg_name, out_name, sigqual_cutoff=200):
 
     # Step4: write data file for use by classifier
     with gzip.open(out_name, 'w') as f:
-        cPickle.dump((task_subject, skill, correct, features, stim_pairs), f)
+        cPickle.dump((task_subject, skill, correct, task_start, features, stim_pairs), f)
 
 
 def _get_ngrams(stims, pairs):

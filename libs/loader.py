@@ -141,7 +141,7 @@ def save(fname, numeric=None, numeric_float=None, enum=None, enum_dict=None,
 
     def iter_time(key, data):
         for d in data:
-            yield format_time(d)
+            yield format_time(d, time_format)
 
     # apply the appropriate type of processor to each column
     def process(data_dict, to_iter=None):
@@ -157,8 +157,12 @@ def save(fname, numeric=None, numeric_float=None, enum=None, enum_dict=None,
     header_column_pairs = list(chain(*starmap(process, column_type_processor_pair)))
 
     # set headers, reorder columns based on headers
+    header_ = [h for h, c in header_column_pairs]
     if not header:
-        header = [h for h, c in header_column_pairs]
+        header = header_
+    if sorted(header) != sorted(header_):
+        raise Exception("header {header_} from data dictionary differs from the provided header {header}".format(
+            header_=header_, header=header))
     header_column_pairs = sorted(header_column_pairs, key=lambda (h, c): header.index(h))
     columns = [c for h, c in header_column_pairs]
 

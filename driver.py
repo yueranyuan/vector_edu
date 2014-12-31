@@ -23,6 +23,8 @@ from data import gen_word_matrix
 from itertools import imap, islice, groupby, chain, compress
 from libs.auc import auc
 
+BNTSM_TIME_FORMAT = '%m/%d/%y %I:%M %p'
+
 
 def get_val(tensor):
     return tensor.get_value(borrow=True)
@@ -65,11 +67,12 @@ def prepare_eeglrkt_data(dataset_name='raw_data/eeglrkt/evidence.2013_2014.txt',
         time=['start_time'],
         numeric_float=eeg_headers,
         enum=['user', 'skill'],
-        time_format='%m/%d/%y %I:%M %p')
+        time_format=BNTSM_TIME_FORMAT)
     sorted_idxs, _ = transpose(sorted(enumerate(data['start_time']),
                                       key=lambda v: v[1]))
     subject_x = data['user'][sorted_idxs]
     skill_x = data['skill'][sorted_idxs]
+    start_x = data['start_time'][sorted_idxs]
     correct_y = data['fluent'][sorted_idxs]
     eeg_x = numpy.column_stack([data[eh] for eh in eeg_headers])[sorted_idxs, :]
     stim_pairs = list(enum_dict['skill'].iteritems())
@@ -81,25 +84,30 @@ def prepare_eeglrkt_data(dataset_name='raw_data/eeglrkt/evidence.2013_2014.txt',
     train_idx = numpy.nonzero(numpy.logical_not(valid_subj_mask))[0]
     valid_idx = numpy.nonzero(valid_subj_mask)[0]
 
-    return (subject_x, skill_x, correct_y, eeg_x, stim_pairs, train_idx, valid_idx)
+    return (subject_x, skill_x, correct_y, start_x, eeg_x, stim_pairs, train_idx, valid_idx)
 
 
 def save_prepared_data_to_eeglrkt(fname, prepared_data):
     from libs.loader import save
     from libs.utils import combine_dict
 
-    (subject_x, skill_x, correct_y, eeg_x, stim_pairs, train_idx, valid_idx) = prepared_data
+    (subject_x, skill_x, correct_y, start_x, eeg_x, stim_pairs, train_idx, valid_idx) = prepared_data
     # Aaron: I need to convert eeg_x to a proper numpy int array in general but I haven't done it yet
     eeg_x = numpy.array([list(e) for e in eeg_x])
     eeg_columns = {}
     eeg_bands = ('kc_delta', 'kc_theta', 'kc_alpha', 'kc_beta')
     for i, band in enumerate(eeg_bands):
         eeg_columns[band] = eeg_x[:, i]
+    zero_eeg_bands = ('kc_att', 'kc_med', 'kc_raww', 'kc_gamma')
+    for i, band in enumerate(zero_eeg_bands):
+        eeg_columns[band] = numpy.zeros(eeg_x.shape[0])
     save(fname,
          numeric=combine_dict(eeg_columns, {'user': subject_x, 'fluent': correct_y}),
          enum={'skill': skill_x},
          enum_dict={'skill': dict(stim_pairs)},
-         header=['user', 'skill', 'fluent'] + list(eeg_bands))
+         time={'start_time': start_x},
+         time_format=BNTSM_TIME_FORMAT,
+         header=['user', 'skill', 'fluent', 'start_time'] + list(eeg_bands) + list(zero_eeg_bands))
     sys.exit()
 
 
@@ -108,7 +116,7 @@ def prepare_data(dataset_name, top_n=0, top_eeg_n=0, eeg_only=0, normalize=0, **
     log_args(inspect.currentframe())
 
     with gzip.open(dataset_name, 'rb') as f:
-        subject_x, skill_x, correct_y, eeg_x, stim_pairs = cPickle.load(f)
+        subject_x, skill_x, correct_y, start_x, eeg_x, stim_pairs = cPickle.load(f)
     subjects = numpy.unique(subject_x)
     indexable_eeg = numpy.asarray(eeg_x)
 
@@ -144,6 +152,7 @@ def prepare_data(dataset_name, top_n=0, top_eeg_n=0, eeg_only=0, normalize=0, **
     subject_x = subject_x[mask]
     skill_x = skill_x[mask]
     correct_y = correct_y[mask]
+    start_x = start_x[mask]
     eeg_x = list(compress(indexable_eeg, mask))
 
     # break cv folds
@@ -152,11 +161,11 @@ def prepare_data(dataset_name, top_n=0, top_eeg_n=0, eeg_only=0, normalize=0, **
     train_idx = numpy.nonzero(numpy.logical_not(valid_subj_mask))[0]
     valid_idx = numpy.nonzero(valid_subj_mask)[0]
 
-    import random
+    # import random
     # train_idx = random.sample(train_idx, 6000)
-    valid_idx = random.sample(valid_idx, min(len(valid_idx), 400))
+    # valid_idx = random.sample(valid_idx, min(len(valid_idx), 400))
 
-    return (subject_x, skill_x, correct_y, eeg_x, stim_pairs, train_idx, valid_idx)
+    return (subject_x, skill_x, correct_y, start_x, eeg_x, stim_pairs, train_idx, valid_idx)
 
 
 # look up tables are cheaper memory-wise.
@@ -196,7 +205,7 @@ def build_model(prepared_data, L1_reg, L2_reg, dropout_p, learning_rate,
     # STEP1: order the data properly so that we can read from it sequentially
     # when training the model
 
-    subject_x, skill_x, correct_y, eeg_x, stim_pairs, train_idx, valid_idx = prepared_data
+    subject_x, skill_x, correct_y, start_x, eeg_x, stim_pairs, train_idx, valid_idx = prepared_data
     subject_x = subject_x[:, None]  # add extra dimension as a 'feature vector'
     skill_x = skill_x[:, None]  # add extra dimension as a 'feature vector'
     train_mask = idx_to_mask(train_idx, len(subject_x))
@@ -382,8 +391,8 @@ def run(learning_rate=0.01, L1_reg=0.00, L2_reg=0.0001, n_epochs=500,
         dataset_name='data/data.gz', batch_size=30, dropout_p=0.2, **kwargs):
     log_args(inspect.currentframe())
 
-    prepared_data = prepare_eeglrkt_data(dataset_name)
-    # prepared_data = prepare_data(dataset_name, **kwargs)
+    prepared_data = prepare_data(dataset_name, **kwargs)
+    # prepared_data = prepare_eeglrkt_data(dataset_name)
     # save_prepared_data_to_eeglrkt('evidence_rebuilt.2012_2013.xls', prepared_data)
 
     f_train, f_validate, train_idx, valid_idx, train_eval, valid_eval = (
@@ -408,7 +417,7 @@ if __name__ == '__main__':
     parser.add_argument('-p', dest='param_set', type=str, default='default',
                         choices=config.all_param_set_keys,
                         help='the name of the parameter set that we want to use')
-    parser.add_argument('--f', dest='file', type=str, default='data/eeglrkt.txt',
+    parser.add_argument('--f', dest='file', type=str, default='data/data4.gz',
                         help='the data file to use')
     parser.add_argument('-o', dest='outname', type=str, default=gen_log_name(),
                         help='name for the log file to be generated')

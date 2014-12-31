@@ -18,8 +18,9 @@ def gen_log_name(uid=None):
         uid=uid)
 
 
-def make_shared(d, to_int=False):
-    sd = theano.shared(numpy.asarray(d, dtype=theano.config.floatX), borrow=True)
+def make_shared(d, to_int=False, **kwargs):
+    sd = theano.shared(numpy.asarray(d, dtype=theano.config.floatX),
+                       **kwargs)
     if to_int:
         return T.cast(sd, 'int32')
     return sd

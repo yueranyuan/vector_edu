@@ -1,21 +1,14 @@
-import datetime
-from random import randint, sample
-import theano
-import theano.tensor as T
-import numpy
+from random import sample
 import operator
 from itertools import imap, chain
 
+import theano
+import theano.tensor as T
+import numpy
+
+
 # I should probably split these into separate files but it would kind of be a
 # waste of a files right now since they'll probably all be in separate ones
-
-
-def gen_log_name(uid=None):
-    if uid is None:
-        uid = str(randint(0, 99999))
-    return '{time}_{uid}.log'.format(
-        time=datetime.datetime.now().strftime("%Y_%m_%d_%H_%M_%S"),
-        uid=uid)
 
 
 def make_shared(d, to_int=False, **kwargs):
@@ -41,7 +34,10 @@ def combine_dict(*dicts):
 
 # transposes a 2d array of arbitrary elements without numpy
 def transpose(arr):
-    if len(arr) == 0:  # incidentally, this line also checks that arr is a list
+    if not isinstance(arr, list):
+        arr = list(arr)
+        # TODO: issue warning of a potentially expensive operation
+    if len(arr) == 0:
         return []
     width = len(arr[0])
     out = [None] * width
@@ -69,6 +65,13 @@ def max_idx(arr):
 
 def flatten(arr):
     return list(chain.from_iterable(arr))
+
+
+def normalize_table(table):
+    table = numpy.array(table)
+    mins = table.min(axis=0)
+    maxs = table.max(axis=0)
+    return (table - mins) / (maxs - mins)
 
 
 # converts an index array into the corresponding mask

@@ -5,3 +5,5 @@
 *.log
 .hidden
 .DS_Store
+data/
+temp_store/

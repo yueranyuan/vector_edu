@@ -70,8 +70,9 @@ f = theano.function(inputs=[i, skill_i, subject_i],
                     outputs=[loss, results])
 
 # train this thing
-n_epochs = 1001
+n_epochs = 54
 for epoch in range(n_epochs):
+    print 'epoch'
     for subject, subject_idxs in groupby(xrange(N), key=lambda i: subject_x[i]):
         for skill, skill_idxs in groupby(subject_idxs, key=lambda i: skill_x[i]):
             print f(list(skill_idxs), skill, subject)

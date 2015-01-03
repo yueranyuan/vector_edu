@@ -60,6 +60,6 @@ train_idxs = [1, 2, 4, 5]
 for i in range(len(train_idxs)):
     print train(train_idxs[i:i + 1])
 
-n_epochs = 1000
+n_epochs = 54
 for i in range(n_epochs):
     print train(train_idxs)

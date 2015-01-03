@@ -154,7 +154,7 @@ def gen_word_matrix(stims, pairs, vector_length=100):
     buffered_words = itertools.imap(lambda (w, i): '^{word}$'.format(word=w), ordered_pairs)
     word_vectors = [[1 if ngram in word else 0 for ngram in vector_keys]
                     for word in buffered_words]
-    return word_vectors
+    return numpy.asarray(word_vectors)
 
 
 if __name__ == "__main__":

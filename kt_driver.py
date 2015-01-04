@@ -14,16 +14,16 @@ def run(**kwargs):
 
     import kt.data
     import kt.train
-    import kt.lrkt
+    import kt.olddeepkt
     prepared_data = kt.data.prepare_data(**kwargs)
 
     f_train, f_validate, train_idx, valid_idx, train_eval, valid_eval = (
-        kt.lrkt.build_model(prepared_data))
+        kt.olddeepkt.build_model(prepared_data, **kwargs))
 
     start_time = time.clock()
     best_validation_loss, best_epoch = (
         kt.train.train_model(f_train, f_validate, train_idx, valid_idx, train_eval, valid_eval,
-                             learning_rate=0.05, **kwargs))
+                             **kwargs))
     end_time = time.clock()
     training_time = (end_time - start_time) / 60.
 

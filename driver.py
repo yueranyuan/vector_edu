@@ -16,10 +16,11 @@ import theano.tensor as T
 
 from model.mlp import MLP, HiddenNetwork, rectifier
 from model.vector import VectorLayer
-from libs.utils import (gen_log_name, make_shared, random_unique_subset,
+from libs.utils import (make_shared, random_unique_subset,
                         idx_to_mask, transpose)
 import config
-from data import gen_word_matrix
+from libs.data import gen_word_matrix
+from libs.logger import gen_log_name, set_log_file, log, log_args
 from itertools import imap, islice, groupby, chain, compress
 from libs.auc import auc
 
@@ -28,23 +29,6 @@ BNTSM_TIME_FORMAT = '%m/%d/%y %I:%M %p'
 
 def get_val(tensor):
     return tensor.get_value(borrow=True)
-
-
-def log(txt, also_print=False):
-    if also_print:
-        print txt
-    with open(LOG_FILE, 'a+') as f:
-        f.write('{0}\n'.format(txt))
-
-
-def log_args(currentframe, include_kwargs=False):
-    _, _, _, arg_dict = inspect.getargvalues(currentframe)
-    explicit_args = [(k, v) for k, v in arg_dict.iteritems()
-                     if isinstance(v, (int, long, float, str))]
-    keyword_args = arg_dict.get('kwargs', {}).items() if include_kwargs else []
-    arg_summary = ', '.join(['{0}={1}'.format(*v) for v in
-                             explicit_args + keyword_args])
-    log(arg_summary)
 
 
 def normalize_table(table):
@@ -206,6 +190,7 @@ def build_model(prepared_data, L1_reg, L2_reg, dropout_p, learning_rate,
     # when training the model
 
     subject_x, skill_x, correct_y, start_x, eeg_x, stim_pairs, train_idx, valid_idx = prepared_data
+    correct_y += 1
     subject_x = subject_x[:, None]  # add extra dimension as a 'feature vector'
     skill_x = skill_x[:, None]  # add extra dimension as a 'feature vector'
     train_mask = idx_to_mask(train_idx, len(subject_x))
@@ -355,7 +340,8 @@ def train_model(train_model, validate_model, train_idx, valid_idx,
 
     for epoch in range(n_epochs):
         # before the skill_accumulator is setup properly, train one at a time
-        _batch_size = 1 if epoch == 0 else batch_size
+        # _batch_size = 1 if epoch == 0 else batch_size
+        _batch_size = batch_size
         train_results = [train_model(train_idx[i * _batch_size: (i + 1) * _batch_size])
                          for i in xrange(int(len(train_idx) / _batch_size))]
         # Aaron: this is not really a speed critical part of the code but we
@@ -390,8 +376,8 @@ def train_model(train_model, validate_model, train_idx, valid_idx,
 def run(learning_rate=0.01, L1_reg=0.00, L2_reg=0.0001, n_epochs=500,
         dataset_name='data/data.gz', batch_size=30, dropout_p=0.2, **kwargs):
     log_args(inspect.currentframe())
-
-    prepared_data = prepare_data(dataset_name, **kwargs)
+    import kt.data
+    prepared_data = kt.data.prepare_data(dataset_name, **kwargs)
     # prepared_data = prepare_eeglrkt_data(dataset_name)
     # save_prepared_data_to_eeglrkt('evidence_rebuilt.2012_2013.xls', prepared_data)
 
@@ -424,7 +410,7 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     params = config.get_config(args.param_set)
-    LOG_FILE = args.outname
+    set_log_file(args.outname)
     log(run(dataset_name=args.file, **params))
     print "finished"
     if sys.platform.startswith('win'):

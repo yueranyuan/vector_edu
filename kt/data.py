@@ -13,6 +13,27 @@ from libs.utils import normalize_table, random_unique_subset, transpose
 BNTSM_TIME_FORMAT = '%m/%d/%y %I:%M %p'
 
 
+def to_lookup_table(x):
+    mask = np.asarray([v is not None for v in x], dtype=bool)
+    if not mask.any():
+        raise Exception("can't create lookup table from no data")
+
+    # create lookup table
+    valid_idxs = np.nonzero(mask)[0]
+    width = len(x[valid_idxs[0]])
+    table = np.zeros((1 + len(valid_idxs), width))  # leave the first row for "None"
+    for i, l in enumerate(compress(x, mask)):
+        table[i + 1] = np.asarray(l)
+    table[1:] = normalize_table(table[1:])
+    table[0] = table[1:].mean(axis=0)  # set the "None" vector to the average of all vectors
+
+    # create a way to index into lookup table
+    idxs = np.zeros(len(x))
+    idxs[valid_idxs] = xrange(1, len(valid_idxs) + 1)
+
+    return idxs, table
+
+
 def prepare_eeglrkt_data(dataset_name='data/eeglrkt.txt'):
     log('... loading data', True)
     log_args(inspect.currentframe())
@@ -112,9 +133,12 @@ def prepare_data(dataset_name, top_n=0, top_eeg_n=14, eeg_only=1, normalize=0, *
     eeg_x = list(compress(indexable_eeg, mask))
 
     # break cv folds
-    valid_subj_mask = random_unique_subset(subject_x, .9)
+    # valid_subj_mask = random_unique_subset(subject_x, .9)
+    valid_subj_mask = np.equal(subject_x, 3)
     log('subjects {} are held out'.format(np.unique(subject_x[valid_subj_mask])), True)
     train_idx = np.nonzero(np.logical_not(valid_subj_mask))[0]
     valid_idx = np.nonzero(valid_subj_mask)[0]
 
-    return (subject_x, skill_x, correct_y, start_x, eeg_x, stim_pairs, train_idx, valid_idx)
+    eeg_x, eeg_table = to_lookup_table(eeg_x)
+
+    return (subject_x, skill_x, correct_y, start_x, eeg_x, eeg_table, stim_pairs, train_idx, valid_idx)

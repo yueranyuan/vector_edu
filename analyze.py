@@ -2,7 +2,7 @@ from libs import s3
 import re
 import os
 from itertools import ifilter, imap, chain, compress, tee, dropwhile
-from libs.utils import transpose, min_idx
+from libs.utils import transpose, max_idx
 from scipy import stats
 from collections import defaultdict
 import numpy as np
@@ -85,7 +85,7 @@ def analyze(bucket=None, subfolder=None, cache_dir=None, start_time=None,
                 continue
             arg_all[arg][i] = v
         times, errors = transpose(history)
-        best_epoch_idx, best_error = min_idx(errors)
+        best_epoch_idx, best_error = max_idx(errors)
         error_all[i] = best_error
 
         if print_individual_trials:
@@ -112,16 +112,19 @@ def analyze(bucket=None, subfolder=None, cache_dir=None, start_time=None,
                     p = 1
                 else:
                     raise
-            better = 'on' if np.mean(_on) < np.mean(_off) else 'off'
+            better = 'on' if np.mean(_on) > np.mean(_off) else 'off'
         else:
             test_type = 'pearson r'
             r, p = stats.pearsonr(v, error_all)
-            better = 'high' if r < 0 else 'low'
+            better = 'high' if r > 0 else 'low'
         outcomes[i] = 'p={p} for {test_type} of {key}: {better} is better'.format(
             test_type=test_type, key=k, p=p, better=better)
     print "# Descriptive #"
     print 'n: {n} mean: {mean} variance: {variance}'.format(
         n=len(error_all), mean=np.mean(error_all), variance=np.var(error_all))
+    print np.mean(error_all[np.equal(arg_all['model_type'], 0)])
+    print np.mean(error_all[np.equal(arg_all['model_type'], 1)])
+    print np.mean(error_all[np.equal(arg_all['model_type'], 2)])
     print "# Parameter Analysis #"
     for o in sorted(outcomes):
         print o
@@ -143,6 +146,6 @@ def analyze(bucket=None, subfolder=None, cache_dir=None, start_time=None,
 
 
 if __name__ == '__main__':
-    start_time = datetime(2014, 12, 30, 00, 00)
-    analyze('cmu-data', 'vectoredu/results', cache_dir='results', start_time=start_time)
-    # analyze(cache_dir='results', start_time=start_time)
+    start_time = datetime(2015, 1, 05, 00, 00)
+    # analyze('cmu-data', 'vectoredu/results', cache_dir='results', start_time=start_time)
+    analyze(cache_dir='results', start_time=start_time)

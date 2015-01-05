@@ -22,7 +22,7 @@ def neg_log_loss(p, y):
     return -T.sum(T.log(p.T)[T.arange(y.shape[0]), y])
 
 
-def build_model(prepared_data, **kwargs):
+def build_model(prepared_data, clamp_L0=0.4, eeg_column_i=4, **kwargs):
     log('... building the model', True)
     log_args(inspect.currentframe())
 
@@ -51,7 +51,6 @@ def build_model(prepared_data, **kwargs):
 
     # binarize eeg
     eeg_single_x = np.zeros(N)
-    eeg_column_i = None
     if eeg_column_i is not None:
         eeg_column = eeg_table[eeg_x, eeg_column_i]
         above_median = np.greater(eeg_column, np.median(eeg_column))
@@ -62,12 +61,16 @@ def build_model(prepared_data, **kwargs):
     p_G = 0.1
     p_S = 0.2
     p_L0 = 0.7
+    if clamp_L0 is None:
+        p_L0 = 0.7
+    else:
+        p_L0 = clamp_L0
     # eeg_single_x = np.zeros(N)
     parameter_base = np.ones(n_skills)
     tp_L0, t_L0 = make_probability(parameter_base * p_L0, name='L0')
     tp_T, t_T = make_probability(np.ones((n_skills, 2)) * p_T, name='p(T)')
-    tp_G, t_G = make_probability(parameter_base * p_G, name='p(G)')
-    tp_S, t_S = make_probability(parameter_base * p_S, name='p(S)')
+    tp_G, t_G = make_probability(p_G, name='p(G)')
+    tp_S, t_S = make_probability(p_S, name='p(S)')
 
     # declare and prepare variables for theano
     i = T.ivector('i')
@@ -88,14 +91,17 @@ def build_model(prepared_data, **kwargs):
                                             outputs_info=[tp_L0[skill_i],
                                                           dummy_float],
                                             non_sequences=[tp_T[skill_i],
-                                                           tp_G[skill_i],
-                                                           tp_S[skill_i]])
+                                                           tp_G,
+                                                           tp_S])
 
     p_y = T.stack(1 - p_C, p_C)
     loss = neg_log_loss(p_y, correct_y[i])
 
     learning_rate = T.fscalar('learning_rate')
-    params = [t_T, t_L0]
+    if clamp_L0 is None:
+        params = [t_T, t_L0]
+    else:
+        params = [t_T]
     update_parameters = [(param, param - learning_rate * T.grad(loss, param))
                          for param in params]
 

@@ -131,6 +131,12 @@ ALL_PARAMS['lrkt_config5'] = combine_dict(ALL_PARAMS['config3'],
                                           {'model_type': GenVar(1)})
 ALL_PARAMS['deep_config5'] = combine_dict(ALL_PARAMS['config3'],
                                           {'model_type': GenVar(0)})
+ALL_PARAMS['eeg_on'] = {'previous_eeg_on': GenVar(1, type=int),
+                        'current_eeg_on': GenVar(1, type=int)}
+ALL_PARAMS['deep_config5_noeeg'] = combine_dict(ALL_PARAMS['deep_config5'],
+                                                ALL_PARAMS['eeg_off'])
+ALL_PARAMS['deep_config5_eeg'] = combine_dict(ALL_PARAMS['deep_config5'],
+                                              ALL_PARAMS['eeg_on'])
 
 all_param_set_keys = ALL_PARAMS.keys()
 

@@ -1,14 +1,16 @@
+import os
 import inspect
 from operator import or_
 from itertools import imap, compress
 import gzip
 import cPickle
 import random
+from collections import defaultdict
 
 import numpy as np
 
 from libs.logger import log, log_args
-from libs.utils import normalize_table, transpose
+from libs.utils import normalize_table, transpose, idx_to_mask
 
 BNTSM_TIME_FORMAT = '%m/%d/%y %I:%M %p'
 
@@ -34,13 +36,13 @@ def to_lookup_table(x):
     return idxs, table
 
 
-def prepare_eeglrkt_data(dataset_name='data/eeglrkt.txt'):
+def prepare_eeglrkt_data(dataset_name='data/eeglrkt.txt', cv_fold=0, **kwargs):
     log('... loading data', True)
     log_args(inspect.currentframe())
 
     from libs.loader import load
-    eeg_headers = ('kc_med', 'kc_att', 'kc_raww', 'kc_delta', 'kc_theta',
-                   'kc_alpha', 'kc_beta')
+    eeg_headers = ('kc_med', 'kc_att', 'kc_raww', 'kc_delta', 'fconf',
+                   'kc_alpha', 'kc_beta', 'kc_gamma')
     data, enum_dict, _ = load(
         dataset_name,
         numeric=['fluent'],
@@ -50,21 +52,39 @@ def prepare_eeglrkt_data(dataset_name='data/eeglrkt.txt'):
         time_format=BNTSM_TIME_FORMAT)
     sorted_idxs, _ = transpose(sorted(enumerate(data['start_time']),
                                       key=lambda v: v[1]))
+    N = len(sorted_idxs)
     subject_x = data['user'][sorted_idxs]
     skill_x = data['skill'][sorted_idxs]
     start_x = data['start_time'][sorted_idxs]
     correct_y = data['fluent'][sorted_idxs] - 1
-    eeg_x = np.column_stack([data[eh] for eh in eeg_headers])[sorted_idxs, :]
+    eeg = np.column_stack([data[eh] for eh in eeg_headers])[sorted_idxs, :]
+
+    min_encounters = 2
+    skill_count = defaultdict(list)
+    for i in range(N):
+        skill_count[(subject_x[i], skill_x[i])].append(i)
+    bad_indices = []
+    for k, v in skill_count.iteritems():
+        if len(v) < min_encounters:
+            bad_indices += v
+    mask = np.logical_not(idx_to_mask(bad_indices, N))
+    subject_x = subject_x[mask]
+    skill_x = skill_x[mask]
+    start_x = start_x[mask]
+    correct_y = correct_y[mask]
+    eeg = eeg[mask]
+
+    eeg_x, eeg_table = to_lookup_table(eeg)
     stim_pairs = list(enum_dict['skill'].iteritems())
     sorted_subj = sorted(np.unique(subject_x),
                          key=lambda s: sum(np.equal(subject_x, s)))
-    held_out_subj = sorted_subj[random.randint(1, 10)]
+    held_out_subj = cv_fold % (len(sorted_subj) - 4)
     valid_subj_mask = np.equal(subject_x, held_out_subj)
     log('subjects {} are held out'.format(held_out_subj), True)
     train_idx = np.nonzero(np.logical_not(valid_subj_mask))[0]
     valid_idx = np.nonzero(valid_subj_mask)[0]
 
-    return (subject_x, skill_x, correct_y, start_x, eeg_x, stim_pairs, train_idx, valid_idx)
+    return (subject_x, skill_x, correct_y, start_x, eeg_x, eeg_table, stim_pairs, train_idx, valid_idx)
 
 
 def prepare_fake_data():
@@ -87,7 +107,14 @@ def prepare_fake_data():
     return (subject_x, skill_x, correct_y, start_x, eeg_x, stim_pairs, train_idx, valid_idx)
 
 
-def prepare_data(dataset_name, top_n=0, top_eeg_n=0, eeg_only=1, normalize=0, cv_fold=0, **kwargs):
+def prepare_data(dataset_name, **kwargs):
+    if os.path.splitext(dataset_name)[1] == '.txt':
+        return prepare_eeglrkt_data(dataset_name, **kwargs)
+    else:
+        return prepare_new_data(dataset_name, **kwargs)
+
+
+def prepare_new_data(dataset_name, top_n=0, top_eeg_n=0, eeg_only=1, normalize=0, cv_fold=0, **kwargs):
     log('... loading data', True)
     log_args(inspect.currentframe())
 

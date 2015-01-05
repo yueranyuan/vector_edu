@@ -22,7 +22,7 @@ def neg_log_loss(p, y):
     return -T.sum(T.log(p.T)[T.arange(y.shape[0]), y])
 
 
-def build_model(prepared_data, **kwargs):
+def build_model(prepared_data, clamp_L0=0.4, **kwargs):
     log('... building the model', True)
     log_args(inspect.currentframe())
 
@@ -53,7 +53,10 @@ def build_model(prepared_data, **kwargs):
     p_T = 0.5
     p_G = 0.1
     p_S = 0.2
-    p_L0 = 0.7
+    if clamp_L0 is None:
+        p_L0 = 0.7
+    else:
+        p_L0 = clamp_L0
     parameter_base = np.ones(n_skills)
     tp_L0, t_L0 = make_probability(parameter_base * p_L0, name='L0')
     tp_T, t_T = make_probability(parameter_base * p_T, name='p(T)')
@@ -84,7 +87,10 @@ def build_model(prepared_data, **kwargs):
     loss = neg_log_loss(p_y, correct_y[i])
 
     learning_rate = T.fscalar('learning_rate')
-    params = [t_T, t_L0]
+    if clamp_L0 is None:
+        params = [t_T, t_L0]
+    else:
+        params = [t_T]
     update_parameters = [(param, param - learning_rate * T.grad(loss, param))
                          for param in params]
 

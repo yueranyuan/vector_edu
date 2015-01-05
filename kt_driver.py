@@ -19,9 +19,10 @@ def run(task_num, model_type=0, **kwargs):
     elif model_type == 1:
         from kt.lrkt2 import build_model
     elif model_type == 2:
-        from kt.kt import build_model
+        from kt.kt2 import build_model
     else:
         raise Exception("model type is not valid")
+
     prepared_data = kt.data.prepare_data(cv_fold=task_num, **kwargs)
 
     f_train, f_validate, train_idx, valid_idx, train_eval, valid_eval = (

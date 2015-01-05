@@ -8,7 +8,7 @@ import random
 import numpy as np
 
 from libs.logger import log, log_args
-from libs.utils import normalize_table, random_unique_subset, transpose
+from libs.utils import normalize_table, transpose
 
 BNTSM_TIME_FORMAT = '%m/%d/%y %I:%M %p'
 
@@ -87,7 +87,7 @@ def prepare_fake_data():
     return (subject_x, skill_x, correct_y, start_x, eeg_x, stim_pairs, train_idx, valid_idx)
 
 
-def prepare_data(dataset_name, top_n=0, top_eeg_n=14, eeg_only=1, normalize=0, **kwargs):
+def prepare_data(dataset_name, top_n=0, top_eeg_n=0, eeg_only=1, normalize=0, cv_fold=0, **kwargs):
     log('... loading data', True)
     log_args(inspect.currentframe())
 
@@ -134,7 +134,9 @@ def prepare_data(dataset_name, top_n=0, top_eeg_n=14, eeg_only=1, normalize=0, *
 
     # break cv folds
     # valid_subj_mask = random_unique_subset(subject_x, .9)
-    valid_subj_mask = np.equal(subject_x, 3)
+    u_subjects = np.unique(subject_x)
+    heldout_subject = u_subjects[cv_fold % len(u_subjects)]
+    valid_subj_mask = np.equal(subject_x, heldout_subject)
     log('subjects {} are held out'.format(np.unique(subject_x[valid_subj_mask])), True)
     train_idx = np.nonzero(np.logical_not(valid_subj_mask))[0]
     valid_idx = np.nonzero(valid_subj_mask)[0]

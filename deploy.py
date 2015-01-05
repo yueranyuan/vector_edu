@@ -22,11 +22,11 @@ def install_all():
             run('aws s3 cp --recursive --region us-east-1 s3://cmu-data/vectoredu/data/ data/')
 
 
-def run_experiment(param_set):
+def run_experiment(param_set, task_num=0):
     with cd('vector_edu'):
         log_name = gen_log_name()
-        run('python driver.py -p {param_set} -o {log_name}'.format(
-            param_set=param_set, log_name=log_name))
+        run('python kt_driver.py -p {param_set} -o {log_name} -tn {task_num}'.format(
+            param_set=param_set, log_name=log_name, task_num=task_num))
         run('aws s3 cp --region us-east-1 {log_name} s3://cmu-data/vectoredu/results/'.format(
             log_name=log_name))
 
@@ -97,7 +97,7 @@ def use_worker(param_set, conn, ids, no_install=False, num_jobs=1, **kwargs):
         c.start()
 
     # setup a bunch of jobs
-    jobs = [Job({'param_set': param_set}, id=str(i)) for i in range(num_jobs)]
+    jobs = [Job({'param_set': param_set, 'task_num': i}, id=str(i)) for i in range(num_jobs)]
     for j in jobs:
         job_queue.put(j)
     for i in range(len(consumers)):

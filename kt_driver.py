@@ -9,13 +9,13 @@ from libs.logger import gen_log_name, log, log_args, set_log_file
 import config
 
 
-def run(**kwargs):
+def run(task_num, **kwargs):
     log_args(inspect.currentframe())
 
     import kt.data
     import kt.train
-    from kt.kt2 import build_model
-    prepared_data = kt.data.prepare_data(**kwargs)
+    from kt.olddeepkt import build_model
+    prepared_data = kt.data.prepare_data(cv_fold=task_num, **kwargs)
 
     f_train, f_validate, train_idx, valid_idx, train_eval, valid_eval = (
         build_model(prepared_data, **kwargs))
@@ -44,6 +44,8 @@ if __name__ == '__main__':
                         help='the data file to use')
     parser.add_argument('-o', dest='outname', type=str, default=gen_log_name(),
                         help='name for the log file to be generated')
+    parser.add_argument('-tn', dest='task_num', type=int, default=0,
+                        help='a way to separate different runs of the same parameter-set')
     args = parser.parse_args()
 
     params = config.get_config(args.param_set)
@@ -52,6 +54,7 @@ if __name__ == '__main__':
         params['dataset_name'] = args.file
     elif 'dataset_name' not in params:
         params['dataset_name'] = default_dataset
+    params['task_num'] = args.task_num
     log(run(**params))
     print "finished"
     if sys.platform.startswith('win'):

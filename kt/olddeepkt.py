@@ -84,56 +84,59 @@ def build_model(prepared_data, L1_reg, L2_reg, dropout_p, learning_rate,
     eeg_x = make_shared(eeg_x, to_int=True)
     eeg_table = make_shared(eeg_table)
 
-    NetInput = namedtuple("NetInput", ['input', 'size'])
     rng = np.random.RandomState(1234)
     t_dropout = T.scalar('dropout')
-    y = correct_y[base_indices]
     skill_accumulator = make_shared(np.zeros((N, combiner_width)))
 
+    # setup combiner component
+    combiner_n_in = combiner_width + skill_vector_len + 1
+    if previous_eeg_on:
+        combiner_n_in += eeg_vector_len
+    combiner = HiddenNetwork(
+        rng=rng,
+        n_in=combiner_n_in,
+        size=[combiner_width] * combiner_depth,
+        activation=rectifier,
+        dropout=t_dropout
+    )
+
+    # setup main network component
+    classifier_n_in = combiner_width + skill_vector_len
+    if current_eeg_on:
+        classifier_n_in += eeg_vector_len
+    classifier = MLP(rng=rng,
+                     n_in=classifier_n_in,
+                     size=[main_net_width] * main_net_depth,
+                     n_out=3,
+                     dropout=t_dropout)
+
+    # STEP 3.1 stuff that goes in scan
     current_skill = skill_matrix[skill_x[base_indices]]
     previous_skill = skill_matrix[skill_x[base_indices - 1]]
     previous_eeg_vector = eeg_table[eeg_x[base_indices]]
     current_eeg_vector = eeg_table[eeg_x[base_indices]]
 
-    # setup combiner component
-    correct_feature = make_shared([[0], [1]])[correct_y[base_indices - 1] - 1]
-    combiner_inputs = [NetInput(skill_accumulator[base_indices - 2], combiner_width),
-                       NetInput(previous_skill, skill_vector_len),
-                       NetInput(correct_feature, 1)]
+    correct_vectors = make_shared([[0], [1]])
+    correct_feature = correct_vectors[correct_y[base_indices - 1] - 1]
+    combiner_inputs = [skill_accumulator[base_indices - 2], previous_skill, correct_feature]
     if previous_eeg_on:
-        combiner_inputs.append(NetInput(previous_eeg_vector, eeg_vector_len))
-    combiner = HiddenNetwork(
-        rng=rng,
-        n_in=sum(c.size for c in combiner_inputs),
-        size=[combiner_width] * combiner_depth,
-        activation=rectifier,
-        dropout=t_dropout
-    )
-    combiner_out = combiner.instance(T.concatenate([c.input for c in combiner_inputs], axis=1), rng=rng)
-
-    # setup main network component
-    classifier_inputs = [NetInput(combiner_out, combiner_width),
-                         NetInput(current_skill, skill_vector_len)]
+        combiner_inputs.append(previous_eeg_vector)
+    combiner_out = combiner.instance(T.concatenate(combiner_inputs, axis=1), rng=rng)
+    classifier_inputs = [combiner_out, current_skill]
     if current_eeg_on:
-        classifier_inputs.append(NetInput(current_eeg_vector, eeg_vector_len))
-    classifier = MLP(rng=rng,
-                     n_in=sum(c.size for c in classifier_inputs),
-                     size=[main_net_width] * main_net_depth,
-                     n_out=3,
-                     dropout=t_dropout)
-
-    pY = classifier.instance(T.concatenate([c.input for c in classifier_inputs], axis=1), rng=rng)
+        classifier_inputs.append(current_eeg_vector)
+    pY = classifier.instance(T.concatenate(classifier_inputs, axis=1), rng=rng)
     # ########
     # STEP3: create the theano functions to run the model
 
+    y = correct_y[base_indices]
+    loss = -T.mean(T.log(pY)[T.arange(y.shape[0]), y])
     subnets = (combiner, classifier)
     cost = (
-        classifier.negative_log_likelihood(pY, y)
+        loss
         + L1_reg * sum([n.L1 for n in subnets])
         + L2_reg * sum([n.L2_sqr for n in subnets])
     )
-
-    loss = -T.mean(T.log(pY)[T.arange(y.shape[0]), y])
 
     func_args = {
         'inputs': [base_indices],

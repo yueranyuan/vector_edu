@@ -38,7 +38,6 @@ def get_config(param_set='default'):
         if var.type == int:
             val += 0.5
         return var.type(val)
-
     return {n: instance_var(v) for n, v in ALL_PARAMS[param_set].iteritems()}
 
 
@@ -126,6 +125,12 @@ ALL_PARAMS['wide_search'] = {'learning_rate': GenVar(0.005, 0.02, scale=LOG_SCAL
                              'dropout_p': GenVar(0, 0.4)}
 ALL_PARAMS['config4'] = combine_dict(ALL_PARAMS['config3'],
                                      ALL_PARAMS['wide_search'])
+ALL_PARAMS['kt_config5'] = combine_dict(ALL_PARAMS['config3'],
+                                        {'model_type': GenVar(2)})
+ALL_PARAMS['lrkt_config5'] = combine_dict(ALL_PARAMS['config3'],
+                                          {'model_type': GenVar(1)})
+ALL_PARAMS['deep_config5'] = combine_dict(ALL_PARAMS['config3'],
+                                          {'model_type': GenVar(0)})
 
 all_param_set_keys = ALL_PARAMS.keys()
 

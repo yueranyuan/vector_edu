@@ -9,12 +9,19 @@ from libs.logger import gen_log_name, log, log_args, set_log_file
 import config
 
 
-def run(task_num, **kwargs):
+def run(task_num, model_type=0, **kwargs):
     log_args(inspect.currentframe())
 
     import kt.data
     import kt.train
-    from kt.olddeepkt import build_model
+    if model_type == 0:
+        from kt.olddeepkt import build_model
+    elif model_type == 1:
+        from kt.lrkt2 import build_model
+    elif model_type == 2:
+        from kt.kt import build_model
+    else:
+        raise Exception("model type is not valid")
     prepared_data = kt.data.prepare_data(cv_fold=task_num, **kwargs)
 
     f_train, f_validate, train_idx, valid_idx, train_eval, valid_eval = (

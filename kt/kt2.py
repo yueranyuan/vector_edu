@@ -51,7 +51,7 @@ def build_model(prepared_data, **kwargs):
 
     # binarize eeg
     eeg_single_x = np.zeros(N)
-    eeg_column_i = 0
+    eeg_column_i = None
     if eeg_column_i is not None:
         eeg_column = eeg_table[eeg_x, eeg_column_i]
         above_median = np.greater(eeg_column, np.median(eeg_column))

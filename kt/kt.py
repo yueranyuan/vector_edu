@@ -30,7 +30,7 @@ def build_model(prepared_data, **kwargs):
     # STEP1: order the data properly so that we can read from it sequentially
     # when training the model
 
-    subject_x, skill_x, correct_y, start_x, eeg_x, stim_pairs, train_idx, valid_idx = prepared_data
+    subject_x, skill_x, correct_y, start_x, eeg_x, eeg_table, stim_pairs, train_idx, valid_idx = prepared_data
     N = len(correct_y)
     train_mask = idx_to_mask(train_idx, N)
     valid_mask = idx_to_mask(valid_idx, N)

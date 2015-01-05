@@ -9,7 +9,7 @@ from libs.utils import transpose
 
 
 def train_model(train_model, validate_model, train_batches, valid_batches,
-                train_eval, valid_eval, n_epochs=300, patience=50,
+                train_eval, valid_eval, n_epochs=500, patience=50,
                 patience_increase=40, improvement_threshold=1,
                 validation_frequency=5, learning_rate=0.02, **kwargs):
     log('... training', True)

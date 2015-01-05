@@ -3,7 +3,7 @@ from time import sleep
 import multiprocessing
 from libs.multijob import Job, JobConsumer
 from config import all_param_set_keys
-from libs.utils import gen_log_name
+from libs.logger import gen_log_name
 from libs.ec2 import (connect, terminate_all, add_instances,
                       get_active_instance)
 

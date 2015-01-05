@@ -28,7 +28,7 @@ def to_lookup_table(x):
     table[0] = table[1:].mean(axis=0)  # set the "None" vector to the average of all vectors
 
     # create a way to index into lookup table
-    idxs = np.zeros(len(x))
+    idxs = np.zeros(len(x), dtype='int32')
     idxs[valid_idxs] = xrange(1, len(valid_idxs) + 1)
 
     return idxs, table

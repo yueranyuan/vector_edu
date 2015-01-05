@@ -35,7 +35,7 @@ def build_model(prepared_data, **kwargs):
     # STEP1: order the data properly so that we can read from it sequentially
     # when training the model
 
-    subject_x, skill_x, correct_y, start_x, eeg_x, stim_pairs, train_idx, valid_idx = prepared_data
+    subject_x, skill_x, correct_y, start_x, eeg_x, eeg_table, stim_pairs, train_idx, valid_idx = prepared_data
     N = len(correct_y)
     train_mask = idx_to_mask(train_idx, N)
     valid_mask = idx_to_mask(valid_idx, N)
@@ -62,11 +62,13 @@ def build_model(prepared_data, **kwargs):
     # STEP 2: initialize parameters
     p_G = 0.1
     p_S = 0.2
+    eeg_columns = [0, 1, 2, 3]
+    eeg_width = len(eeg_columns)
     Beta0 = make_shared(np.random.rand(skill_table_width).T)
-    Beta = make_shared(np.random.rand(skill_table_width).T)
-    Gamma = make_shared(np.random.rand(skill_table_width).T)
-    tp_G, _ = make_probability(p_G, name='p(G)')
-    tp_S, _ = make_probability(p_S, name='p(S)')
+    Beta = make_shared(np.random.rand(skill_table_width + eeg_width).T)
+    Gamma = make_shared(np.random.rand(skill_table_width + eeg_width).T)
+    tp_G, t_G = make_probability(p_G, name='p(G)')
+    tp_S, t_S = make_probability(p_S, name='p(S)')
 
     # declare and prepare variables for theano
     i = T.ivector('i')
@@ -74,17 +76,25 @@ def build_model(prepared_data, **kwargs):
     skill_i, subject_i = T.iscalars('skill_i', 'subject_i')
     correct_y = make_shared(correct_y, to_int=True)
     skill_table = make_shared(skill_table, to_int=True)
+    # eegs = make_shared(eeg_table[np.asarray(eeg_x, dtype='int32')])
+    eeg_x = make_shared(eeg_x, to_int=True)
+    eeg_table = make_shared(eeg_table)
+
+    def step2(eeg):
+        return eeg
 
     # set up theano functions
-    def step(correct_i, prev_L, prev_p_C, subskills, P_S, P_G):
-        L_true_given_true = sigmoid(T.dot(Beta, subskills))
-        L_true_given_false = sigmoid(T.dot(Gamma, subskills))
+    def step(correct_i, eeg, prev_L, prev_p_C, subskills, P_S, P_G):
+        x = T.concatenate((subskills, eeg[eeg_columns]))
+        L_true_given_true = sigmoid(T.dot(Beta, x))
+        L_true_given_false = sigmoid(T.dot(Gamma, x))
         Ln = prev_L * L_true_given_true + (1 - prev_L) * L_true_given_false
         p_C = prev_L * (1 - P_S) + (1 - prev_L) * P_G
         return Ln, p_C
     L0 = sigmoid(T.dot(Beta0, skill_table[skill_i]))
     ((results, p_C), updates) = theano.scan(fn=step,
-                                            sequences=correct_y[i],
+                                            sequences=[correct_y[i],
+                                                       eeg_table[eeg_x[i]]],
                                             outputs_info=[L0,
                                                           dummy_float],
                                             non_sequences=[skill_table[skill_i],

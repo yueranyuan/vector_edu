@@ -14,11 +14,11 @@ def run(**kwargs):
 
     import kt.data
     import kt.train
-    import kt.olddeepkt
+    from kt.kt2 import build_model
     prepared_data = kt.data.prepare_data(**kwargs)
 
     f_train, f_validate, train_idx, valid_idx, train_eval, valid_eval = (
-        kt.olddeepkt.build_model(prepared_data, **kwargs))
+        build_model(prepared_data, **kwargs))
 
     start_time = time.clock()
     best_validation_loss, best_epoch = (

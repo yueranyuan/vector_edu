@@ -54,19 +54,19 @@ def build_model(prepared_data, **kwargs):
     n_skills = np.max(skill_x) + 1
     n_subjects = np.max(subject_x) + 1
 
-    skill_table = np.diag(np.ones(n_skills))
-    # skill_table = gen_word_matrix(skill_x, stim_pairs, vector_length=100)
+    # skill_table = np.diag(np.ones(n_skills))
+    skill_table = gen_word_matrix(skill_x, stim_pairs, vector_length=125)
     skill_table_width = skill_table.shape[1]
 
     # ####
     # STEP 2: initialize parameters
     p_G = 0.1
     p_S = 0.2
-    eeg_columns = [0, 1, 2, 3]
-    eeg_width = len(eeg_columns)
     Beta0 = make_shared(np.random.rand(skill_table_width).T)
-    Beta = make_shared(np.random.rand(skill_table_width + eeg_width).T)
-    Gamma = make_shared(np.random.rand(skill_table_width + eeg_width).T)
+    Beta = make_shared(np.random.rand(skill_table_width).T)
+    Gamma = make_shared(np.random.rand(skill_table_width).T)
+    b = make_shared(0.2)
+    g = make_shared(0.2)
     tp_G, t_G = make_probability(p_G, name='p(G)')
     tp_S, t_S = make_probability(p_S, name='p(S)')
 
@@ -80,21 +80,18 @@ def build_model(prepared_data, **kwargs):
     eeg_x = make_shared(eeg_x, to_int=True)
     eeg_table = make_shared(eeg_table)
 
-    def step2(eeg):
-        return eeg
-
     # set up theano functions
-    def step(correct_i, eeg, prev_L, prev_p_C, subskills, P_S, P_G):
-        x = T.concatenate((subskills, eeg[eeg_columns]))
-        L_true_given_true = sigmoid(T.dot(Beta, x))
-        L_true_given_false = sigmoid(T.dot(Gamma, x))
+    def step(correct_i, prev_L, prev_p_C, subskills, P_S, P_G):
+        L_true_given_true = sigmoid(T.dot(Beta, subskills) + b)
+        L_true_given_false = sigmoid(T.dot(Gamma, subskills) + g)
         Ln = prev_L * L_true_given_true + (1 - prev_L) * L_true_given_false
+        # C_true_given_L = sigmoid(T.dot(Delta, subskills) + d)
         p_C = prev_L * (1 - P_S) + (1 - prev_L) * P_G
+        # p_C = prev_L * C_true_given_L
         return Ln, p_C
     L0 = sigmoid(T.dot(Beta0, skill_table[skill_i]))
     ((results, p_C), updates) = theano.scan(fn=step,
-                                            sequences=[correct_y[i],
-                                                       eeg_table[eeg_x[i]]],
+                                            sequences=correct_y[i],
                                             outputs_info=[L0,
                                                           dummy_float],
                                             non_sequences=[skill_table[skill_i],
@@ -104,7 +101,7 @@ def build_model(prepared_data, **kwargs):
     loss = neg_log_loss(p_y, correct_y[i])
 
     learning_rate = T.fscalar('learning_rate')
-    params = [Beta0, Beta, Gamma]
+    params = [Beta0, Beta, Gamma, b, g]
     update_parameters = [(param, param - learning_rate * T.grad(loss, param))
                          for param in params]
 

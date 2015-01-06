@@ -1,6 +1,5 @@
 import inspect
 from itertools import groupby
-import random
 
 import numpy as np
 import theano
@@ -8,6 +7,7 @@ import theano.tensor as T
 
 from libs.logger import log, log_args
 from libs.utils import idx_to_mask, make_shared
+from libs.data import gen_word_matrix
 from libs.auc import auc
 
 
@@ -27,7 +27,7 @@ def neg_log_loss(p, y):
     return -T.sum(T.log(p.T)[T.arange(y.shape[0]), y])
 
 
-def build_model(prepared_data, clamp_L0=0.4, **kwargs):
+def build_model(prepared_data, clamp_L0=None, **kwargs):
     log('... building the model', True)
     log_args(inspect.currentframe())
 
@@ -57,13 +57,15 @@ def build_model(prepared_data, clamp_L0=0.4, **kwargs):
     # STEP 2: initialize parameters
     p_G = 0.1
     p_S = 0.2
-    eeg_columns = range(eeg_table.shape[1])  # [0, 1, 2, 3, 4, 5, 6]
-    eeg_width = len(eeg_columns)
+    feat_x = eeg_x
+    feat_table = eeg_table
+    feat_columns = range(feat_table.shape[1])  # [0, 1, 2, 3, 4, 5, 6]
+    feat_width = len(feat_columns)
     if clamp_L0 is None:
         Beta0 = make_shared(np.random.rand(n_skills))
-    Beta = make_shared(np.random.rand(n_skills, eeg_width))
+    Beta = make_shared(np.random.rand(n_skills, feat_width))
     b = make_shared(np.random.rand(n_skills))
-    Gamma = make_shared(np.random.rand(n_skills, eeg_width))
+    Gamma = make_shared(np.random.rand(n_skills, feat_width))
     g = make_shared(np.random.rand(n_skills))
     tp_G, t_G = make_probability(p_G, name='p(G)')
     tp_S, t_S = make_probability(p_S, name='p(S)')
@@ -73,17 +75,13 @@ def build_model(prepared_data, clamp_L0=0.4, **kwargs):
     dummy_float = make_shared(0, name='dummy')
     skill_i, subject_i = T.iscalars('skill_i', 'subject_i')
     correct_y = make_shared(correct_y, to_int=True)
-    # eegs = make_shared(eeg_table[np.asarray(eeg_x, dtype='int32')])
-    eeg_x = make_shared(eeg_x, to_int=True)
-    eeg_table = make_shared(eeg_table)
-
-    def step2(eeg):
-        return eeg
+    feat_x = make_shared(feat_x, to_int=True)
+    feat_table = make_shared(feat_table)
 
     # set up theano functions
-    def step(correct_i, eeg, prev_L, prev_p_C, skill_i, P_S, P_G):
-        L_true_given_true = sigmoid(T.dot(Beta[skill_i].T, eeg[eeg_columns]) + b[skill_i])
-        L_true_given_false = sigmoid(T.dot(Gamma[skill_i].T, eeg[eeg_columns]) + g[skill_i])
+    def step(correct_i, feat, prev_L, prev_p_C, skill_i, P_S, P_G):
+        L_true_given_true = sigmoid(T.dot(Beta[skill_i].T, feat[feat_columns]) + b[skill_i])
+        L_true_given_false = sigmoid(T.dot(Gamma[skill_i].T, feat[feat_columns]) + g[skill_i])
         Ln = prev_L * L_true_given_true + (1 - prev_L) * L_true_given_false
         p_C = prev_L * (1 - P_S) + (1 - prev_L) * P_G
         return Ln, p_C
@@ -93,7 +91,7 @@ def build_model(prepared_data, clamp_L0=0.4, **kwargs):
         L0 = make_shared(clamp_L0)
     ((results, p_C), updates) = theano.scan(fn=step,
                                             sequences=[correct_y[i],
-                                                       eeg_table[eeg_x[i]]],
+                                                       feat_table[feat_x[i]]],
                                             outputs_info=[L0,
                                                           dummy_float],
                                             non_sequences=[skill_i,
@@ -104,9 +102,9 @@ def build_model(prepared_data, clamp_L0=0.4, **kwargs):
 
     learning_rate = T.fscalar('learning_rate')
     if clamp_L0 is None:
-        params = [Beta0, Beta, Gamma, g, b, t_G, t_S]
+        params = [Beta0, Beta, Gamma, g, b]
     else:
-        params = [Beta, Gamma, g, b, t_G, t_S]
+        params = [Beta, Gamma, g, b]
     update_parameters = [(param, param - learning_rate * T.grad(loss, param))
                          for param in params]
 

@@ -137,6 +137,13 @@ ALL_PARAMS['deep_config5_noeeg'] = combine_dict(ALL_PARAMS['deep_config5'],
                                                 ALL_PARAMS['eeg_off'])
 ALL_PARAMS['deep_config5_eeg'] = combine_dict(ALL_PARAMS['deep_config5'],
                                               ALL_PARAMS['eeg_on'])
+ALL_PARAMS['combiner_off'] = {'combiner_on': GenVar(0, type=int)}
+ALL_PARAMS['deep_config5_nocombiner_eeg'] = combine_dict(ALL_PARAMS['deep_config5'],
+                                                         ALL_PARAMS['eeg_on'],
+                                                         ALL_PARAMS['combiner_off'])
+ALL_PARAMS['deep_config5_nocombiner_noeeg'] = combine_dict(ALL_PARAMS['deep_config5'],
+                                                           ALL_PARAMS['eeg_off'],
+                                                           ALL_PARAMS['combiner_off'])
 
 all_param_set_keys = ALL_PARAMS.keys()
 

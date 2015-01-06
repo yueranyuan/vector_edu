@@ -17,7 +17,7 @@ def run(task_num, model_type=0, **kwargs):
     if model_type == 0:
         from kt.olddeepkt import build_model
     elif model_type == 1:
-        from kt.lrkt2 import build_model
+        from kt.lrkt import build_model
     elif model_type == 2:
         from kt.kt2 import build_model
     else:

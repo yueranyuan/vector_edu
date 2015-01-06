@@ -18,9 +18,10 @@ def train_model(train_model, validate_model, train_batches, valid_batches,
     best_valid_error = 0
     best_epoch = 0
 
-    def run_batches(model, batches, f_eval, **kwargs):
+    def run_batches(model, batches, f_eval, shuffle=True, **kwargs):
         batch_order = range(len(batches))
-        random.shuffle(batch_order)
+        if shuffle:
+            random.shuffle(batch_order)
         # Aaron: this is not really a speed critical part of the code but we
         # can come back and redo AUC in theano if we want to make this suck less
         results = imap(lambda i: model(batches[i], **kwargs), batch_order)
@@ -36,7 +37,7 @@ def train_model(train_model, validate_model, train_batches, valid_batches,
             epoch=epoch, err=train_error), True)
 
         if (epoch + 1) % validation_frequency == 0:
-            valid_error, _ = run_batches(validate_model, valid_batches, valid_eval)
+            valid_error, _ = run_batches(validate_model, valid_batches, valid_eval, shuffle=False)
             log('epoch {epoch}, validation error {err:.2%}'.format(
                 epoch=epoch, err=valid_error), True)
 

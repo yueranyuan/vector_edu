@@ -1,3 +1,4 @@
+from __future__ import division
 from libs import s3
 import re
 import os
@@ -123,8 +124,6 @@ def analyze(bucket=None, subfolder=None, cache_dir=None, start_time=None,
     print 'n: {n} mean: {mean} variance: {variance}'.format(
         n=len(error_all), mean=np.mean(error_all), variance=np.var(error_all))
     print np.mean(error_all[np.equal(arg_all['model_type'], 0)])
-    print np.mean(error_all[np.equal(arg_all['model_type'], 1)])
-    print np.mean(error_all[np.equal(arg_all['model_type'], 2)])
     print "# Parameter Analysis #"
     for o in sorted(outcomes):
         print o
@@ -132,11 +131,11 @@ def analyze(bucket=None, subfolder=None, cache_dir=None, start_time=None,
     plot_args = [arg for arg in arg_all.keys() if max(arg_all[arg]) != min(arg_all[arg])]
     h = int(sqrt(len(plot_args)))
     w = ceil(len(plot_args) / h)
+
     for i, arg in enumerate(plot_args):
         xs = arg_all[arg]
         min_, max_ = min(xs), max(xs)
         margin = (max_ - min_) * 0.1
-
         plt.subplot(h, w, i + 1)
         plt.scatter(xs, error_all)
         plt.xlabel(arg)
@@ -146,6 +145,6 @@ def analyze(bucket=None, subfolder=None, cache_dir=None, start_time=None,
 
 
 if __name__ == '__main__':
-    start_time = datetime(2015, 1, 05, 00, 00)
-    # analyze('cmu-data', 'vectoredu/results', cache_dir='results', start_time=start_time)
-    analyze(cache_dir='results', start_time=start_time)
+    start_time = datetime(2015, 1, 05, 18, 00)
+    analyze('cmu-data', 'vectoredu/results', cache_dir='results', start_time=start_time)
+    # analyze(cache_dir='results', start_time=start_time)

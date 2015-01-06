@@ -1,12 +1,10 @@
 import inspect
 from itertools import compress, imap, chain, groupby, islice
-from collections import namedtuple
 
 import theano
 import theano.tensor as T
 import numpy as np
 
-from model.vector import VectorLayer
 from model.mlp import HiddenNetwork, MLP, rectifier
 from libs.utils import normalize_table, make_shared, idx_to_mask
 from libs.data import gen_word_matrix
@@ -44,8 +42,8 @@ def to_lookup_table(x, access_idxs, sort):
 def build_model(prepared_data, L1_reg, L2_reg, dropout_p, learning_rate,
                 skill_vector_len=100, combiner_depth=1, combiner_width=200,
                 main_net_depth=1, main_net_width=500, previous_eeg_on=1,
-                current_eeg_on=1, mutable_skill=1, valid_percentage=0.8, batch_size=30,
-                **kwargs):
+                current_eeg_on=1, combiner_on=1, mutable_skill=1, valid_percentage=0.8,
+                batch_size=30, **kwargs):
     log('... building the model', True)
     log_args(inspect.currentframe())
 
@@ -101,7 +99,9 @@ def build_model(prepared_data, L1_reg, L2_reg, dropout_p, learning_rate,
     )
 
     # setup main network component
-    classifier_n_in = combiner_width + skill_vector_len
+    classifier_n_in = skill_vector_len
+    if combiner_on:
+        classifier_n_in += combiner_width
     if current_eeg_on:
         classifier_n_in += eeg_vector_len
     classifier = MLP(rng=rng,
@@ -122,7 +122,9 @@ def build_model(prepared_data, L1_reg, L2_reg, dropout_p, learning_rate,
     if previous_eeg_on:
         combiner_inputs.append(previous_eeg_vector)
     combiner_out = combiner.instance(T.concatenate(combiner_inputs, axis=1), rng=rng)
-    classifier_inputs = [combiner_out, current_skill]
+    classifier_inputs = [current_skill]
+    if combiner_on:
+        classifier_inputs.append(combiner_out)
     if current_eeg_on:
         classifier_inputs.append(current_eeg_vector)
     pY = classifier.instance(T.concatenate(classifier_inputs, axis=1), rng=rng)
@@ -131,7 +133,9 @@ def build_model(prepared_data, L1_reg, L2_reg, dropout_p, learning_rate,
 
     y = correct_y[base_indices]
     loss = -T.mean(T.log(pY)[T.arange(y.shape[0]), y])
-    subnets = (combiner, classifier)
+    subnets = [classifier]
+    if combiner_on:
+        subnets.append(combiner)
     cost = (
         loss
         + L1_reg * sum([n.L1 for n in subnets])
@@ -148,16 +152,18 @@ def build_model(prepared_data, L1_reg, L2_reg, dropout_p, learning_rate,
     params = chain.from_iterable(n.params for n in subnets)
     update_parameters = [(param, param - learning_rate * T.grad(cost, param))
                          for param in params]
-    update_accumulator = [(
-        skill_accumulator,
-        T.set_subtensor(skill_accumulator[base_indices - 1], combiner_out)
-    )]
+    basic_updates = []
+    if combiner_on:
+        basic_updates += [(
+            skill_accumulator,
+            T.set_subtensor(skill_accumulator[base_indices - 1], combiner_out)
+        )]
     tf_valid = theano.function(
-        updates=update_accumulator,
+        updates=basic_updates,
         givens={t_dropout: 0.},
         **func_args)
     tf_train = theano.function(
-        updates=update_parameters + update_accumulator,
+        updates=update_parameters + basic_updates,
         givens={t_dropout: dropout_p},
         **func_args)
 

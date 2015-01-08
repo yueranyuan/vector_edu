@@ -8,7 +8,7 @@ import numpy as np
 from model.mlp import HiddenNetwork, MLP, rectifier
 from libs.utils import normalize_table, make_shared, idx_to_mask
 from libs.data import gen_word_matrix
-from libs.logger import log, log_args
+from libs.logger import log_me
 from libs.auc import auc
 
 
@@ -39,14 +39,12 @@ def to_lookup_table(x, access_idxs, sort):
     return t_table[t_idxs[access_idxs]], table.shape
 
 
+@log_me('... building the model')
 def build_model(prepared_data, L1_reg, L2_reg, dropout_p, learning_rate,
                 skill_vector_len=100, combiner_depth=1, combiner_width=200,
                 main_net_depth=1, main_net_width=500, previous_eeg_on=1,
                 current_eeg_on=1, combiner_on=1, mutable_skill=1, valid_percentage=0.8,
                 batch_size=30, **kwargs):
-    log('... building the model', True)
-    log_args(inspect.currentframe())
-
     # ##########
     # STEP1: order the data properly so that we can read from it sequentially
     # when training the model

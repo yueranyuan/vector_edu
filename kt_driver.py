@@ -1,17 +1,15 @@
 import sys
 import time
-import inspect
 import argparse
 import warnings
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 
-from libs.logger import gen_log_name, log, log_args, set_log_file
+from libs.logger import gen_log_name, log_me, log, set_log_file
 import config
 
 
+@log_me()
 def run(task_num, model_type=0, **kwargs):
-    log_args(inspect.currentframe())
-
     import kt.data
     import kt.train
     if model_type == 0:
@@ -62,8 +60,8 @@ if __name__ == '__main__':
         params['dataset_name'] = args.file
     elif 'dataset_name' not in params:
         params['dataset_name'] = default_dataset
-    params['task_num'] = args.task_num
-    log(run(**params))
+    # params['task_num'] = args.task_num
+    log(run(0, **params))
     print "finished"
     if sys.platform.startswith('win'):
         from win_utils import winalert

@@ -1,11 +1,10 @@
-import inspect
 from itertools import groupby
 
 import numpy as np
 import theano
 import theano.tensor as T
 
-from libs.logger import log, log_args
+from libs.logger import log_me
 from libs.utils import idx_to_mask, make_shared
 from libs.auc import auc
 
@@ -22,10 +21,8 @@ def neg_log_loss(p, y):
     return -T.sum(T.log(p.T)[T.arange(y.shape[0]), y])
 
 
+@log_me('... building the model')
 def build_model(prepared_data, clamp_L0=0.4, **kwargs):
-    log('... building the model', True)
-    log_args(inspect.currentframe())
-
     # ##########
     # STEP1: order the data properly so that we can read from it sequentially
     # when training the model

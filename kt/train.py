@@ -1,20 +1,15 @@
-import inspect
 from itertools import imap, chain
 import random
 
-import numpy as np
-
-from libs.logger import log, log_args
+from libs.logger import log_me, log
 from libs.utils import transpose
 
 
+@log_me('... training')
 def train_model(train_model, validate_model, train_batches, valid_batches,
                 train_eval, valid_eval, n_epochs=500, patience=50,
                 patience_increase=40, improvement_threshold=1,
                 validation_frequency=5, learning_rate=0.02, **kwargs):
-    log('... training', True)
-    log_args(inspect.currentframe())
-
     best_valid_error = 0
     best_epoch = 0
 

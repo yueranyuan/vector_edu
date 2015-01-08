@@ -1,15 +1,13 @@
 import os
-import inspect
 from operator import or_
 from itertools import imap, compress
 import gzip
 import cPickle
-import random
 from collections import defaultdict
 
 import numpy as np
 
-from libs.logger import log, log_args
+from libs.logger import log, log_me
 from libs.utils import normalize_table, transpose, idx_to_mask
 
 BNTSM_TIME_FORMAT = '%m/%d/%y %I:%M %p'
@@ -36,10 +34,8 @@ def to_lookup_table(x):
     return idxs, table
 
 
+@log_me('... loading data')
 def prepare_eeglrkt_data(dataset_name='data/eeglrkt.txt', cv_fold=0, **kwargs):
-    log('... loading data', True)
-    log_args(inspect.currentframe())
-
     from libs.loader import load
     eeg_headers = ('kc_med', 'kc_att', 'kc_raww', 'kc_delta', 'fconf',
                    'kc_alpha', 'kc_beta', 'kc_gamma')
@@ -114,10 +110,8 @@ def prepare_data(dataset_name, **kwargs):
         return prepare_new_data(dataset_name, **kwargs)
 
 
+@log_me('...loading data')
 def prepare_new_data(dataset_name, top_n=0, top_eeg_n=0, eeg_only=1, normalize=0, cv_fold=0, **kwargs):
-    log('... loading data', True)
-    log_args(inspect.currentframe())
-
     with gzip.open(dataset_name, 'rb') as f:
         subject_x, skill_x, correct_y, start_x, eeg_x, stim_pairs = cPickle.load(f)
     correct_y -= 1

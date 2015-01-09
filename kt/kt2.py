@@ -5,8 +5,10 @@ import theano
 import theano.tensor as T
 
 from libs.logger import log_me
-from libs.utils import idx_to_mask, make_shared
+from libs.utils import idx_to_mask
 from libs.auc import auc
+from model.math import neg_log_loss
+from model.theano_utils import make_shared
 
 
 def make_probability(init, shape=None, **kwargs):
@@ -15,10 +17,6 @@ def make_probability(init, shape=None, **kwargs):
     logit_p = np.log(init / (1 - init))
     logit_p = make_shared(logit_p, **kwargs)
     return 1 / (1 + T.exp(-logit_p)), logit_p
-
-
-def neg_log_loss(p, y):
-    return -T.sum(T.log(p.T)[T.arange(y.shape[0]), y])
 
 
 @log_me('... building the model')

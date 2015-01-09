@@ -1,15 +1,16 @@
-import inspect
 from itertools import compress, imap, chain, groupby, islice
 
 import theano
 import theano.tensor as T
 import numpy as np
 
-from model.mlp import HiddenNetwork, MLP, rectifier
-from libs.utils import normalize_table, make_shared, idx_to_mask
+from libs.utils import normalize_table, idx_to_mask
 from libs.data import gen_word_matrix
 from libs.logger import log_me
 from libs.auc import auc
+from model.mlp import HiddenNetwork, MLP
+from model.math import rectifier
+from model.theano_utils import make_shared
 
 
 # look up tables are cheaper memory-wise.
@@ -119,13 +120,13 @@ def build_model(prepared_data, L1_reg, L2_reg, dropout_p, learning_rate,
     combiner_inputs = [skill_accumulator[base_indices - 2], previous_skill, correct_feature]
     if previous_eeg_on:
         combiner_inputs.append(previous_eeg_vector)
-    combiner_out = combiner.instance(T.concatenate(combiner_inputs, axis=1), rng=rng)
+    combiner_out = combiner.instance(T.concatenate(combiner_inputs, axis=1))
     classifier_inputs = [current_skill]
     if combiner_on:
         classifier_inputs.append(combiner_out)
     if current_eeg_on:
         classifier_inputs.append(current_eeg_vector)
-    pY = classifier.instance(T.concatenate(classifier_inputs, axis=1), rng=rng)
+    pY = classifier.instance(T.concatenate(classifier_inputs, axis=1))
     # ########
     # STEP3: create the theano functions to run the model
 

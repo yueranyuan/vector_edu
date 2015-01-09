@@ -150,11 +150,13 @@ def gen_word_matrix(stims, pairs, vector_length=100):
     ngrams = _get_ngrams(stims, pairs)
     top_pairs = heapq.nlargest(vector_length, ngrams.iteritems(), key=lambda (k, v): v)
     vector_keys = [k for (k, v) in top_pairs]
+    padding = [0] * (vector_length - len(top_pairs))
     ordered_pairs = sorted(pairs, key=lambda (w, i): i)
     buffered_words = itertools.imap(lambda (w, i): '^{word}$'.format(word=w), ordered_pairs)
-    word_vectors = [[1 if ngram in word else 0 for ngram in vector_keys]
+    word_vectors = [[1 if ngram in word else 0 for ngram in vector_keys] + padding
                     for word in buffered_words]
-    return numpy.asarray(word_vectors)
+    word_vectors = numpy.asarray(word_vectors)
+    return word_vectors
 
 
 if __name__ == "__main__":

@@ -8,7 +8,7 @@ from libs.logger import log_me
 from libs.utils import idx_to_mask
 from libs.auc import auc
 from model.math import neg_log_loss
-from model.theano_utils import make_shared
+from model.theano_utils import make_shared, make_probability
 
 
 @log_me('... building the model')

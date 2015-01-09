@@ -41,7 +41,7 @@ def to_lookup_table(x, access_idxs, sort):
 
 
 @log_me('... building the model')
-def build_model(prepared_data, L1_reg, L2_reg, dropout_p, learning_rate,
+def build_model(prepared_data, L1_reg=0., L2_reg=0., dropout_p=0., learning_rate=0.02,
                 skill_vector_len=100, combiner_depth=1, combiner_width=200,
                 main_net_depth=1, main_net_width=500, previous_eeg_on=1,
                 current_eeg_on=1, combiner_on=1, mutable_skill=1, valid_percentage=0.8,
@@ -72,10 +72,10 @@ def build_model(prepared_data, L1_reg, L2_reg, dropout_p, learning_rate,
     # ###########
     # STEP2: connect up the model. See figures/vector_edu_model.png for diagram
     # TODO: make the above mentioned diagram
-
     skill_matrix = make_shared(gen_word_matrix(skill_x,
                                                stim_pairs,
                                                vector_length=skill_vector_len))
+
     skill_x = make_shared(skill_x, to_int=True)
     correct_y = make_shared(correct_y, to_int=True)
     eeg_x = make_shared(eeg_x, to_int=True)
@@ -143,7 +143,7 @@ def build_model(prepared_data, L1_reg, L2_reg, dropout_p, learning_rate,
 
     func_args = {
         'inputs': [base_indices],
-        'outputs': [loss, pY[:, 1] - pY[:, 2], base_indices],
+        'outputs': [loss, pY[:, 1] - pY[:, 2], base_indices, pY, previous_eeg_vector],
         'on_unused_input': 'ignore',
         'allow_input_downcast': True
     }
@@ -186,10 +186,12 @@ def build_model(prepared_data, L1_reg, L2_reg, dropout_p, learning_rate,
         return auc(_y[:len(pred)], pred, pos_label=1)
 
     def f_train(idxs, **kwargs):
-        return tf_train(idxs)
+        res = tf_train(idxs)
+        return res[:3]
 
     def f_valid(idxs, **kwargs):
-        return tf_valid(idxs)
+        res = tf_valid(idxs)
+        return res[:3]
 
     train_batches = gen_batches(train_idx, [subject_x], batch_size)
     valid_batches = gen_batches(valid_idx, [subject_x], 1)

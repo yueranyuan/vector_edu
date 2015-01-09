@@ -84,23 +84,28 @@ def prepare_eeglrkt_data(dataset_name='data/eeglrkt.txt', cv_fold=0, **kwargs):
 
 
 def prepare_fake_data():
+    import random
     # specific data
-    correct_y = np.asarray([0, 1, 1, 0, 0, 1, 0, 1, 1, 0, 0, 1], dtype='int32')
-    skill_x = np.asarray([0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0], dtype='int32')
-    subject_x = np.asarray([0, 0, 0, 1, 1, 1, 1, 1, 1, 2, 2, 2], dtype='int32')
+    correct_y = np.asarray([0, 0, 1, 1, 1, 0, 0, 1, 0, 1, 1, 0, 0, 0, 1, 1], dtype='int32')
+    skill_x = np.asarray([0, 0, 0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0], dtype='int32')
+    subject_x = np.asarray([0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2], dtype='int32')
     held_out_subj = 2
 
     # generate filler data
     N = len(correct_y)
     start_x = np.asarray(range(N))
-    eeg_x = np.zeros((N, 4))
-    stim_pairs = [(s, 'skill_{s}'.format(s=s)) for s in np.unique(skill_x)]
+    eeg = np.random.rand(N, 4)
+    eeg_x, eeg_table = to_lookup_table(eeg)
+
+    def gen_random_word(word_len):
+        return [chr(random.randint(0, 26)) for i in xrange(word_len)]
+    stim_pairs = [(gen_random_word(5), s) for s in np.unique(skill_x)]
 
     # generate CV folds
     held_out = np.equal(subject_x, held_out_subj)
     valid_idx = np.nonzero(held_out)
     train_idx = np.nonzero(np.logical_not(held_out))
-    return (subject_x, skill_x, correct_y, start_x, eeg_x, stim_pairs, train_idx, valid_idx)
+    return (subject_x, skill_x, correct_y, start_x, eeg_x, eeg_table, stim_pairs, train_idx, valid_idx)
 
 
 def prepare_data(dataset_name, **kwargs):

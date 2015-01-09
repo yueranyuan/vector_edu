@@ -9,15 +9,7 @@ from libs.utils import idx_to_mask
 from libs.auc import auc
 from libs.data import gen_word_matrix
 from model.math import neg_log_loss, sigmoid
-from model.theano_utils import make_shared
-
-
-def make_probability(init, shape=None, **kwargs):
-    if shape:
-        init = np.ones(shape) * init
-    logit_p = np.log(init / (1 - init))
-    logit_p = make_shared(logit_p, **kwargs)
-    return 1 / (1 + T.exp(-logit_p)), logit_p
+from model.theano_utils import make_shared, make_probability
 
 
 @log_me('... building the model')

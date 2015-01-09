@@ -52,7 +52,13 @@ def normalize_table(table):
     table = numpy.array(table)
     mins = table.min(axis=0)
     maxs = table.max(axis=0)
-    return (table - mins) / (maxs - mins)
+    norm_table = (table - mins) / (maxs - mins)
+    if numpy.any(numpy.isnan(norm_table)):
+        # TODO: issue warning all nan
+        print "Warning: normalized table contains nans"
+        if not numpy.any(numpy.isnan(table)):
+            print "Warning: nans were not present in input table"
+    return norm_table
 
 
 # converts an index array into the corresponding mask

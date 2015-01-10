@@ -12,7 +12,7 @@ from model.theano_utils import make_shared, make_probability
 
 
 @log_me('... building the model')
-def build_model(prepared_data, clamp_L0=0.4, eeg_column_i=4, **kwargs):
+def build_model(prepared_data, clamp_L0=0.4, eeg_column_i=None, **kwargs):
     # ##########
     # STEP1: order the data properly so that we can read from it sequentially
     # when training the model

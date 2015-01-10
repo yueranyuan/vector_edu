@@ -6,14 +6,14 @@ import theano.tensor as T
 
 from libs.logger import log_me
 from libs.utils import idx_to_mask
-from libs.auc import auc
 from libs.data import gen_word_matrix
+from libs.auc import auc
 from model.math import neg_log_loss, sigmoid
 from model.theano_utils import make_shared, make_probability
 
 
 @log_me('... building the model')
-def build_model(prepared_data, **kwargs):
+def build_model(prepared_data, clamp_L0=None, **kwargs):
     # ##########
     # STEP1: order the data properly so that we can read from it sequentially
     # when training the model
@@ -35,21 +35,21 @@ def build_model(prepared_data, **kwargs):
     valid_idx = np.nonzero(valid_mask)[0]
 
     n_skills = np.max(skill_x) + 1
-    n_subjects = np.max(subject_x) + 1
-
-    # skill_table = np.diag(np.ones(n_skills))
-    skill_table = gen_word_matrix(skill_x, stim_pairs, vector_length=125)
-    skill_table_width = skill_table.shape[1]
 
     # ####
     # STEP 2: initialize parameters
     p_G = 0.1
     p_S = 0.2
-    Beta0 = make_shared(np.random.rand(skill_table_width).T)
-    Beta = make_shared(np.random.rand(skill_table_width).T)
-    Gamma = make_shared(np.random.rand(skill_table_width).T)
-    b = make_shared(0.2)
-    g = make_shared(0.2)
+    feat_x = eeg_x
+    feat_table = eeg_table
+    feat_columns = range(feat_table.shape[1])  # [0, 1, 2, 3, 4, 5, 6]
+    feat_width = len(feat_columns)
+    if clamp_L0 is None:
+        Beta0 = make_shared(np.random.rand(n_skills))
+    Beta = make_shared(np.random.rand(n_skills, feat_width))
+    b = make_shared(np.random.rand(n_skills))
+    Gamma = make_shared(np.random.rand(n_skills, feat_width))
+    g = make_shared(np.random.rand(n_skills))
     tp_G, t_G = make_probability(p_G, name='p(G)')
     tp_S, t_S = make_probability(p_S, name='p(S)')
 
@@ -58,33 +58,36 @@ def build_model(prepared_data, **kwargs):
     dummy_float = make_shared(0, name='dummy')
     skill_i, subject_i = T.iscalars('skill_i', 'subject_i')
     correct_y = make_shared(correct_y, to_int=True)
-    skill_table = make_shared(skill_table, to_int=True)
-    # eegs = make_shared(eeg_table[np.asarray(eeg_x, dtype='int32')])
-    eeg_x = make_shared(eeg_x, to_int=True)
-    eeg_table = make_shared(eeg_table)
+    feat_x = make_shared(feat_x, to_int=True)
+    feat_table = make_shared(feat_table)
 
     # set up theano functions
-    def step(correct_i, prev_L, prev_p_C, subskills, P_S, P_G):
-        L_true_given_true = sigmoid(T.dot(Beta, subskills) + b)
-        L_true_given_false = sigmoid(T.dot(Gamma, subskills) + g)
+    def step(correct_i, feat, prev_L, prev_p_C, skill_i, P_S, P_G):
+        L_true_given_true = sigmoid(T.dot(Beta[skill_i].T, feat[feat_columns]) + b[skill_i])
+        L_true_given_false = sigmoid(T.dot(Gamma[skill_i].T, feat[feat_columns]) + g[skill_i])
         Ln = prev_L * L_true_given_true + (1 - prev_L) * L_true_given_false
-        # C_true_given_L = sigmoid(T.dot(Delta, subskills) + d)
         p_C = prev_L * (1 - P_S) + (1 - prev_L) * P_G
-        # p_C = prev_L * C_true_given_L
         return Ln, p_C
-    L0 = sigmoid(T.dot(Beta0, skill_table[skill_i]))
+    if clamp_L0 is None:
+        L0 = sigmoid(Beta0[skill_i])
+    else:
+        L0 = make_shared(clamp_L0)
     ((results, p_C), updates) = theano.scan(fn=step,
-                                            sequences=correct_y[i],
+                                            sequences=[correct_y[i],
+                                                       feat_table[feat_x[i]]],
                                             outputs_info=[L0,
                                                           dummy_float],
-                                            non_sequences=[skill_table[skill_i],
+                                            non_sequences=[skill_i,
                                                            tp_G,
                                                            tp_S])
     p_y = T.stack(1 - p_C, p_C)
     loss = neg_log_loss(p_y, correct_y[i])
 
     learning_rate = T.fscalar('learning_rate')
-    params = [Beta0, Beta, Gamma, b, g]
+    if clamp_L0 is None:
+        params = [Beta0, Beta, Gamma, g, b]
+    else:
+        params = [Beta, Gamma, g, b]
     update_parameters = [(param, param - learning_rate * T.grad(loss, param))
                          for param in params]
 

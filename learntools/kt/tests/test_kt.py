@@ -3,7 +3,7 @@ import os
 
 from learntools.kt.kt import build_model
 from learntools.kt.data import prepare_fake_data
-from learntools.kt.train import train_model
+from learntools.model.train import train_model
 from learntools.libs.logger import set_log_file
 
 

@@ -5,15 +5,15 @@ import warnings
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 
 from learntools.libs.logger import gen_log_name, log_me, log, set_log_file
+from learntools.kt.data import prepare_data
+from learntools.model.train import train_model
 import config
 
 
 @log_me()
 def run(task_num, model_type=0, **kwargs):
-    from learntools.kt.data import prepare_data
-    from learntools.kt.train import train_model
     if model_type == 0:
-        from learntools.kt.olddeepkt import build_model
+        from learntools.kt.deepkt import build_model
     elif model_type == 1:
         from learntools.kt.lrkt import build_model
     elif model_type == 2:

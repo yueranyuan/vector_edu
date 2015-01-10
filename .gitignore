@@ -7,3 +7,5 @@
 .DS_Store
 data/
 temp_store/
+temp.py
+*.egg-info/

@@ -2,7 +2,7 @@ import numpy as np
 import theano
 import theano.tensor as T
 
-from model.mlp import MLP, rectifier
+from learntools.model.mlp import MLP, rectifier
 
 
 def test_mlp_smoke():

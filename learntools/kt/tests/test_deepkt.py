@@ -1,6 +1,6 @@
-import learntools.kt.olddeepkt
-from learntools.kt.tests.kt_test import smoke_build_model
+from learntools.kt.deepkt import build_model
+from learntools.kt.tests.test_kt import smoke_build_model
 
 
 def test_deepkt_smoke():
-    smoke_build_model(learntools.kt.olddeepkt.build_model)
+    smoke_build_model(build_model)

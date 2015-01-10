@@ -4,15 +4,15 @@ import numpy as np
 import theano
 import theano.tensor as T
 
-from libs.logger import log_me
-from libs.utils import idx_to_mask
-from libs.auc import auc
-from model.math import neg_log_loss
-from model.theano_utils import make_shared, make_probability
+from learntools.libs.logger import log_me
+from learntools.libs.utils import idx_to_mask
+from learntools.libs.auc import auc
+from learntools.model.math import neg_log_loss
+from learntools.model.theano_utils import make_shared, make_probability
 
 
 @log_me('... building the model')
-def build_model(prepared_data, clamp_L0=0.4, **kwargs):
+def build_model(prepared_data, clamp_L0=0.4, eeg_column_i=None, **kwargs):
     # ##########
     # STEP1: order the data properly so that we can read from it sequentially
     # when training the model
@@ -36,39 +36,50 @@ def build_model(prepared_data, clamp_L0=0.4, **kwargs):
     n_skills = np.max(skill_x) + 1
     n_subjects = np.max(subject_x) + 1
 
+    # binarize eeg
+    eeg_single_x = np.zeros(N)
+    if eeg_column_i is not None:
+        eeg_column = eeg_table[eeg_x, eeg_column_i]
+        above_median = np.greater(eeg_column, np.median(eeg_column))
+        eeg_single_x[above_median] = 1
+
     # prepare parameters
     p_T = 0.5
     p_G = 0.1
     p_S = 0.2
+    p_L0 = 0.7
     if clamp_L0 is None:
         p_L0 = 0.7
     else:
         p_L0 = clamp_L0
+    # eeg_single_x = np.zeros(N)
     parameter_base = np.ones(n_skills)
     tp_L0, t_L0 = make_probability(parameter_base * p_L0, name='L0')
-    tp_T, t_T = make_probability(parameter_base * p_T, name='p(T)')
-    tp_G, t_G = make_probability(parameter_base * p_G, name='p(G)')
-    tp_S, t_S = make_probability(parameter_base * p_S, name='p(S)')
+    tp_T, t_T = make_probability(np.ones((n_skills, 2)) * p_T, name='p(T)')
+    tp_G, t_G = make_probability(p_G, name='p(G)')
+    tp_S, t_S = make_probability(p_S, name='p(S)')
 
     # declare and prepare variables for theano
     i = T.ivector('i')
     dummy_float = make_shared(0, name='dummy')
     skill_i, subject_i = T.iscalars('skill_i', 'subject_i')
     correct_y = make_shared(correct_y, to_int=True)
+    eeg_single_x = make_shared(eeg_single_x, to_int=True)
 
-    def step(correct_i, prev_L, prev_p_C, P_T, P_S, P_G):
-        Ln = prev_L + (1 - prev_L) * P_T
+    def step(correct_i, eeg, prev_L, prev_p_C, P_T, P_S, P_G):
+        Ln = prev_L + (1 - prev_L) * P_T[eeg]
         p_C = prev_L * (1 - P_S) + (1 - prev_L) * P_G
         return Ln, p_C
 
     # set up theano functions
     ((results, p_C), updates) = theano.scan(fn=step,
-                                            sequences=correct_y[i],
+                                            sequences=[correct_y[i],
+                                                       eeg_single_x[i]],
                                             outputs_info=[tp_L0[skill_i],
                                                           dummy_float],
                                             non_sequences=[tp_T[skill_i],
-                                                           tp_G[skill_i],
-                                                           tp_S[skill_i]])
+                                                           tp_G,
+                                                           tp_S])
 
     p_y = T.stack(1 - p_C, p_C)
     loss = neg_log_loss(p_y, correct_y[i])

@@ -4,13 +4,13 @@ import theano
 import theano.tensor as T
 import numpy as np
 
-from libs.utils import normalize_table, idx_to_mask
-from libs.data import gen_word_matrix
-from libs.logger import log_me
-from libs.auc import auc
-from model.mlp import HiddenNetwork, MLP
-from model.math import rectifier
-from model.theano_utils import make_shared
+from learntools.libs.utils import normalize_table, idx_to_mask
+from learntools.libs.data import gen_word_matrix
+from learntools.libs.logger import log_me
+from learntools.libs.auc import auc
+from learntools.model.mlp import HiddenNetwork, MLP
+from learntools.model.math import rectifier
+from learntools.model.theano_utils import make_shared
 
 
 # look up tables are cheaper memory-wise.

@@ -7,8 +7,8 @@ from collections import defaultdict
 
 import numpy as np
 
-from libs.logger import log, log_me
-from libs.utils import normalize_table, transpose, idx_to_mask
+from learntools.libs.logger import log, log_me
+from learntools.libs.utils import normalize_table, transpose, idx_to_mask
 
 BNTSM_TIME_FORMAT = '%m/%d/%y %I:%M %p'
 

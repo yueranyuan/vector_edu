@@ -6,8 +6,6 @@ from datetime import datetime
 from itertools import chain, starmap, imap, izip
 from collections import namedtuple
 
-from utils import flatten, transpose
-
 LISTEN_TIME_FORMAT = "%Y-%m-%d %H:%M:%S.%f"
 
 

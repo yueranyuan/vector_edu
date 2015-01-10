@@ -1,7 +1,7 @@
 import numpy
 import theano
 import theano.tensor as T
-from mlp import MLP
+from learntools.model.mlp import MLP
 
 
 class VectorLayer(object):

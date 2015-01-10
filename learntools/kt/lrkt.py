@@ -4,15 +4,16 @@ import numpy as np
 import theano
 import theano.tensor as T
 
-from libs.logger import log_me
-from libs.utils import idx_to_mask
-from libs.auc import auc
-from model.math import neg_log_loss
-from model.theano_utils import make_shared, make_probability
+from learntools.libs.logger import log_me
+from learntools.libs.utils import idx_to_mask
+from learntools.libs.data import gen_word_matrix
+from learntools.libs.auc import auc
+from learntools.model.math import neg_log_loss, sigmoid
+from learntools.model.theano_utils import make_shared, make_probability
 
 
 @log_me('... building the model')
-def build_model(prepared_data, clamp_L0=0.4, eeg_column_i=None, **kwargs):
+def build_model(prepared_data, clamp_L0=None, **kwargs):
     # ##########
     # STEP1: order the data properly so that we can read from it sequentially
     # when training the model
@@ -34,28 +35,21 @@ def build_model(prepared_data, clamp_L0=0.4, eeg_column_i=None, **kwargs):
     valid_idx = np.nonzero(valid_mask)[0]
 
     n_skills = np.max(skill_x) + 1
-    n_subjects = np.max(subject_x) + 1
 
-    # binarize eeg
-    eeg_single_x = np.zeros(N)
-    if eeg_column_i is not None:
-        eeg_column = eeg_table[eeg_x, eeg_column_i]
-        above_median = np.greater(eeg_column, np.median(eeg_column))
-        eeg_single_x[above_median] = 1
-
-    # prepare parameters
-    p_T = 0.5
+    # ####
+    # STEP 2: initialize parameters
     p_G = 0.1
     p_S = 0.2
-    p_L0 = 0.7
+    feat_x = eeg_x
+    feat_table = eeg_table
+    feat_columns = range(feat_table.shape[1])  # [0, 1, 2, 3, 4, 5, 6]
+    feat_width = len(feat_columns)
     if clamp_L0 is None:
-        p_L0 = 0.7
-    else:
-        p_L0 = clamp_L0
-    # eeg_single_x = np.zeros(N)
-    parameter_base = np.ones(n_skills)
-    tp_L0, t_L0 = make_probability(parameter_base * p_L0, name='L0')
-    tp_T, t_T = make_probability(np.ones((n_skills, 2)) * p_T, name='p(T)')
+        Beta0 = make_shared(np.random.rand(n_skills))
+    Beta = make_shared(np.random.rand(n_skills, feat_width))
+    b = make_shared(np.random.rand(n_skills))
+    Gamma = make_shared(np.random.rand(n_skills, feat_width))
+    g = make_shared(np.random.rand(n_skills))
     tp_G, t_G = make_probability(p_G, name='p(G)')
     tp_S, t_S = make_probability(p_S, name='p(S)')
 
@@ -64,31 +58,36 @@ def build_model(prepared_data, clamp_L0=0.4, eeg_column_i=None, **kwargs):
     dummy_float = make_shared(0, name='dummy')
     skill_i, subject_i = T.iscalars('skill_i', 'subject_i')
     correct_y = make_shared(correct_y, to_int=True)
-    eeg_single_x = make_shared(eeg_single_x, to_int=True)
-
-    def step(correct_i, eeg, prev_L, prev_p_C, P_T, P_S, P_G):
-        Ln = prev_L + (1 - prev_L) * P_T[eeg]
-        p_C = prev_L * (1 - P_S) + (1 - prev_L) * P_G
-        return Ln, p_C
+    feat_x = make_shared(feat_x, to_int=True)
+    feat_table = make_shared(feat_table)
 
     # set up theano functions
+    def step(correct_i, feat, prev_L, prev_p_C, skill_i, P_S, P_G):
+        L_true_given_true = sigmoid(T.dot(Beta[skill_i].T, feat[feat_columns]) + b[skill_i])
+        L_true_given_false = sigmoid(T.dot(Gamma[skill_i].T, feat[feat_columns]) + g[skill_i])
+        Ln = prev_L * L_true_given_true + (1 - prev_L) * L_true_given_false
+        p_C = prev_L * (1 - P_S) + (1 - prev_L) * P_G
+        return Ln, p_C
+    if clamp_L0 is None:
+        L0 = sigmoid(Beta0[skill_i])
+    else:
+        L0 = make_shared(clamp_L0)
     ((results, p_C), updates) = theano.scan(fn=step,
                                             sequences=[correct_y[i],
-                                                       eeg_single_x[i]],
-                                            outputs_info=[tp_L0[skill_i],
+                                                       feat_table[feat_x[i]]],
+                                            outputs_info=[L0,
                                                           dummy_float],
-                                            non_sequences=[tp_T[skill_i],
+                                            non_sequences=[skill_i,
                                                            tp_G,
                                                            tp_S])
-
     p_y = T.stack(1 - p_C, p_C)
     loss = neg_log_loss(p_y, correct_y[i])
 
     learning_rate = T.fscalar('learning_rate')
     if clamp_L0 is None:
-        params = [t_T, t_L0]
+        params = [Beta0, Beta, Gamma, g, b]
     else:
-        params = [t_T]
+        params = [Beta, Gamma, g, b]
     update_parameters = [(param, param - learning_rate * T.grad(loss, param))
                          for param in params]
 
@@ -101,7 +100,8 @@ def build_model(prepared_data, clamp_L0=0.4, eeg_column_i=None, **kwargs):
                                allow_input_downcast=True)
 
     def f_train((i, (subject_i, skill_i)), learning_rate):
-        return tf_train(i, skill_i, learning_rate)
+        everything = tf_train(i, skill_i, learning_rate)
+        return everything[:3]
 
     def f_valid((i, (subject_i, skill_i))):
         return tf_valid(i, skill_i)
@@ -121,16 +121,5 @@ def build_model(prepared_data, clamp_L0=0.4, eeg_column_i=None, **kwargs):
 
     train_batches = gen_batches(train_idx, [subject_x, skill_x])
     valid_batches = gen_batches(valid_idx, [subject_x, skill_x])
-
-    '''
-    for (i, (subject_i, skill_i)) in train_batches:
-        tf_train(i, skill_i, 0.1)
-    for (i, (subject_i, skill_i)) in valid_batches:
-        _1, _2, _3, a = tf_valid(i, skill_i)
-        print sum(np.equal(a, 0.2)), max(skill_x) - len(np.unique(skill_x))
-
-    import sys
-    sys.exit()
-    '''
 
     return f_train, f_valid, train_batches, valid_batches, train_eval, valid_eval

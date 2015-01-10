@@ -4,32 +4,32 @@ import argparse
 import warnings
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 
-from libs.logger import gen_log_name, log_me, log, set_log_file
+from learntools.libs.logger import gen_log_name, log_me, log, set_log_file
 import config
 
 
 @log_me()
 def run(task_num, model_type=0, **kwargs):
-    import kt.data
-    import kt.train
+    from learntools.kt.data import prepare_data
+    from learntools.kt.train import train_model
     if model_type == 0:
-        from kt.olddeepkt import build_model
+        from learntools.kt.olddeepkt import build_model
     elif model_type == 1:
-        from kt.lrkt import build_model
+        from learntools.kt.lrkt import build_model
     elif model_type == 2:
-        from kt.kt2 import build_model
+        from learntools.kt.kt2 import build_model
     else:
         raise Exception("model type is not valid")
 
-    prepared_data = kt.data.prepare_data(cv_fold=task_num, **kwargs)
+    prepared_data = prepare_data(cv_fold=task_num, **kwargs)
 
     f_train, f_validate, train_idx, valid_idx, train_eval, valid_eval = (
         build_model(prepared_data, **kwargs))
 
     start_time = time.clock()
     best_validation_loss, best_epoch = (
-        kt.train.train_model(f_train, f_validate, train_idx, valid_idx, train_eval, valid_eval,
-                             **kwargs))
+        train_model(f_train, f_validate, train_idx, valid_idx, train_eval, valid_eval,
+                    **kwargs))
     end_time = time.clock()
     training_time = (end_time - start_time) / 60.
 

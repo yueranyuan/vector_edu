@@ -1,8 +1,8 @@
 from itertools import imap, chain
 import random
 
-from libs.logger import log_me, log
-from libs.utils import transpose
+from learntools.libs.logger import log_me, log
+from learntools.libs.utils import transpose
 
 
 @log_me('... training')

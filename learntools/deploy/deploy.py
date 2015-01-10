@@ -1,11 +1,13 @@
-from fabric.api import run, hide, execute, env, cd
 from time import sleep
 import multiprocessing
-from libs.multijob import Job, JobConsumer
-from config import all_param_set_keys
-from libs.logger import gen_log_name
-from libs.ec2 import (connect, terminate_all, add_instances,
+
+from fabric.api import run, hide, execute, env, cd
+
+from learntools.libs.multijob import Job, JobConsumer
+from learntools.libs.logger import gen_log_name
+from learntools.libs.ec2 import (connect, terminate_all, add_instances,
                       get_active_instance)
+from learntools.deploy.config import all_param_set_keys
 
 
 env.key_filename = "cmu-east-key1.pem"

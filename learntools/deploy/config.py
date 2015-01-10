@@ -2,7 +2,8 @@ from random import random
 from collections import namedtuple
 from math import log as ln
 from math import exp
-from libs.utils import combine_dict
+
+from learntools.libs.utils import combine_dict
 
 LOG_SCALE = 1
 LINEAR_SCALE = 2

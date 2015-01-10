@@ -6,8 +6,8 @@ import numpy
 import theano
 import theano.tensor as T
 
-from model.logistic import LogisticRegression2
-from model.math import rectifier
+from learntools.model.logistic import LogisticRegression2
+from learntools.model.math import rectifier
 
 
 # inspired by https://github.com/mdenil/dropout/blob/master/mlp.py

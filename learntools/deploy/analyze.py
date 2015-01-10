@@ -1,15 +1,17 @@
 from __future__ import division
-from libs import s3
 import re
 import os
 from itertools import ifilter, imap, chain, compress, tee, dropwhile
-from libs.utils import transpose, max_idx
-from scipy import stats
 from collections import defaultdict
-import numpy as np
 from datetime import datetime
-import matplotlib.pyplot as plt
 from math import sqrt, ceil
+
+from scipy import stats
+import numpy as np
+import matplotlib.pyplot as plt
+
+from learntools.libs import s3
+from learntools.libs.utils import transpose, max_idx
 
 
 # not using iterators in this code because log files are small

@@ -14,10 +14,10 @@ class DynamicRecArray(object):
         self.dtype = np.dtype(dtype)
         self.length = 0
         self.size = size
-        self._data = np.empty(self.size, dtype=self.dtype)
+        self._data = np.zeros(self.size, dtype=self.dtype)
 
     def __len__(self):
-        return self.length
+        return max(self.length, self._data)
 
     def append(self, rec):
         if self.length == self.size:
@@ -32,12 +32,161 @@ class DynamicRecArray(object):
 
     @property
     def data(self):
-        return self._data[:self.length]
+        return self._data[:len(self._data)]
+
+
+class Column(DynamicRecArray):
+    def __init__(self, name, dtype='f4', size=10):
+        super(Column, self).__init__(dtype=dtype)
+        self.name = name
+
+    def __getitem__(self, key):
+        return self._data[key]
+
+    def __setitem__(self, key, values):
+        self._data[key] = values
+
+
+class NumericColumn(Column):
+    def __init__(self, name, set_func=None, *args, **kwargs):
+        super(NumericColumn, self).__init__(name, *args, **kwargs)
+        if set_func is None:
+            self.set_func = lambda x: x
+        else:
+            self.set_func = set_func
+
+    def __setitem__(self, key, values):
+        if hasattr(values, '__iter__') and not isinstance(values, str):
+            value = [self.set_func(t) for t in values]
+        else:
+            value = self.set_func(values)
+        return super(NumericColumn, self).__setitem__(key, value)
+
+
+class TimeColumn(Column):
+    NUM = 0
+    ORIGINAL = 1
+
+    def __init__(self, name, form=LISTEN_TIME_FORMAT, *args, **kwargs):
+        super(TimeColumn, self).__init__(name, dtype='i8', *args, **kwargs)
+        self.form = LISTEN_TIME_FORMAT
+        self.mode = TimeColumn.NUM
+
+    def __setitem__(self, key, time_strs):
+        if hasattr(time_strs, '__iter__') and not isinstance(time_strs, str):
+            value = [parse_time(t, self.form) for t in time_strs]
+        else:
+            value = parse_time(time_strs, self.form)
+        return super(TimeColumn, self).__setitem__(key, value)
+
+    def __getitem__(self, key):
+        if self.mode == TimeColumn.NUM:
+            return super(TimeColumn, self).__getitem__(key)
+        else:
+            values = super(TimeColumn, self).__getitem__(key)
+            if hasattr(values, '__iter__') and not isinstance(values, str):
+                values = [format_time(t, self.form) for t in values]
+            else:
+                values = format_time(values, self.form)
+            return values
+
+
+class EnumColumn(Column):
+    NUM = 0
+    ORIGINAL = 1
+
+    def __init__(self, name, enum_dict=None, *args, **kwargs):
+        super(EnumColumn, self).__init__(name, dtype='i4', *args, **kwargs)
+        self._enum_dict = {} if enum_dict is None else enum_dict
+        self._enum_dict_reverse = None
+        self.mode = EnumColumn.NUM
+
+    def __convert_to_dict__(self, str_value):
+        if str_value in self._enum_dict:
+            return self._enum_dict[str_value]
+        else:
+            int_val = len(self._enum_dict)
+            self._enum_dict[str_value] = int_val
+            return int_val
+
+    def __setitem__(self, key, str_value):
+        if hasattr(str_value, '__iter__') and not isinstance(str_value, str):
+            value = [self.__convert_to_dict__(t) for t in str_value]
+        else:
+            value = self.__convert_to_dict__(str_value)
+        return super(EnumColumn, self).__setitem__(key, value)
+
+    def __getitem__(self, key):
+        if self.mode == EnumColumn.NUM:
+            return super(EnumColumn, self).__getitem__(key)
+        else:
+            value = super(EnumColumn, self).__getitem__(key)
+            if self._enum_dict_reverse is None:
+                self._enum_dict_reverse = dict((v, k) for (k, v) in self._enum_dict.iteritems())
+            if hasattr(value, '__iter__') and not isinstance(value, str):
+                value_ = [self._enum_dict_reverse[t] for t in value]
+            else:
+                value_ = self._enum_dict_reverse[value]
+            return value_
+
+
+# TODO: alter string to integer for numeric columns
+class Dataset(object):
+    ENUM = 0
+    TIME = 1
+    INT = 2
+    LONG = 3
+    FLOAT = 4
+
+    NUM = 0
+    ORIGINAL = 1
+
+    def __init__(self, headers, n_rows=10, form=LISTEN_TIME_FORMAT):
+        self.columns = {}
+        self._mode = Dataset.NUM
+        for h, t in headers:
+            if t == Dataset.ENUM:
+                col = EnumColumn(name=h, size=n_rows)
+            elif t == Dataset.TIME:
+                col = TimeColumn(name=h, size=n_rows, form=form)
+            elif t in (Dataset.INT, Dataset.LONG, Dataset.FLOAT):
+                if t == Dataset.INT:
+                    col_type = 'i4'
+                    func_type = lambda x: int(x)
+                elif t == Dataset.LONG:
+                    col_type = 'i8'
+                    func_type = lambda x: long(x)
+                elif t == Dataset.FLOAT:
+                    col_type = 'f4'
+                    func_type = lambda x: float(x)
+                col = NumericColumn(name=h, dtype=col_type, set_func=func_type, size=n_rows)
+            self.columns[h] = col
+
+    @property
+    def mode(self):
+        return self._mode
+
+    @mode.setter
+    def mode(self, value):
+        self._mode = value
+        for c in self.columns.itervalues():
+            c.mode = self._mode
+
+    def __setitem__(self, key, values):
+        if not isinstance(key, int):
+            raise Exception("only integer keys can be used for datasets (sorry)")
+        for c, v in izip(self.columns.itervalues(), values):
+            c[key] = v
+
+    def __getitem__(self, key):
+        if not isinstance(key, int):
+            raise Exception("only integer keys can be used for datasets (sorry)")
+        return [c[key] for c in self.columns.itervalues()]
 
 
 def parse_time(time_str, form=LISTEN_TIME_FORMAT):
     t = datetime.strptime(time_str, form)
-    return int(round((mktime(t.timetuple()) + t.microsecond / 1000000) * 100))
+    return long(round((mktime(t.timetuple()) + t.microsecond / 1000000) * 100))
 
 
 def format_time(time_int, form=LISTEN_TIME_FORMAT):

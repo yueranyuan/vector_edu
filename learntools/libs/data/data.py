@@ -1,9 +1,6 @@
 import gzip
 import cPickle
-from collections import Counter
 from itertools import count, izip, groupby
-import itertools
-import heapq
 
 import numpy
 
@@ -22,8 +19,8 @@ def gen_data(fname):
         cPickle.dump((set_, set_, set_), f)
 
 
-def convert_task_from_xls(fname, outname):
-    from loader import load
+def convert_task_from_xls(fname, outname=None):
+    from io import load
     data, enum_dict, _ = load(
         fname,
         numeric=['cond'],
@@ -36,12 +33,16 @@ def convert_task_from_xls(fname, outname):
     correct = data['cond']
     start_time = data['start_time']
     end_time = data['end_time']
-    with gzip.open(outname, 'w') as f:
-        cPickle.dump((subject, start_time, end_time, skill, correct, subject_pairs, stim_pairs), f)
+    formatted_data = (subject, start_time, end_time, skill, correct, subject_pairs, stim_pairs)
+    if outname is not None:
+        with gzip.open(outname, 'w') as f:
+            cPickle.dump(formatted_data, f)
+    else:
+        return formatted_data
 
 
 def convert_eeg_from_xls(fname, outname, cutoffs=(0.5, 4.0, 7.0, 12.0, 30.0)):
-    from loader import load
+    from io import load
     from eeg import signal_to_freq_bins
     data, enum_dict, text = load(
         fname,
@@ -125,38 +126,6 @@ def align_data(task_name, eeg_name, out_name, sigqual_cutoff=200):
     # Step4: write data file for use by classifier
     with gzip.open(out_name, 'w') as f:
         cPickle.dump((task_subject, skill, correct, task_start, features, stim_pairs), f)
-
-
-def _get_ngrams(stims, pairs):
-    word_id_count = Counter(stims)
-    ngrams = Counter()
-    for (word, word_id) in pairs:
-        cnt = word_id_count[word_id]
-        for l in word:
-            ngrams[l] += cnt
-        buffered_word = '^{word}$'.format(word=word)
-        for b1, b2 in zip(buffered_word, buffered_word[1:]):
-            ngrams[b1 + b2] += cnt
-    # remove non-letter keys in-place
-    bad_chars = set('()1234567890')
-    bad_keys = itertools.ifilter(lambda k: set(k) & bad_chars, ngrams.iterkeys())
-    for bk in list(bad_keys):  # cast because it seems the reference to bk gets deleted with 'del'
-        del ngrams[bk]
-    return ngrams
-
-
-def gen_word_matrix(stims, pairs, vector_length=100):
-    stims = stims.flatten()
-    ngrams = _get_ngrams(stims, pairs)
-    top_pairs = heapq.nlargest(vector_length, ngrams.iteritems(), key=lambda (k, v): v)
-    vector_keys = [k for (k, v) in top_pairs]
-    padding = [0] * (vector_length - len(top_pairs))
-    ordered_pairs = sorted(pairs, key=lambda (w, i): i)
-    buffered_words = itertools.imap(lambda (w, i): '^{word}$'.format(word=w), ordered_pairs)
-    word_vectors = [[1 if ngram in word else 0 for ngram in vector_keys] + padding
-                    for word in buffered_words]
-    word_vectors = numpy.asarray(word_vectors)
-    return word_vectors
 
 
 if __name__ == "__main__":

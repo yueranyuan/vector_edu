@@ -89,3 +89,20 @@ def test_loader():
 
     eeg = data.get_column("rawwave")
     assert_sample_data(eeg=eeg)
+
+
+def test_pickle():
+    dataset = Dataset([('int', Dataset.INT), ('enum', Dataset.ENUM), ('time', Dataset.TIME)], n_rows=len(nums))
+    for i, row in enumerate(izip(numstr, enumstr, strtimes)):
+        dataset[i] = row
+
+    import cPickle
+    gz_name = 'learntools/libs/data/tests/sample_data.gz'
+    with open(gz_name, 'w') as f:
+        cPickle.dump(dataset.to_pickle(), f)
+
+    with open(gz_name, 'r') as f:
+        dataset2 = Dataset.from_pickle(cPickle.load(f))
+
+    for d, d2 in izip(dataset, dataset2):
+        assert d == d2

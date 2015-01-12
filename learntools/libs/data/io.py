@@ -60,9 +60,12 @@ class Column(object):
     def __eq__(self, x):
         return self._data == x
 
+    def __len__(self):
+        return len(self._data)
+
     @property
     def data(self):
-        return self._data[:len(self._data)]
+        return self[:]  # TODO: follow up on the memory efficiency of doing this
 
 
 class ObjectColumn(Column):
@@ -179,6 +182,8 @@ class Dataset(object):
 
     def __init__(self, headers, n_rows=10, form=LISTEN_TIME_FORMAT):
         self._mode = Dataset.NUM
+        self.headers = headers
+        self.time_form = form
 
         def _make_column(h, t):
             if t == Dataset.ENUM:
@@ -227,6 +232,26 @@ class Dataset(object):
         if not isinstance(key, int):
             raise Exception("only integer keys can be used for datasets (sorry)")
         return [c[key] for c in self.columns]
+
+    def to_pickle(self):
+        n_rows = len(self.columns[0])
+        headers = self.headers
+        time_form = self.time_form
+
+        # get data back in it's former format so it can be read back in the same way
+        # TODO: more efficient serialization and reloading to save processing at least for some columns
+        old_mode = self.mode
+        self.mode = Dataset.ORIGINAL
+        data = zip(*[col.data for col in self.columns])
+        self.mode = old_mode
+        return (headers, n_rows, time_form, data)
+
+    @classmethod
+    def from_pickle(cls, (headers, n_rows, time_form, data)):
+        dataset = cls(headers, n_rows=n_rows, form=time_form)
+        for i, row in enumerate(data):
+            dataset[i] = data[i]
+        return dataset
 
 
 def parse_time(time_str, form=LISTEN_TIME_FORMAT):

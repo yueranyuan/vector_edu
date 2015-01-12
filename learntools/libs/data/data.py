@@ -20,19 +20,22 @@ def gen_data(fname):
 
 
 def convert_task_from_xls(fname, outname=None):
-    from io import load
-    data, enum_dict, _ = load(
-        fname,
-        numeric=['cond'],
-        enum=['subject', 'stim', 'block'],
-        time=['start_time', 'end_time'])
-    stim_pairs = list(enum_dict['stim'].iteritems())
-    subject_pairs = list(enum_dict['subject'].iteritems())
-    skill = data['stim']
-    subject = data['subject']
-    correct = data['cond']
-    start_time = data['start_time']
-    end_time = data['end_time']
+    from io import load, Dataset
+    headers = (('cond', Dataset.INT),
+               ('subject', Dataset.ENUM),
+               ('stim', Dataset.ENUM),
+               ('block', Dataset.ENUM),
+               ('start_time', Dataset.TIME),
+               ('end_time', Dataset.TIME))
+    data = load('learntools/libs/data/tests/sample_data.xls', headers)
+
+    subject = data.get_data('subject')
+    correct = data.get_data('cond')
+    skill = data.get_data('stim')
+    start_time = data.get_data('start_time')
+    end_time = data.get_data('end_time')
+    stim_pairs = data.get_column('stim').enum_pairs
+    subject_pairs = data.get_column('subject').enum_pairs
     formatted_data = (subject, start_time, end_time, skill, correct, subject_pairs, stim_pairs)
     if outname is not None:
         with gzip.open(outname, 'w') as f:
@@ -41,30 +44,34 @@ def convert_task_from_xls(fname, outname=None):
         return formatted_data
 
 
-def convert_eeg_from_xls(fname, outname, cutoffs=(0.5, 4.0, 7.0, 12.0, 30.0)):
-    from io import load
+def convert_eeg_from_xls(fname, outname=None, cutoffs=(0.5, 4.0, 7.0, 12.0, 30.0)):
+    from io import load, Dataset
     from eeg import signal_to_freq_bins
-    data, enum_dict, text = load(
-        fname,
-        numeric=['sigqual'],
-        enum=['subject'],
-        time=['start_time', 'end_time'],
-        text=['rawwave'])
-    subject_pairs = list(enum_dict['subject'].iteritems())
-    subject = data['subject']
-    sigqual = data['sigqual']
-    start_time = data['start_time']
-    end_time = data['end_time']
+    headers = (('sigqual', Dataset.INT),
+               ('subject', Dataset.ENUM),
+               ('start_time', Dataset.TIME),
+               ('end_time', Dataset.TIME),
+               ('rawwave', Dataset.STR))
+    data = load(fname, headers)
+    subject_pairs = data.get_column('subject').enum_pairs
+    subject = data.get_data('subject')
+    sigqual = data.get_data('sigqual')
+    start_time = data.get_data('start_time')
+    end_time = data.get_data('end_time')
+    rawwave = data.get_data('rawwave')
     cutoffs = list(cutoffs)
-    eeg_freq = numpy.empty((len(text.rawwave), len(cutoffs) - 1))
-    for i, eeg_str in enumerate(text.rawwave):
+    eeg_freq = numpy.empty((len(rawwave), len(cutoffs) - 1))
+    for i, eeg_str in enumerate(rawwave):
         eeg = [float(d) for d in eeg_str.strip().split(' ')]
         eeg_freq[i] = tuple(signal_to_freq_bins(eeg, cutoffs=cutoffs, sampling_rate=512))
-    with gzip.open(outname, 'w') as f:
-        cPickle.dump((subject, start_time, end_time, sigqual, eeg_freq, subject_pairs), f)
+    formatted_data = (subject, start_time, end_time, sigqual, eeg_freq, subject_pairs)
+    if outname is not None:
+        with gzip.open(outname, 'w') as f:
+            cPickle.dump(formatted_data, f)
+    return formatted_data
 
 
-def align_data(task_name, eeg_name, out_name, sigqual_cutoff=200):
+def align_data(task_name, eeg_name, out_name=None, sigqual_cutoff=200):
     with gzip.open(task_name, 'rb') as task_f, gzip.open(eeg_name, 'rb') as eeg_f:
         task_subject, task_start, task_end, skill, correct, task_subject_pairs, stim_pairs = cPickle.load(task_f)
         eeg_subject, eeg_start, eeg_end, sigqual, eeg_freq, eeg_subject_pairs = cPickle.load(eeg_f)
@@ -113,6 +120,7 @@ def align_data(task_name, eeg_name, out_name, sigqual_cutoff=200):
                     temp_pointer += 1
                 if task_eeg:
                     task_eeg_mapping[t_i] = task_eeg
+                print task_eeg
         except StopIteration:
             pass
 
@@ -124,8 +132,12 @@ def align_data(task_name, eeg_name, out_name, sigqual_cutoff=200):
     features = [compute_eeg_features(ei) if ei else None for ei in task_eeg_mapping]
 
     # Step4: write data file for use by classifier
-    with gzip.open(out_name, 'w') as f:
-        cPickle.dump((task_subject, skill, correct, task_start, features, stim_pairs), f)
+    formatted_data = (task_subject, skill, correct, task_start, features, stim_pairs)
+    if out_name is not None:
+        with gzip.open(out_name, 'w') as f:
+            cPickle.dump(formatted_data, f)
+    else:
+        return formatted_data
 
 
 if __name__ == "__main__":

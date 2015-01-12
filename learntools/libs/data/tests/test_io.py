@@ -1,6 +1,8 @@
 from itertools import izip, islice
 
 from learntools.libs.data.io import Column, TimeColumn, EnumColumn, Dataset
+from test_data import assert_sample_data
+
 
 strtimes = ["2013-10-15 09:15:51.480000", "2013-10-15 09:15:55.480000", "2013-10-15 09:15:55.480000"]
 timestamps = [138184295148, 138184295548, 138184295548]
@@ -17,6 +19,9 @@ def test_column():
     col[1:3] = numstr[1:3]
     assert all(col[:3] == nums)
 
+    col2 = Column('example', data=nums)
+    assert all(col2[:3] == nums)
+
 
 def test_timecolumn():
     col = TimeColumn('example_column')
@@ -26,6 +31,11 @@ def test_timecolumn():
     assert all(col[:3] == timestamps)
     col.mode = TimeColumn.ORIGINAL
     assert col[:3] == strtimes
+
+    col2 = TimeColumn('example', data=timestamps)
+    assert all(col2[:3] == timestamps)
+    col2.mode = TimeColumn.ORIGINAL
+    assert col2[:3] == strtimes
 
 
 def test_enumcolumn():
@@ -38,6 +48,11 @@ def test_enumcolumn():
     col.mode = EnumColumn.ORIGINAL
     assert col[:3] == enumstr
 
+    col2 = EnumColumn('example', data=enumint, enum_dict={'jan': 0, 'feb': 1})
+    assert all(col2[:3] == enumint)
+    col2.mode = EnumColumn.ORIGINAL
+    assert col2[:3] == enumstr
+
 
 def test_dataset():
     dataset = Dataset([('int', Dataset.INT), ('enum', Dataset.ENUM), ('time', Dataset.TIME)], n_rows=len(nums))
@@ -49,3 +64,28 @@ def test_dataset():
     dataset.mode = Dataset.ORIGINAL
     for d, row in izip(islice(dataset, None, 3), izip(numstr, enumstr, strtimes)):
         assert tuple(map(str, d)) == row
+
+
+def test_loader():
+    from learntools.libs.data.io import load
+    headers = (('cond', Dataset.INT),
+               ('subject', Dataset.ENUM),
+               ('stim', Dataset.ENUM),
+               ('block', Dataset.ENUM),
+               ('start_time', Dataset.TIME),
+               ('end_time', Dataset.TIME),
+               ('rawwave', Dataset.STR))
+    data = load('learntools/libs/data/tests/sample_data.xls', headers)
+
+    subject = data.get_column('subject')
+    correct = data.get_column('cond')
+    skill = data.get_column('stim')
+    start_time = data.get_column('start_time')
+    end_time = data.get_column('end_time')
+    stim_pairs = data.get_column('stim').enum_pairs
+    subject_pairs = data.get_column('subject').enum_pairs
+
+    assert_sample_data(subject, start_time, end_time, skill, correct, subject_pairs, stim_pairs)
+
+    eeg = data.get_column("rawwave")
+    assert_sample_data(eeg=eeg)

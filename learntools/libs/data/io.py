@@ -4,13 +4,12 @@ import csv
 from time import mktime
 from datetime import datetime
 from itertools import chain, starmap, imap, izip
-from collections import namedtuple
 
 LISTEN_TIME_FORMAT = "%Y-%m-%d %H:%M:%S.%f"
 
 
 class DynamicRecArray(object):
-    def __init__(self, dtype, size=10):
+    def __init__(self, dtype='i4', size=10):
         self.dtype = np.dtype(dtype)
         self.length = 0
         self.size = size
@@ -35,16 +34,43 @@ class DynamicRecArray(object):
         return self._data[:len(self._data)]
 
 
-class Column(DynamicRecArray):
-    def __init__(self, name, dtype='f4', size=10):
-        super(Column, self).__init__(dtype=dtype)
+class Column(object):
+    def __init__(self, name, data=None, **kwargs):
         self.name = name
+        self.initialize_data(data, **kwargs)
+
+    def initialize_data(self, data, dtype='i4', size=10, **kwargs):
+        if data is None:
+            self._data = np.zeros(size, dtype=dtype)
+        else:
+            self._data = np.asarray(data)
 
     def __getitem__(self, key):
         return self._data[key]
 
     def __setitem__(self, key, values):
         self._data[key] = values
+
+    def __repr__(self):
+        return repr(self._data)
+
+    def __str__(self):
+        return str(self._data)
+
+    def __eq__(self, x):
+        return self._data == x
+
+    @property
+    def data(self):
+        return self._data[:len(self._data)]
+
+
+class ObjectColumn(Column):
+    def initialize_data(self, data, size, **kwargs):
+        if data is None:
+            self._data = [None] * size
+        else:
+            self._data = data
 
 
 class NumericColumn(Column):
@@ -116,6 +142,14 @@ class EnumColumn(Column):
             value = self.__convert_to_dict__(str_value)
         return super(EnumColumn, self).__setitem__(key, value)
 
+    @property
+    def ienum_pairs(self):
+        return self._enum_dict.iteritems()
+
+    @property
+    def enum_pairs(self):
+        return list(self._enum_dict.iteritems())
+
     def __getitem__(self, key):
         if self.mode == EnumColumn.NUM:
             return super(EnumColumn, self).__getitem__(key)
@@ -130,25 +164,29 @@ class EnumColumn(Column):
             return value_
 
 
-# TODO: alter string to integer for numeric columns
+# TODO: make Dataset resizable (i.e. we need resize to propogate to all columns)
 class Dataset(object):
     ENUM = 0
     TIME = 1
     INT = 2
     LONG = 3
     FLOAT = 4
+    STR = 5
+    OBJ = 6
 
     NUM = 0
     ORIGINAL = 1
 
     def __init__(self, headers, n_rows=10, form=LISTEN_TIME_FORMAT):
-        self.columns = {}
         self._mode = Dataset.NUM
-        for h, t in headers:
+
+        def _make_column(h, t):
             if t == Dataset.ENUM:
-                col = EnumColumn(name=h, size=n_rows)
+                return EnumColumn(name=h, size=n_rows)
             elif t == Dataset.TIME:
-                col = TimeColumn(name=h, size=n_rows, form=form)
+                return TimeColumn(name=h, size=n_rows, form=form)
+            elif t == Dataset.STR or t == Dataset.OBJ:
+                return ObjectColumn(name=h, size=n_rows)
             elif t in (Dataset.INT, Dataset.LONG, Dataset.FLOAT):
                 if t == Dataset.INT:
                     col_type = 'i4'
@@ -159,8 +197,9 @@ class Dataset(object):
                 elif t == Dataset.FLOAT:
                     col_type = 'f4'
                     func_type = lambda x: float(x)
-                col = NumericColumn(name=h, dtype=col_type, set_func=func_type, size=n_rows)
-            self.columns[h] = col
+                return NumericColumn(name=h, dtype=col_type, set_func=func_type, size=n_rows)
+        self.columns = [_make_column(h, t) for h, t in headers]
+        self.header_idx_mapping = {h: i for i, (h, _) in enumerate(headers)}
 
     @property
     def mode(self):
@@ -169,19 +208,25 @@ class Dataset(object):
     @mode.setter
     def mode(self, value):
         self._mode = value
-        for c in self.columns.itervalues():
+        for c in self.columns:
             c.mode = self._mode
+
+    def get_data(self, key):
+        return self.get_column(key).data
+
+    def get_column(self, key):
+        return self.columns[self.header_idx_mapping[key]]
 
     def __setitem__(self, key, values):
         if not isinstance(key, int):
             raise Exception("only integer keys can be used for datasets (sorry)")
-        for c, v in izip(self.columns.itervalues(), values):
+        for c, v in izip(self.columns, values):
             c[key] = v
 
     def __getitem__(self, key):
         if not isinstance(key, int):
             raise Exception("only integer keys can be used for datasets (sorry)")
-        return [c[key] for c in self.columns.itervalues()]
+        return [c[key] for c in self.columns]
 
 
 def parse_time(time_str, form=LISTEN_TIME_FORMAT):
@@ -197,70 +242,23 @@ def format_time(time_int, form=LISTEN_TIME_FORMAT):
     return datetime.strftime(d, form)
 
 
-def load(fname, numeric=(), numeric_float=(), time=(), enum=(), text=(),
-         time_format=LISTEN_TIME_FORMAT):
-    # this ensures that the inputs can be immutable tuples while maintaining
-    # mutability inside the function. The extra memory usage is minimal
-    numeric = [x for x in numeric]
-    numeric_float = [x for x in numeric_float]
-    time = [x for x in time]
-    enum = [x for x in enum]
-    text = [x for x in text]
+def load(fname, headers, delimiter='\t', **kwargs):
+    from learntools.libs.utils import get_column
+
+    # this is so we can allocate memory ahead of time
+    # resizing arrays will be more costly than reading the file twice
+    with open(fname, 'r') as f:
+        n_rows = sum(1 for line in f if len(line) > 0) - 1  # don't count header or empty lines
 
     with open(fname, 'r') as f:
-        reader = csv.reader(f, delimiter='\t')
-        header = reader.next()
-        # translate string to index for speed
-        column_types = [numeric, numeric_float, time, enum, text]
-        try:
-            for hs in column_types:
-                for i, h in enumerate(hs):
-                    hs[i] = (header.index(h), h)
-        except ValueError:
-            raise Exception('header {h} not in file {fname}'.format(h=h, fname=fname))
-
-        # build enum ids and remove all unneeded columns
-        rows = []
-        columns = list(chain(numeric, numeric_float, time, enum, text))
-        enum_dict = {e: {} for i, e in enum}
-        for row in reader:
-            try:  # empty lines can cause problems
-                for i, e in enum:
-                    if row[i] not in enum_dict[e]:
-                        enum_dict[e][row[i]] = len(enum_dict[e])
-                rows.append([row[i] for i, h in columns])
-            except IndexError:
-                if len(row) != 0:
-                    raise  # reraise error if it's not due to empty-line
-
-    # create data structures to hold the loaded data
-    def add_type(arr, type_):
-        return [(v, type_) for i, v in arr]
-    column_dtypes = list(chain.from_iterable(
-        starmap(add_type, [(numeric, 'i4'), (numeric_float, 'f4'), (time, 'i8'), (enum, 'i4')])))
-    m = np.empty(len(rows), dtype=column_dtypes)
-    TextStore = namedtuple('Text', [h for i, h in text])
-    text_store = TextStore(*[[None] * len(rows) for i in xrange(len(text))])
-    # reindex headers because the unneeded columns have been removed
-    # we have to do it this way because python doesn't support direct pointer access :(
-    j = 0
-    for hs in column_types:
-        for i, h in enumerate(hs):
-            hs[i] = (j, h[1])
-            j += 1
-    # load data into our structure in the proper format
-    for row_num, row in enumerate(rows):
-        for i, e in enum:
-            m[row_num][i] = enum_dict[e][row[i]]
-        for i, t in time:
-            m[row_num][i] = parse_time(row[i], time_format)
-        for i, n in numeric:
-            m[row_num][i] = int(row[i])
-        for i, n in numeric_float:
-            m[row_num][i] = float(row[i])
-        for t_i, (i, n) in enumerate(text):
-            text_store[t_i][row_num] = str(row[i])
-    return m, enum_dict, text_store
+        reader = csv.reader(f, delimiter=delimiter)
+        file_headers = reader.next()
+        data_headers = get_column(headers, 0)
+        header_column_idxs = [file_headers.index(h) for i, h in enumerate(data_headers)]
+        dataset = Dataset(headers, n_rows=n_rows, **kwargs)
+        for i, row in enumerate(reader):
+            dataset[i] = (row[i] for i in header_column_idxs)
+    return dataset
 
 
 def save(fname, numeric=None, numeric_float=None, enum=None, enum_dict=None,

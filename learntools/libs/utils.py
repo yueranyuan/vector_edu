@@ -1,5 +1,5 @@
 import operator
-from itertools import chain
+from itertools import chain, imap
 
 import numpy
 
@@ -69,3 +69,11 @@ def idx_to_mask(idxs, mask_len=None):
     mask = numpy.array([False] * mask_len)
     mask[idxs] = True
     return mask
+
+
+def iget_column(data, i):
+    return imap(operator.itemgetter(i), data)
+
+
+def get_column(data, i):
+    return [d[i] for d in data]

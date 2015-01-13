@@ -140,6 +140,15 @@ def align_data(task_name, eeg_name, out_name=None, sigqual_cutoff=200):
         return formatted_data
 
 
+def to_dataset_pickle((task_subject, skill, correct, task_start, features, stim_pairs)):
+    from io import Dataset
+    headers = [('subject', Dataset.ENUM),
+               ('skill', Dataset.ENUM),
+               ('correct', Dataset.INT),
+               ('task_start', Dataset.TIME),
+               ('features', Dataset.MAT)]
+
+
 if __name__ == "__main__":
     task_name, eeg_name = 'data/task_data4.gz', 'data/eeg_data4.gz'
     convert_task_from_xls('raw_data/task_large.xls', task_name)

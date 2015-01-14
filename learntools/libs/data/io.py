@@ -127,10 +127,18 @@ class MatColumn(Column):
         self._data = None
 
     def __setitem__(self, key, value):
+        if not isinstance(value, (np.ndarray)):
+            value = np.array(value)
+        # lazily initialize data so that we don't have to pre-specify the dimensions
         if self._data is None:
             n_cols = value.shape[-1]
             self._data = np.zeros((self.n_rows, n_cols), dtype=self.dtype)
-        super(MatColumn, self).__setitem__(key, value)
+        return super(MatColumn, self).__setitem__(key, value)
+
+    def __getitem__(self, key):
+        if self._data is None:
+            raise Exception("Matrix column '{}' not initialized".format(self.name))
+        return super(MatColumn, self).__getitem__(key)
 
 
 class EnumColumn(Column):
@@ -189,35 +197,50 @@ class Dataset(object):
     FLOAT = 4
     STR = 5
     OBJ = 6
+    MATINT = 7
+    MATFLOAT = 8
 
     NUM = 0
     ORIGINAL = 1
 
     def __init__(self, headers, n_rows=10, form=LISTEN_TIME_FORMAT):
         self._mode = Dataset.NUM
-        self.headers = headers
         self.time_form = form
+        self.n_rows = n_rows
 
-        def _make_column(h, t):
-            if t == Dataset.ENUM:
-                return EnumColumn(name=h, size=n_rows)
-            elif t == Dataset.TIME:
-                return TimeColumn(name=h, size=n_rows, form=form)
-            elif t == Dataset.STR or t == Dataset.OBJ:
-                return ObjectColumn(name=h, size=n_rows)
-            elif t in (Dataset.INT, Dataset.LONG, Dataset.FLOAT):
-                if t == Dataset.INT:
-                    col_type = 'i4'
-                    func_type = lambda x: int(x)
-                elif t == Dataset.LONG:
-                    col_type = 'i8'
-                    func_type = lambda x: long(x)
-                elif t == Dataset.FLOAT:
-                    col_type = 'f4'
-                    func_type = lambda x: float(x)
-                return NumericColumn(name=h, dtype=col_type, set_func=func_type, size=n_rows)
-        self.columns = [_make_column(h, t) for h, t in headers]
-        self.header_idx_mapping = {h: i for i, (h, _) in enumerate(headers)}
+        self.header_idx_mapping = {}
+        self.columns = []
+        self.headers = []
+        for h, t in headers:
+            self.set_column(h, t)
+
+    def _make_column(self, h, t):
+        if t == Dataset.ENUM:
+            return EnumColumn(name=h, size=self.n_rows)
+        elif t == Dataset.TIME:
+            return TimeColumn(name=h, size=self.n_rows, form=self.time_form)
+        elif t == Dataset.STR or t == Dataset.OBJ:
+            return ObjectColumn(name=h, size=self.n_rows)
+        elif t in (Dataset.INT, Dataset.LONG, Dataset.FLOAT):
+            if t == Dataset.INT:
+                col_type = 'i4'
+                func_type = lambda x: int(x)
+            elif t == Dataset.LONG:
+                col_type = 'i8'
+                func_type = lambda x: long(x)
+            elif t == Dataset.FLOAT:
+                col_type = 'f4'
+                func_type = lambda x: float(x)
+            return NumericColumn(name=h, dtype=col_type, set_func=func_type,
+                                 size=self.n_rows)
+        elif t in (Dataset.MATINT, Dataset.MATFLOAT):
+            if t == Dataset.MATINT:
+                col_type = 'i4'
+            elif t == Dataset.MATFLOAT:
+                col_type = 'f4'
+            return MatColumn(name=h, dtype=col_type, size=self.n_rows)
+        else:
+            raise Exception('unknown dataset type for column')
 
     @property
     def mode(self):
@@ -234,6 +257,19 @@ class Dataset(object):
 
     def get_column(self, key):
         return self.columns[self.header_idx_mapping[key]]
+
+    def set_column(self, header, ctype, data=None):
+        col = self._make_column(header, ctype)
+        if data is not None:
+            col[:len(data)] = data
+
+        col_idx = self.header_idx_mapping.get(header, None)
+        if col_idx is None:
+            self.headers.append((header, ctype))
+            self.header_idx_mapping[header] = len(self.headers) - 1
+            self.columns.append(col)
+        else:
+            self.columns[col_idx] = col
 
     def __setitem__(self, key, values):
         if not isinstance(key, int):

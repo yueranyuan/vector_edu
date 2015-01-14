@@ -12,6 +12,7 @@ enumstr = ['jan', 'feb', 'jan']
 enumint = [0, 1, 0]
 numstr = ['0', '1', '2']
 nums = [0, 1, 2]
+matints = [[1, 2, 3], [4, 5, 6], [7, 8, 9]]
 
 
 def test_column():
@@ -27,7 +28,6 @@ def test_column():
 
 def test_timecolumn():
     col = TimeColumn('example_column')
-    strtimes = ["2013-10-15 09:15:51.480000", "2013-10-15 09:15:55.480000", "2013-10-15 09:15:55.480000"]
     col[0] = strtimes[0]
     col[1:3] = strtimes[1:3]
     assert all(col[:3] == timestamps)
@@ -42,8 +42,6 @@ def test_timecolumn():
 
 def test_enumcolumn():
     col = EnumColumn('example_column')
-    enumstr = ['jan', 'feb', 'jan']
-    enumint = [0, 1, 0]
     col[0] = enumstr[0]
     col[1:3] = enumstr[1:3]
     assert all(col[:3] == enumint)
@@ -58,11 +56,10 @@ def test_enumcolumn():
 
 def test_matcolumn():
     col = MatColumn('example_column')
-    matstr = np.array([[1, 2, 3], [4, 5, 6], [7, 8, 9]])
-    col[0] = matstr[0]
-    assert all(col[0] == matstr[0])
-    col[1:3] = matstr[1:3]
-    assert np.all(col[:3] == matstr)
+    col[0] = matints[0]
+    assert all(col[0] == matints[0])
+    col[1:3] = matints[1:3]
+    assert np.all(col[:3] == matints)
 
 
 def test_dataset():
@@ -100,6 +97,7 @@ def test_loader():
 
     eeg = data.get_column("rawwave")
     assert_sample_data(eeg=eeg)
+'''
 
 
 def test_pickle():
@@ -117,4 +115,27 @@ def test_pickle():
 
     for d, d2 in izip(dataset, dataset2):
         assert d == d2
-'''
+
+
+def test_set_column():
+    dataset = Dataset([('int', Dataset.INT), ('enum', Dataset.ENUM), ('time', Dataset.TIME)],
+                      n_rows=len(nums))
+    for i, row in enumerate(izip(numstr, enumstr, strtimes)):
+        dataset[i] = row
+
+    import cPickle
+    gz_name = 'learntools/libs/data/tests/sample_data.gz'
+    with open(gz_name, 'w') as f:
+        cPickle.dump(dataset.to_pickle(), f)
+
+    with open(gz_name, 'r') as f:
+        dataset2 = Dataset.from_pickle(cPickle.load(f))
+
+    dataset2.set_column('mat', Dataset.MATINT, matints)
+
+    for row in dataset2:
+        print row
+
+    for d, d2, d3 in izip(dataset2, dataset, matints):
+        assert d[:len(d2)] == d2
+        assert all(d[-1] == d3)

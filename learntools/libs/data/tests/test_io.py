@@ -1,6 +1,8 @@
 from itertools import izip, islice
 
-from learntools.libs.data.io import Column, TimeColumn, EnumColumn, Dataset
+import numpy as np
+
+from learntools.libs.data.io import Column, TimeColumn, EnumColumn, MatColumn, Dataset
 from test_data import assert_sample_data
 
 
@@ -54,6 +56,15 @@ def test_enumcolumn():
     assert col2[:3] == enumstr
 
 
+def test_matcolumn():
+    col = MatColumn('example_column')
+    matstr = np.array([[1, 2, 3], [4, 5, 6], [7, 8, 9]])
+    col[0] = matstr[0]
+    assert all(col[0] == matstr[0])
+    col[1:3] = matstr[1:3]
+    assert np.all(col[:3] == matstr)
+
+
 def test_dataset():
     dataset = Dataset([('int', Dataset.INT), ('enum', Dataset.ENUM), ('time', Dataset.TIME)], n_rows=len(nums))
     for i, row in enumerate(izip(numstr, enumstr, strtimes)):
@@ -65,7 +76,7 @@ def test_dataset():
     for d, row in izip(islice(dataset, None, 3), izip(numstr, enumstr, strtimes)):
         assert tuple(map(str, d)) == row
 
-
+'''
 def test_loader():
     from learntools.libs.data.io import load
     headers = (('cond', Dataset.INT),
@@ -106,3 +117,4 @@ def test_pickle():
 
     for d, d2 in izip(dataset, dataset2):
         assert d == d2
+'''

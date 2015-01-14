@@ -120,6 +120,19 @@ class TimeColumn(Column):
             return values
 
 
+class MatColumn(Column):
+    def initialize_data(self, data, dtype='i4', size=10, **kwargs):
+        self.n_rows = size
+        self.dtype = dtype
+        self._data = None
+
+    def __setitem__(self, key, value):
+        if self._data is None:
+            n_cols = value.shape[-1]
+            self._data = np.zeros((self.n_rows, n_cols), dtype=self.dtype)
+        super(MatColumn, self).__setitem__(key, value)
+
+
 class EnumColumn(Column):
     NUM = 0
     ORIGINAL = 1

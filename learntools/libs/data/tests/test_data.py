@@ -64,4 +64,5 @@ def test_align():
     convert_task_from_xls(SAMPLE_DATA, SAMPLE_TASK)
     convert_eeg_from_xls(SAMPLE_DATA, SAMPLE_EEG)
     subject, skill, correct, task_start, features, stim_pairs = align_data(SAMPLE_TASK, SAMPLE_EEG)
-    assert_sample_data(subject=subject, skill=skill, correct=correct, start_time=task_start, stim_pairs=stim_pairs, features=features)
+    assert_sample_data(subject=subject, skill=skill, correct=correct, start_time=task_start,
+                       stim_pairs=stim_pairs, features=features)

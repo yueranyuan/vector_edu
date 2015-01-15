@@ -5,7 +5,7 @@ import theano.tensor as T
 import numpy as np
 
 from learntools.libs.utils import normalize_table, idx_to_mask
-from learntools.libs.data import gen_word_matrix
+from learntools.data import gen_word_matrix
 from learntools.libs.logger import log_me
 from learntools.libs.auc import auc
 from learntools.model.mlp import HiddenNetwork, MLP
@@ -51,35 +51,42 @@ def build_model(prepared_data, L1_reg=0., L2_reg=0., dropout_p=0., learning_rate
     # when training the model
 
     subject_x, skill_x, correct_y, start_x, eeg_x, eeg_table, stim_pairs, train_idx, valid_idx = prepared_data
-    N = len(correct_y)
-    eeg_vector_len = eeg_table.shape[1]
-    correct_y += 1
-    train_mask = idx_to_mask(train_idx, len(subject_x))
-    valid_mask = idx_to_mask(valid_idx, len(subject_x))
+    dataset_name = 'data/data4.gz'
+    from learntools.kt.data import prepare_new_data2
+    ds, train_idx, valid_idx = prepare_new_data2(dataset_name, top_n=14, cv_fold=0)
+    N = len(ds['correct'])
+    eeg_vector_len = ds['eeg'].shape[1]
+    # eeg_vector_len = eeg_table.shape[1]
+    train_mask = idx_to_mask(train_idx, len(ds['subject']))
+    valid_mask = idx_to_mask(valid_idx, len(ds['subject']))
 
     sorted_i = sorted(xrange(N), key=lambda i: (subject_x[i], start_x[i]))
-    skill_x = skill_x[sorted_i]
-    subject_x = subject_x[sorted_i]
-    correct_y = correct_y[sorted_i]
-    start_x = start_x[sorted_i]
-    eeg_x = eeg_x[sorted_i]
+    ds.reorder(sorted_i)
     train_mask = train_mask[sorted_i]
     valid_mask = valid_mask[sorted_i]
     train_idx = np.nonzero(train_mask)[0]
     valid_idx = np.nonzero(valid_mask)[0]
     base_indices = T.ivector('idx')
 
+    skill_x = ds['skill']
+    subject_x = ds['subject']
+    correct_y = ds['correct']
+    start_x = ds['start_time']
+    eeg_full = ds['eeg']
+
+    # eeg_full = eeg_table[eeg_x]
+    # assert np.allclose(eeg_full, ds['eeg'])
+
     # ###########
     # STEP2: connect up the model. See figures/vector_edu_model.png for diagram
     # TODO: make the above mentioned diagram
-    skill_matrix = make_shared(gen_word_matrix(skill_x,
-                                               stim_pairs,
+    skill_matrix = make_shared(gen_word_matrix(ds['skill'],
+                                               ds.get_column('skill').enum_pairs,
                                                vector_length=skill_vector_len))
 
     skill_x = make_shared(skill_x, to_int=True)
     correct_y = make_shared(correct_y, to_int=True)
-    eeg_x = make_shared(eeg_x, to_int=True)
-    eeg_table = make_shared(eeg_table)
+    eeg_full = make_shared(eeg_full)
 
     rng = np.random.RandomState(1234)
     t_dropout = T.scalar('dropout')
@@ -112,8 +119,8 @@ def build_model(prepared_data, L1_reg=0., L2_reg=0., dropout_p=0., learning_rate
     # STEP 3.1 stuff that goes in scan
     current_skill = skill_matrix[skill_x[base_indices]]
     previous_skill = skill_matrix[skill_x[base_indices - 1]]
-    previous_eeg_vector = eeg_table[eeg_x[base_indices]]
-    current_eeg_vector = eeg_table[eeg_x[base_indices]]
+    previous_eeg_vector = eeg_full[base_indices]
+    current_eeg_vector = eeg_full[base_indices]
 
     correct_vectors = make_shared([[0], [1]])
     correct_feature = correct_vectors[correct_y[base_indices - 1] - 1]
@@ -143,7 +150,7 @@ def build_model(prepared_data, L1_reg=0., L2_reg=0., dropout_p=0., learning_rate
 
     func_args = {
         'inputs': [base_indices],
-        'outputs': [loss, pY[:, 1] - pY[:, 2], base_indices, pY, previous_eeg_vector],
+        'outputs': [loss, pY[:, -2] - pY[:, -1], base_indices, pY, previous_eeg_vector],
         'on_unused_input': 'ignore',
         'allow_input_downcast': True
     }

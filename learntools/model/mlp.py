@@ -6,7 +6,7 @@ import numpy
 import theano
 import theano.tensor as T
 
-from learntools.model.logistic import LogisticRegression2
+from learntools.model.logistic import LogisticRegression
 from learntools.model.math import rectifier
 
 
@@ -82,7 +82,7 @@ class MLP(object):
             dropout=self.dropout
         )
 
-        self.logRegressionLayer = LogisticRegression2(
+        self.logRegressionLayer = LogisticRegression(
             n_in=size[-1],
             n_out=n_out
         )

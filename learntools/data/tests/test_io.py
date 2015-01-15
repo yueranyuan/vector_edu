@@ -1,9 +1,38 @@
-from itertools import izip, islice
+from itertools import izip, islice, compress
 
 import numpy as np
 
-from learntools.libs.data.io import Column, TimeColumn, EnumColumn, MatColumn, Dataset
+from learntools.data.io import Column, TimeColumn, EnumColumn, MatColumn, Dataset
 from test_data import assert_sample_data
+
+
+# match by getting a single truth value (this is complicated by the fact that
+# numpy array eq returns an array rather than a single value)
+class AWrap:
+    def __init__(self, o):
+        self.o = o
+
+    def __eq__(self, e):
+        if isinstance(self.o, np.ndarray):
+            return np.all(self.o == e)
+
+        try:
+            assert self.o == e
+            return True
+        except AssertionError:
+            if not hasattr(self.o, '__iter__'):
+                raise
+            else:
+                if len(self.o) != len(e):
+                    return False
+                for o_i, e_i in izip(self.o, e):
+                    return AWrap(o_i) == e_i
+
+    def __repr__(self):
+        return repr(self.o)
+
+    def __str__(self):
+        return str(self.o)
 
 
 strtimes = ["2013-10-15 09:15:51.480000", "2013-10-15 09:15:55.480000", "2013-10-15 09:15:55.480000"]
@@ -106,7 +135,7 @@ def test_pickle():
         dataset[i] = row
 
     import cPickle
-    gz_name = 'learntools/libs/data/tests/sample_data.gz'
+    gz_name = 'learntools/data/tests/sample_data.gz'
     with open(gz_name, 'w') as f:
         cPickle.dump(dataset.to_pickle(), f)
 
@@ -117,6 +146,37 @@ def test_pickle():
         assert d == d2
 
 
+def test_mask():
+    dataset = Dataset([('int', Dataset.INT), ('enum', Dataset.ENUM),
+                       ('time', Dataset.TIME), ('mat', Dataset.MATINT)],
+                      n_rows=len(nums))
+    for i, row in enumerate(izip(numstr, enumstr, strtimes, matints)):
+        dataset[i] = row
+
+    mask_i = [True, False, True]
+    dataset.mask(mask_i)
+
+    columns = [nums, enumint, timestamps, matints]
+    for i, row in enumerate(compress(izip(*columns), mask_i)):
+        assert AWrap(dataset[i]) == row
+
+
+def test_reorder():
+    dataset = Dataset([('int', Dataset.INT), ('enum', Dataset.ENUM),
+                       ('time', Dataset.TIME), ('mat', Dataset.MATINT)],
+                      n_rows=len(nums))
+    for i, row in enumerate(izip(numstr, enumstr, strtimes, matints)):
+        dataset[i] = row
+
+    order_i = [2, 0, 1]
+    dataset.reorder(order_i)
+
+    columns = zip(nums, enumint, timestamps, matints)
+    for i, row in enumerate([columns[i] for i in order_i]):
+        assert AWrap(dataset[i]) == row
+        np.array([1, 2, 3]) == np.array([1, 2, 2])
+
+
 def test_set_column():
     dataset = Dataset([('int', Dataset.INT), ('enum', Dataset.ENUM), ('time', Dataset.TIME)],
                       n_rows=len(nums))
@@ -124,7 +184,7 @@ def test_set_column():
         dataset[i] = row
 
     import cPickle
-    gz_name = 'learntools/libs/data/tests/sample_data.gz'
+    gz_name = 'learntools/data/tests/sample_data.gz'
     with open(gz_name, 'w') as f:
         cPickle.dump(dataset.to_pickle(), f)
 

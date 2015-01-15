@@ -1,7 +1,7 @@
 from itertools import izip
 
-from learntools.libs.data.data import (convert_task_from_xls, convert_eeg_from_xls,
-                                       align_data)
+from learntools.data.data import (convert_task_from_xls, convert_eeg_from_xls,
+                                  align_data)
 
 
 # create an object to stand for argument-not-set to catch inadvertent None

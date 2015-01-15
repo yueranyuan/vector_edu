@@ -3,7 +3,7 @@ import numpy as np
 import csv
 from time import mktime
 from datetime import datetime
-from itertools import chain, starmap, imap, izip
+from itertools import chain, starmap, imap, izip, compress
 
 LISTEN_TIME_FORMAT = "%Y-%m-%d %H:%M:%S.%f"
 
@@ -66,6 +66,10 @@ class Column(object):
     @property
     def data(self):
         return self[:]  # TODO: follow up on the memory efficiency of doing this
+
+    @data.setter
+    def data(self, value):
+        self._data = value
 
 
 class ObjectColumn(Column):
@@ -175,7 +179,6 @@ class EnumColumn(Column):
         return list(self._enum_dict.iteritems())
 
     def __getitem__(self, key):
-        print self.mode, 'here'
         if self.mode == EnumColumn.NUM:
             return super(EnumColumn, self).__getitem__(key)
         else:
@@ -279,9 +282,16 @@ class Dataset(object):
             c[key] = v
 
     def __getitem__(self, key):
+        # key is a column header
+        if isinstance(key, str):
+            return self.get_data(key)
+        # key is a row number
         if not isinstance(key, int):
             raise Exception("only integer keys can be used for datasets (sorry)")
         return [c[key] for c in self.columns]
+
+    def __len__(self):
+        return self.n_rows
 
     def to_pickle(self):
         n_rows = len(self.columns[0])
@@ -302,6 +312,28 @@ class Dataset(object):
         for i, row in enumerate(data):
             dataset[i] = data[i]
         return dataset
+
+    def resize(self, n_rows):
+        self.n_rows = n_rows
+
+    def reorder(self, order_i):
+        for c in self.columns:
+            if isinstance(c.data, np.ndarray):
+                c2 = c[order_i]
+            else:
+                c2 = [c[i] for i in order_i]
+            c.data = c2
+        self.resize(len(order_i))
+
+    def mask(self, mask_i):
+        mask_i = [bool(i) for i in mask_i]
+        for c in self.columns:
+            if isinstance(c.data, np.ndarray):
+                c2 = c[[i for i in xrange(len(mask_i)) if mask_i[i]]]
+            else:
+                c2 = list(compress(c.data, mask_i))
+            c.data = c2
+        self.resize(sum(mask_i))
 
 
 def parse_time(time_str, form=LISTEN_TIME_FORMAT):

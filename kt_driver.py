@@ -7,7 +7,7 @@ warnings.filterwarnings("ignore", category=DeprecationWarning)
 from learntools.libs.logger import gen_log_name, log_me, log, set_log_file
 from learntools.kt.data import prepare_data
 from learntools.model.train import train_model
-import config
+import learntools.deploy.config as config
 
 
 @log_me()

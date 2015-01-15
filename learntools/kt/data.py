@@ -116,10 +116,35 @@ def prepare_data(dataset_name, **kwargs):
 
 
 @log_me('...loading data')
+def prepare_new_data2(dataset_name, top_n=0, cv_fold=0, **kwargs):
+    ds = old_gz_to_dataset(dataset_name)
+    subjects = np.unique(ds['subject'])
+
+    def row_count(subj):
+        return sum(np.equal(ds['subject'], subj))
+
+    if top_n:
+        subjects = sorted(subjects, key=row_count)[-top_n:]
+    subject_mask = reduce(or_, imap(lambda s: np.equal(ds['subject'], s), subjects))
+    ds.mask(subject_mask)
+    ds.get_column('eeg').data = normalize_table(ds['eeg'])
+
+    heldout_subject = subjects[cv_fold % top_n]
+    valid_subj_mask = np.equal(ds['subject'], heldout_subject)
+    train_idx = np.nonzero(np.logical_not(valid_subj_mask))[0]
+    valid_idx = np.nonzero(valid_subj_mask)[0]
+
+    log('subjects {} are held out'.format(np.unique(ds['subject'][valid_idx])), True)
+    train_idx = np.nonzero(np.logical_not(valid_subj_mask))[0]
+    valid_idx = np.nonzero(valid_subj_mask)[0]
+
+    return ds, train_idx, valid_idx
+
+
+@log_me('...loading data')
 def prepare_new_data(dataset_name, top_n=0, top_eeg_n=0, eeg_only=1, normalize=0, cv_fold=0, **kwargs):
     with gzip.open(dataset_name, 'rb') as f:
         subject_x, skill_x, correct_y, start_x, eeg_x, stim_pairs = cPickle.load(f)
-    correct_y -= 1
     subjects = np.unique(subject_x)
     indexable_eeg = np.asarray(eeg_x)
 

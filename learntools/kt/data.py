@@ -112,7 +112,7 @@ def prepare_data(dataset_name, **kwargs):
     if os.path.splitext(dataset_name)[1] == '.txt':
         return prepare_eeglrkt_data(dataset_name, **kwargs)
     else:
-        return prepare_new_data(dataset_name, **kwargs)
+        return prepare_new_data2(dataset_name, **kwargs)
 
 
 @log_me('...loading data')
@@ -129,7 +129,7 @@ def prepare_new_data2(dataset_name, top_n=0, cv_fold=0, **kwargs):
     ds.mask(subject_mask)
     ds.get_column('eeg').data = normalize_table(ds['eeg'])
 
-    heldout_subject = subjects[cv_fold % top_n]
+    heldout_subject = subjects[cv_fold % len(subjects)]
     valid_subj_mask = np.equal(ds['subject'], heldout_subject)
     train_idx = np.nonzero(np.logical_not(valid_subj_mask))[0]
     valid_idx = np.nonzero(valid_subj_mask)[0]

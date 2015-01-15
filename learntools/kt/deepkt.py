@@ -50,17 +50,18 @@ def build_model(prepared_data, L1_reg=0., L2_reg=0., dropout_p=0., learning_rate
     # STEP1: order the data properly so that we can read from it sequentially
     # when training the model
 
-    subject_x, skill_x, correct_y, start_x, eeg_x, eeg_table, stim_pairs, train_idx, valid_idx = prepared_data
-    dataset_name = 'data/data4.gz'
-    from learntools.kt.data import prepare_new_data2
-    ds, train_idx, valid_idx = prepare_new_data2(dataset_name, top_n=14, cv_fold=0)
+    #subject_x, skill_x, correct_y, start_x, eeg_x, eeg_table, stim_pairs, train_idx, valid_idx = prepared_data
+    #dataset_name = 'data/data4.gz'
+    #from learntools.kt.data import prepare_new_data2
+    #ds, train_idx, valid_idx = prepare_new_data2(dataset_name, top_n=14, cv_fold=0)
+    ds, train_idx, valid_idx = prepared_data
     N = len(ds['correct'])
     eeg_vector_len = ds['eeg'].shape[1]
     # eeg_vector_len = eeg_table.shape[1]
     train_mask = idx_to_mask(train_idx, len(ds['subject']))
     valid_mask = idx_to_mask(valid_idx, len(ds['subject']))
 
-    sorted_i = sorted(xrange(N), key=lambda i: (subject_x[i], start_x[i]))
+    sorted_i = sorted(xrange(N), key=lambda i: (ds['subject'][i], ds['start_time'][i]))
     ds.reorder(sorted_i)
     train_mask = train_mask[sorted_i]
     valid_mask = valid_mask[sorted_i]

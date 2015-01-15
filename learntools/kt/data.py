@@ -170,3 +170,31 @@ def prepare_new_data(dataset_name, top_n=0, top_eeg_n=0, eeg_only=1, normalize=0
     eeg_x, eeg_table = to_lookup_table(eeg_x)
 
     return (subject_x, skill_x, correct_y, start_x, eeg_x, eeg_table, stim_pairs, train_idx, valid_idx)
+
+
+# TODO: get rid of "old.gz" style data format in all function so that we can
+# be rid of this gross function
+def old_gz_to_dataset(dataset_name='data/data4.gz'):
+    from learntools.data import Dataset
+    from itertools import izip
+    with gzip.open(dataset_name, 'rb') as f:
+        subject_x, skill_x, correct_y, start_x, eeg_x, stim_pairs = cPickle.load(f)
+    eeg_mask = np.not_equal(eeg_x, None)
+    true_size = sum(eeg_mask)
+    print true_size
+
+    stim_dict = {v: k for (k, v) in stim_pairs}
+    skill_orig = [stim_dict[s] for s in skill_x]
+
+    ds = Dataset((('subject', Dataset.INT),
+                  ('skill', Dataset.ENUM),
+                  ('correct', Dataset.INT),
+                  ('start_time', Dataset.LONG),
+                  ('eeg', Dataset.MATFLOAT)),
+                 n_rows=true_size)
+    i = 0
+    for row in izip(subject_x, skill_orig, correct_y, start_x, eeg_x):
+        if row[-1] is not None:
+            ds[i] = row
+            i += 1
+    return ds

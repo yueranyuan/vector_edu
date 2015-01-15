@@ -4,21 +4,6 @@ from itertools import count, izip, groupby
 
 import numpy
 
-
-class DataSet:
-    def __init__(self):
-        self.skills = numpy.array([0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1])
-        self.cond = numpy.array([0, 0, 1, 1, 1, 1, 0, 0, 0, 1, 1])
-
-
-def gen_data(fname):
-    inp = numpy.array([[0], [0], [0], [1], [1], [1]])
-    target = numpy.array([1, 1, 1, 0, 0, 0])
-    set_ = (inp, target)
-    with gzip.open(fname, 'w') as f:
-        cPickle.dump((set_, set_, set_), f)
-
-
 def convert_task_from_xls(fname, outname=None):
     from io import load, Dataset
     headers = (('cond', Dataset.INT),

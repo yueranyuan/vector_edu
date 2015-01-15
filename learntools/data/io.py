@@ -175,6 +175,7 @@ class EnumColumn(Column):
         return list(self._enum_dict.iteritems())
 
     def __getitem__(self, key):
+        print self.mode, 'here'
         if self.mode == EnumColumn.NUM:
             return super(EnumColumn, self).__getitem__(key)
         else:

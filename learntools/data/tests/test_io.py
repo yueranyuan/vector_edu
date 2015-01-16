@@ -2,7 +2,7 @@ from itertools import izip, islice, compress
 
 import numpy as np
 
-from learntools.data.io import Column, TimeColumn, EnumColumn, MatColumn, Dataset
+from learntools.data.dataset import Column, TimeColumn, EnumColumn, MatColumn, Dataset
 from test_data import assert_sample_data
 
 
@@ -177,25 +177,32 @@ def test_reorder():
         np.array([1, 2, 3]) == np.array([1, 2, 2])
 
 
-def test_set_column():
-    dataset = Dataset([('int', Dataset.INT), ('enum', Dataset.ENUM), ('time', Dataset.TIME)],
+def test_rename_column():
+    headers = [('int', Dataset.INT), ('enum', Dataset.ENUM), ('time', Dataset.TIME)]
+    dataset = Dataset(headers,
                       n_rows=len(nums))
     for i, row in enumerate(izip(numstr, enumstr, strtimes)):
         dataset[i] = row
 
-    import cPickle
-    gz_name = 'learntools/data/tests/sample_data.gz'
-    with open(gz_name, 'w') as f:
-        cPickle.dump(dataset.to_pickle(), f)
+    # check is loaded correctly
+    columns = [nums, enumint, timestamps]
+    for (h, _), c in izip(headers, columns):
+        assert AWrap(dataset[h]) == c
 
-    with open(gz_name, 'r') as f:
-        dataset2 = Dataset.from_pickle(cPickle.load(f))
+    # rename
+    new_headers = []
+    for h, t in headers:
+        new_name = 'new_' + h
+        dataset.rename_column(h, new_name)
+        new_headers.append((new_name, t))
+    assert new_headers != headers
 
-    dataset2.set_column('mat', Dataset.MATINT, matints)
+    # new names match the old data
+    for (h, _), c in izip(new_headers, columns):
+        assert AWrap(dataset[h]) == c
 
-    for row in dataset2:
-        print row
-
-    for d, d2, d3 in izip(dataset2, dataset, matints):
-        assert d[:len(d2)] == d2
-        assert all(d[-1] == d3)
+    # old names no longer work
+    import pytest
+    for (h, _), c in izip(headers, columns):
+        with pytest.raises(KeyError):
+            assert AWrap(dataset[h]) == c

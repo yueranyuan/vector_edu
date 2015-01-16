@@ -27,3 +27,8 @@ def test_load():
     stim_dict = {v: k for (k, v) in stim_pairs}
     skill_orig = [stim_dict[s] for s in skill_x]
     assert dataset.get_data('skill') == list(compress(skill_orig, eeg_mask))
+
+
+def test_new_align():
+    with gzip.open('data/data4.gz', 'rb') as f:
+        subject_x, skill_x, correct_y, start_x, eeg_x, stim_pairs = cPickle.load(f)

@@ -117,7 +117,12 @@ def prepare_data(dataset_name, **kwargs):
 
 @log_me('...loading data')
 def prepare_new_data2(dataset_name, top_n=0, cv_fold=0, **kwargs):
+    from learntools.data import Dataset
     ds = old_gz_to_dataset(dataset_name)
+    #with gzip.open('data/data5.gz', 'rb') as f:
+    #    ds = Dataset.from_pickle(cPickle.load(f))
+    #ds.rename_column('stim', 'skill')
+    #ds.rename_column('cond', 'correct')
     subjects = np.unique(ds['subject'])
 
     def row_count(subj):
@@ -206,7 +211,6 @@ def old_gz_to_dataset(dataset_name='data/data4.gz'):
         subject_x, skill_x, correct_y, start_x, eeg_x, stim_pairs = cPickle.load(f)
     eeg_mask = np.not_equal(eeg_x, None)
     true_size = sum(eeg_mask)
-    print true_size
 
     stim_dict = {v: k for (k, v) in stim_pairs}
     skill_orig = [stim_dict[s] for s in skill_x]
@@ -223,3 +227,10 @@ def old_gz_to_dataset(dataset_name='data/data4.gz'):
             ds[i] = row
             i += 1
     return ds
+
+
+def prepare_new_data3():
+    from learntools.data.data import convert_task_from_xls, convert_eeg_from_xls, align_data
+    task = convert_task_from_xls('raw_data/task_large.xls')
+    eeg = convert_eeg_from_xls('raw_data/eeg_data_thinkgear_2013_2014.xls')
+    return align_data(task, eeg, 'data/data5.gz')

@@ -1,11 +1,10 @@
 *.pyc
-*.gz
-*.xls
 *.pem
 *.log
 .hidden
 .DS_Store
 /data/
+/raw_data/
 /temp_store/
 /temp.py
 *.egg-info/

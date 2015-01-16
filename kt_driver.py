@@ -13,23 +13,20 @@ import learntools.deploy.config as config
 @log_me()
 def run(task_num, model_type=0, **kwargs):
     if model_type == 0:
-        from learntools.kt.deepkt import build_model
+        from learntools.kt.deepkt import DeepKT as SelectedModel
     elif model_type == 1:
-        from learntools.kt.lrkt import build_model
+        from learntools.kt.lrkt import build_model  # TODO: UNBREAK
     elif model_type == 2:
-        from learntools.kt.kt2 import build_model
+        from learntools.kt.kt2 import build_model  # TODO: UNBREAK
     else:
         raise Exception("model type is not valid")
 
     prepared_data = prepare_data(cv_fold=task_num, **kwargs)
 
-    f_train, f_validate, train_idx, valid_idx, train_eval, valid_eval = (
-        build_model(prepared_data, **kwargs))
+    model = SelectedModel(prepared_data, **kwargs)
 
     start_time = time.clock()
-    best_validation_loss, best_epoch = (
-        train_model(f_train, f_validate, train_idx, valid_idx, train_eval, valid_eval,
-                    **kwargs))
+    best_validation_loss, best_epoch = train_model(model, **kwargs)
     end_time = time.clock()
     training_time = (end_time - start_time) / 60.
 

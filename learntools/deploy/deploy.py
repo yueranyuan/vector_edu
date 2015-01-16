@@ -6,7 +6,7 @@ from fabric.api import run, hide, execute, env, cd
 from learntools.libs.multijob import Job, JobConsumer
 from learntools.libs.logger import gen_log_name
 from learntools.libs.ec2 import (connect, terminate_all, add_instances,
-                      get_active_instance)
+                                 get_active_instance)
 from learntools.deploy.config import all_param_set_keys
 
 

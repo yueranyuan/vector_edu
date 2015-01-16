@@ -71,6 +71,10 @@ def idx_to_mask(idxs, mask_len=None):
     return mask
 
 
+def mask_to_idx(mask):
+    return numpy.nonzero(mask)[0]
+
+
 def iget_column(data, i):
     return imap(operator.itemgetter(i), data)
 

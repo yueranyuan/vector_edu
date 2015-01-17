@@ -44,12 +44,15 @@ def convert_eeg_from_xls(fname, outname=None, cutoffs=(0.5, 4.0, 7.0, 12.0, 30.0
 
 
 def align_data(task_data, eeg_data, out_name=None, sigqual_cutoff=200):
-    # with gzip.open(task_name, 'rb') as task_f, gzip.open(eeg_name, 'rb') as eeg_f:
-    #    task_subject, task_start, task_end, skill, correct, task_subject_pairs, stim_pairs = cPickle.load(task_f)
-    #    eeg_subject, eeg_start, eeg_end, sigqual, eeg_freq, eeg_subject_pairs = cPickle.load(eeg_f)
-
     # Step1: convert to dictionary with subject_id as keys and rows sorted by
     # start_time as values
+    if isinstance(task_data, str):
+        with gzip.open(task_data, 'rb') as f:
+            task_data = Dataset.from_pickle(cPickle.load(f))
+    if isinstance(eeg_data, str):
+        with gzip.open(eeg_data, 'rb') as f:
+            eeg_data = Dataset.from_pickle(cPickle.load(f))
+
     def convert_format(dataset):
         sorted_i = sorted(xrange(dataset.n_rows),
                           key=lambda i: (dataset['subject'][i], dataset['start_time'][i]))
@@ -57,7 +60,6 @@ def align_data(task_data, eeg_data, out_name=None, sigqual_cutoff=200):
         subject_dict = dict((v, k) for (k, v) in dataset.get_column('subject').enum_pairs)
         data_by_subject = {subject_dict[k]: list(v) for k, v in subject_groups}
         return data_by_subject
-
     task_by_subject = convert_format(task_data)
     eeg_by_subject = convert_format(eeg_data)
 
@@ -96,11 +98,10 @@ def align_data(task_data, eeg_data, out_name=None, sigqual_cutoff=200):
     eeg_mask = [bool(ei) for ei in task_eeg_mapping]
     task_data.mask(eeg_mask)
     itask_eeg_mapping = compress(task_eeg_mapping, eeg_mask)
-    task_data.set_column('eeg', Dataset.MATINT)
+    task_data.set_column('eeg', Dataset.MATFLOAT)
     for i, ei in enumerate(itask_eeg_mapping):
         features = np.mean(eeg_data['eeg'][ei], axis=0)
         task_data.get_column('eeg')[i] = features
-
     # Step4: write data file for use by classifier
     if out_name is not None:
         with gzip.open(out_name, 'w') as f:
@@ -110,7 +111,7 @@ def align_data(task_data, eeg_data, out_name=None, sigqual_cutoff=200):
 
 
 if __name__ == "__main__":
-    task_name, eeg_name = 'data/task_data4.gz', 'data/eeg_data4.gz'
-    task = convert_task_from_xls('raw_data/task_large.xls')
-    eeg = convert_eeg_from_xls('raw_data/eeg_data_thinkgear_2013_2014.xls')
-    align_data(task, eeg, 'data/data5.gz')
+    task_name, eeg_name = 'data/task_data5.gz', 'data/eeg_data5.gz'
+    convert_task_from_xls('raw_data/task_large.xls', task_name)
+    convert_eeg_from_xls('raw_data/eeg_data_thinkgear_2013_2014.xls', eeg_name)
+    align_data(task_name, eeg_name, 'data/data5.gz')

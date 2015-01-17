@@ -19,7 +19,7 @@ class AWrap:
         try:
             assert self.o == e
             return True
-        except AssertionError:
+        except:
             if not hasattr(self.o, '__iter__'):
                 raise
             else:

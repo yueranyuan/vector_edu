@@ -362,7 +362,8 @@ def load(fname, headers, delimiter='\t', **kwargs):
     # this is so we can allocate memory ahead of time
     # resizing arrays will be more costly than reading the file twice
     with open(fname, 'r') as f:
-        n_rows = sum(1 for line in f if len(line) > 0) - 1  # don't count header or empty lines
+        reader = csv.reader(f, delimiter=delimiter)
+        n_rows = sum(1 for row in reader) - 1  # don't count header
 
     with open(fname, 'r') as f:
         reader = csv.reader(f, delimiter=delimiter)

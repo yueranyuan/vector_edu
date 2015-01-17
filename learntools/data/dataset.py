@@ -186,6 +186,8 @@ class EnumColumn(Column):
             if self._enum_dict_reverse is None:
                 self._enum_dict_reverse = dict((v, k) for (k, v) in self._enum_dict.iteritems())
             if hasattr(value, '__iter__') and not isinstance(value, str):
+                print value
+                print self._enum_dict_reverse
                 value_ = [self._enum_dict_reverse[t] for t in value]
             else:
                 value_ = self._enum_dict_reverse[value]
@@ -324,6 +326,8 @@ class Dataset(object):
         self.n_rows = n_rows
 
     def reorder(self, order_i):
+        oldmode = self.mode
+        self.mode = Dataset.NUM
         for c in self.columns:
             if isinstance(c.data, np.ndarray):
                 c2 = c[order_i]
@@ -331,8 +335,11 @@ class Dataset(object):
                 c2 = [c[i] for i in order_i]
             c.data = c2
         self.resize(len(order_i))
+        self.mode = oldmode  # TODO: use a context for temporary modes
 
     def mask(self, mask_i):
+        oldmode = self.mode
+        self.mode = Dataset.NUM
         mask_i = [bool(i) for i in mask_i]
         for c in self.columns:
             if isinstance(c.data, np.ndarray):
@@ -341,6 +348,27 @@ class Dataset(object):
                 c2 = list(compress(c.data, mask_i))
             c.data = c2
         self.resize(sum(mask_i))
+        self.mode = oldmode  # TODO: use a context for temporary modes
+
+    @classmethod
+    def from_csv(cls, fname, headers, delimiter='\t', **kwargs):
+        from learntools.libs.utils import get_column
+
+        # this is so we can allocate memory ahead of time
+        # resizing arrays will be more costly than reading the file twice
+        with open(fname, 'r') as f:
+            reader = csv.reader(f, delimiter=delimiter)
+            n_rows = sum(1 for row in reader) - 1  # don't count header
+
+        with open(fname, 'r') as f:
+            reader = csv.reader(f, delimiter=delimiter)
+            file_headers = reader.next()
+            data_headers = get_column(headers, 0)
+            header_column_idxs = [file_headers.index(h) for i, h in enumerate(data_headers)]
+            dataset = cls(headers, n_rows=n_rows, **kwargs)
+            for i, row in enumerate(reader):
+                dataset[i] = (row[i] for i in header_column_idxs)
+        return dataset
 
 
 def parse_time(time_str, form=LISTEN_TIME_FORMAT):
@@ -356,24 +384,8 @@ def format_time(time_int, form=LISTEN_TIME_FORMAT):
     return datetime.strftime(d, form)
 
 
-def load(fname, headers, delimiter='\t', **kwargs):
-    from learntools.libs.utils import get_column
-
-    # this is so we can allocate memory ahead of time
-    # resizing arrays will be more costly than reading the file twice
-    with open(fname, 'r') as f:
-        reader = csv.reader(f, delimiter=delimiter)
-        n_rows = sum(1 for row in reader) - 1  # don't count header
-
-    with open(fname, 'r') as f:
-        reader = csv.reader(f, delimiter=delimiter)
-        file_headers = reader.next()
-        data_headers = get_column(headers, 0)
-        header_column_idxs = [file_headers.index(h) for i, h in enumerate(data_headers)]
-        dataset = Dataset(headers, n_rows=n_rows, **kwargs)
-        for i, row in enumerate(reader):
-            dataset[i] = (row[i] for i in header_column_idxs)
-    return dataset
+def load(*args, **kwargs):
+    return Dataset.from_csv(*args, **kwargs)
 
 
 def save(fname, numeric=None, numeric_float=None, enum=None, enum_dict=None,

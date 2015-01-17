@@ -37,7 +37,7 @@ def run(task_num, model_type=0, **kwargs):
 
 
 if __name__ == '__main__':
-    default_dataset = 'data/data4.gz'
+    default_dataset = 'data/data5.gz'
 
     parser = argparse.ArgumentParser(description="run an experiment on this computer")
     parser.add_argument('-p', dest='param_set', type=str, default='default',

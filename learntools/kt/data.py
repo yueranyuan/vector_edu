@@ -118,12 +118,12 @@ def prepare_data(dataset_name, **kwargs):
 @log_me('...loading data')
 def prepare_new_data2(dataset_name, top_eeg_n=0, top_n=0, cv_fold=0, **kwargs):
     from learntools.data import Dataset
-    with gzip.open('data/data5.gz', 'rb') as f:
+    with gzip.open(dataset_name, 'rb') as f:
         ds = Dataset.from_pickle(cPickle.load(f))
     ds.rename_column('stim', 'skill')
     ds.rename_column('cond', 'correct')
-
     subjects = np.unique(ds['subject'])
+
     def row_count(subj):
         return sum(np.equal(ds['subject'], subj))
     top_n = top_eeg_n  # TODO: remove "top_eeg_n" as a config

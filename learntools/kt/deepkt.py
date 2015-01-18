@@ -26,7 +26,7 @@ class DeepKT(Model):
 
         ds, train_idx, valid_idx = prepared_data
         N = len(ds['correct'])
-        eeg_vector_len = ds['eeg'].shape[1]
+        eeg_vector_len = ds.get_data('eeg').shape[1]
         train_mask = idx_to_mask(train_idx, len(ds['subject']))
         valid_mask = idx_to_mask(valid_idx, len(ds['subject']))
 
@@ -39,17 +39,17 @@ class DeepKT(Model):
         valid_idx = mask_to_idx(valid_mask)
         base_indices = T.ivector('idx')
 
-        skill_x = ds['skill']
-        subject_x = ds['subject']
-        correct_y = ds['correct']
-        eeg_full = ds['eeg']
+        skill_x = ds.get_data('skill')
+        subject_x = ds.get_data('subject')
+        correct_y = ds.get_data('correct')
+        eeg_full = ds.get_data('eeg')
 
         # ###########
         # STEP2: connect up the model. See figures/vector_edu_model.png for diagram
         # TODO: make the above mentioned diagram
 
-        skill_matrix = make_shared(gen_word_matrix(ds['skill'],
-                                                   ds.get_column('skill').enum_pairs,
+        skill_matrix = make_shared(gen_word_matrix(ds.get_data('skill'),
+                                                   ds['skill'].enum_pairs,
                                                    vector_length=skill_vector_len))
 
         skill_x = make_shared(skill_x, to_int=True)

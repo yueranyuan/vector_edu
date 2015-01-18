@@ -1,6 +1,7 @@
 from itertools import izip, islice, compress
 
 import numpy as np
+import pytest
 
 from learntools.data.dataset import Column, TimeColumn, EnumColumn, MatColumn, Dataset
 from test_data import assert_sample_data
@@ -13,7 +14,8 @@ class AWrap:
         self.o = o
 
     def __eq__(self, e):
-        if isinstance(self.o, np.ndarray):
+        errors = self.o == e
+        if hasattr(errors, '__iter__'):
             return np.all(self.o == e)
 
         try:
@@ -96,6 +98,7 @@ def test_dataset():
         assert tuple(d) == row
     for d, row in izip(islice(dataset.orig, None, 3), izip(numstr, enumstr, strtimes)):
         assert tuple(map(str, d)) == row
+
 
 '''
 def test_loader():

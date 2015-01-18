@@ -39,23 +39,13 @@ class OriginalColumnView(object):
         self.owner = owner
 
     def __getitem__(self, key):
-        try:
-            oldmode = self.owner.mode
-            self.owner.mode = Column.ORIGINAL
-            v = self.owner[key]
-        finally:
-            self.owner.mode = oldmode
-        return v
+        return self.owner.to_original(self.owner[key])
 
 
 class Column(object):
-    NUM = 0
-    ORIGINAL = 1
-
     def __init__(self, name, data=None, **kwargs):
         self.name = name
         self.initialize_data(data, **kwargs)
-        self.mode = Column.NUM
         self.orig = OriginalColumnView(self)
 
     def initialize_data(self, data, dtype='i4', size=10, **kwargs):
@@ -82,9 +72,12 @@ class Column(object):
     def __len__(self):
         return len(self._data)
 
+    def to_original(self, value):
+        return value
+
     @property
     def data(self):
-        return self[:]  # TODO: follow up on the memory efficiency of doing this
+        return self[:]
 
     @data.setter
     def data(self, value):
@@ -128,15 +121,14 @@ class TimeColumn(Column):
         return super(TimeColumn, self).__setitem__(key, value)
 
     def __getitem__(self, key):
-        if self.mode == TimeColumn.NUM:
-            return super(TimeColumn, self).__getitem__(key)
+        return super(TimeColumn, self).__getitem__(key)
+
+    def to_original(self, value):
+        if hasattr(value, '__iter__') and not isinstance(value, str):
+            value_ = [format_time(t, self.form) for t in value]
         else:
-            values = super(TimeColumn, self).__getitem__(key)
-            if hasattr(values, '__iter__') and not isinstance(values, str):
-                values = [format_time(t, self.form) for t in values]
-            else:
-                values = format_time(values, self.form)
-            return values
+            value_ = format_time(value, self.form)
+        return value_
 
 
 class MatColumn(Column):
@@ -190,19 +182,16 @@ class EnumColumn(Column):
         return list(self._enum_dict.iteritems())
 
     def __getitem__(self, key):
-        if self.mode == EnumColumn.NUM:
-            return super(EnumColumn, self).__getitem__(key)
+        return super(EnumColumn, self).__getitem__(key)
+
+    def to_original(self, value):
+        if self._enum_dict_reverse is None:
+            self._enum_dict_reverse = dict((v, k) for (k, v) in self._enum_dict.iteritems())
+        if hasattr(value, '__iter__') and not isinstance(value, str):
+            value_ = [self._enum_dict_reverse[t] for t in value]
         else:
-            value = super(EnumColumn, self).__getitem__(key)
-            if self._enum_dict_reverse is None:
-                self._enum_dict_reverse = dict((v, k) for (k, v) in self._enum_dict.iteritems())
-            if hasattr(value, '__iter__') and not isinstance(value, str):
-                print value
-                print self._enum_dict_reverse
-                value_ = [self._enum_dict_reverse[t] for t in value]
-            else:
-                value_ = self._enum_dict_reverse[value]
-            return value_
+            value_ = self._enum_dict_reverse[value]
+        return value_
 
 
 class OriginalDatasetView(object):
@@ -231,11 +220,7 @@ class Dataset(object):
     MATINT = 7
     MATFLOAT = 8
 
-    NUM = 0
-    ORIGINAL = 1
-
     def __init__(self, headers, n_rows=10, form=LISTEN_TIME_FORMAT):
-        self._mode = Dataset.NUM
         self.time_form = form
         self.n_rows = n_rows
 
@@ -320,7 +305,7 @@ class Dataset(object):
     def __getitem__(self, key):
         # key is a column header
         if isinstance(key, str):
-            return self.get_data(key)
+            return self.get_column(key)
         # key is a row number
         if not isinstance(key, int):
             raise Exception("only integer keys can be used for datasets (sorry)")
@@ -350,8 +335,6 @@ class Dataset(object):
         self.n_rows = n_rows
 
     def reorder(self, order_i):
-        oldmode = self.mode
-        self.mode = Dataset.NUM
         for c in self.columns:
             if isinstance(c.data, np.ndarray):
                 c2 = c[order_i]
@@ -359,11 +342,8 @@ class Dataset(object):
                 c2 = [c[i] for i in order_i]
             c.data = c2
         self.resize(len(order_i))
-        self.mode = oldmode  # TODO: use a context for temporary modes
 
     def mask(self, mask_i):
-        oldmode = self.mode
-        self.mode = Dataset.NUM
         mask_i = [bool(i) for i in mask_i]
         for c in self.columns:
             if isinstance(c.data, np.ndarray):
@@ -372,7 +352,6 @@ class Dataset(object):
                 c2 = list(compress(c.data, mask_i))
             c.data = c2
         self.resize(sum(mask_i))
-        self.mode = oldmode  # TODO: use a context for temporary modes
 
     @classmethod
     def from_csv(cls, fname, headers, delimiter='\t', **kwargs):

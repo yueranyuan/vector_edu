@@ -210,6 +210,37 @@ class OriginalDatasetView(object):
 
 # TODO: make Dataset resizable (i.e. we need resize to propogate to all columns)
 class Dataset(object):
+    '''Structured dataset for storing and structuring data to be processed
+
+    The dataset is a collection of columns which all have the same length. The dataset
+    enforces the abstraction of the row. This allows the columns to be masked and reordered
+    in sync with each other. Once the datatype of the dataset columns are specified,
+    the rows can be loaded, written, and manipulated according to that datatype.
+
+    The available Datatypes are: ENUM, TIME, INT, LONG, FLOAT, STR, OBJ,
+        MATINT, MATFLOAT
+
+    Datasets emulate a python collection object (alternatively a dictionary and a list).
+        Where data = Dataset(*args)
+        Retrieving a row: data[row_idx]
+        Retrieving a column object: data[column_name]
+        Retrieving a cell: data[column_name][row_idx]
+        Retrieving the column data (stored inside the column object): data.get_data(column_name)
+
+    Datasets perform transformations on inputs depending on the type of the column.
+    For instance, ENUM type columns take a string input but that string is converted into
+    a virtual enum. e.g. ['Jan', 'Feb', 'Mar', 'Jan', 'Mar'] will be converted to [0, 1, 2, 0, 2].
+    The original input can be retrieved using the 'orig' attribute. The 'orig' attribute is
+    merely a view and does not replicate the data.
+        Where data = Dataset(*args)
+        Retrieving original row: data.orig[row_idx]
+        Retrieving original column: data.orig[column_name]
+        Retrieving original cell: data.orig[column_name][row_idx]
+
+    Attributes:
+        orig (OriginalDatasetView): a view that provides the original form of the data in the Dataset.
+            see Dataset's docstring.
+    '''
     ENUM = 0
     TIME = 1
     INT = 2
@@ -220,7 +251,16 @@ class Dataset(object):
     MATINT = 7
     MATFLOAT = 8
 
-    def __init__(self, headers, n_rows=10, form=LISTEN_TIME_FORMAT):
+    def __init__(self, headers, n_rows, form=LISTEN_TIME_FORMAT):
+        '''
+        Args:
+            headers ((string, int)[]): a list of tuples consisting of the name and
+                datatype of each column. e.g. [("column1", Dataset.TIME), ("column2", Dataset.INT)]
+            n_rows (int): the number of rows the dataset should have. Because
+                pre-allocation saves computation time, we try to always know the size of the dataset
+                ahead of time. Resizing is currently not supported but is planned.
+            form (string, optional): the format string for time strings given to Dataset.TIME type columns
+        '''
         self.time_form = form
         self.n_rows = n_rows
 
@@ -260,26 +300,31 @@ class Dataset(object):
         else:
             raise Exception('unknown dataset type for column')
 
-    @property
-    def mode(self):
-        return self._mode
-
-    @mode.setter
-    def mode(self, value):
-        self._mode = value
-        for c in self.columns:
-            c.mode = self._mode
-
     def get_data(self, key):
+        '''retrieve the raw data of the column not wrapped by the column object.
+        This data should NOT be altered.
+
+        Args:
+            key (string): column name
+        Returns:
+            (list): the data stored in the column
+        '''
         return self.get_column(key).data
 
     def get_column(self, key):
         return self.columns[self.header_idx_mapping[key]]
 
-    def set_column(self, header, ctype, data=None):
+    def set_column(self, header, ctype):
+        '''sets or resets a column
+
+        adds a new column of a certain name and type or resets an existing column,
+        deleting its data and changing its ctype.
+
+        Args:
+            header (string): name of the new column or the name of the existing column to reset
+            ctype (int): the type for the column
+        '''
         col = self._make_column(header, ctype)
-        if data is not None:
-            col[:len(data)] = data
 
         col_idx = self.header_idx_mapping.get(header, None)
         if col_idx is None:
@@ -290,11 +335,53 @@ class Dataset(object):
             self.columns[col_idx] = col
 
     def rename_column(self, key, new_key):
+        '''renames an existing column
+
+        Args:
+            key (string): current name of the column
+            new_key (string): new name for the column
+        '''
         idx = self.header_idx_mapping[key]
         self.columns[idx].name = new_key
         self.headers[idx] = (new_key, self.headers[idx][1])
         self.header_idx_mapping.pop(key)
         self.header_idx_mapping[new_key] = idx
+
+    def _resize(self, n_rows):
+        self.n_rows = n_rows
+
+    def reorder(self, order_i):
+        '''reorder the rows.
+
+        Args:
+            order_i (int[]): the value of each index in this list represents the row number of
+                the row to be moved to that index. The data [2, 4, 6, 8, 10] reorded with [2, 1, 4, 0]
+                would be [6, 4, 10, 2]
+        '''
+        for c in self.columns:
+            if isinstance(c.data, np.ndarray):
+                c2 = c[order_i]
+            else:
+                c2 = [c[i] for i in order_i]
+            c.data = c2
+        self._resize(len(order_i))
+
+    def mask(self, mask_i):
+        '''mask rows. Masked rows are permanently removed
+
+        Args:
+            mask_i (bool[]): the boolean in each position in the mask represents
+                a row. Masking [1, 2, 3, 4, 5] with [True, True, False, False, True]
+                results in [1, 2, 5]
+        '''
+        mask_i = [bool(i) for i in mask_i]
+        for c in self.columns:
+            if isinstance(c.data, np.ndarray):
+                c2 = c[[i for i in xrange(len(mask_i)) if mask_i[i]]]
+            else:
+                c2 = list(compress(c.data, mask_i))
+            c.data = c2
+        self._resize(sum(mask_i))
 
     def __setitem__(self, key, values):
         if not isinstance(key, int):
@@ -315,6 +402,11 @@ class Dataset(object):
         return self.n_rows
 
     def to_pickle(self):
+        '''convert the dataset into a serializable format
+
+        Retruns:
+            (tuple): serializable tuple representing the data stored in the dataset
+        '''
         n_rows = len(self.columns[0])
         headers = self.headers
         time_form = self.time_form
@@ -326,35 +418,32 @@ class Dataset(object):
 
     @classmethod
     def from_pickle(cls, (headers, n_rows, time_form, data)):
+        '''load the data from a serializable format
+
+        Args:
+            (tuple): tuple representing the data stored in the dataset
+
+        Returns:
+            (Dataset): the loaded Dataset object
+        '''
         dataset = cls(headers, n_rows=n_rows, form=time_form)
         for i, row in enumerate(data):
             dataset[i] = data[i]
         return dataset
 
-    def resize(self, n_rows):
-        self.n_rows = n_rows
-
-    def reorder(self, order_i):
-        for c in self.columns:
-            if isinstance(c.data, np.ndarray):
-                c2 = c[order_i]
-            else:
-                c2 = [c[i] for i in order_i]
-            c.data = c2
-        self.resize(len(order_i))
-
-    def mask(self, mask_i):
-        mask_i = [bool(i) for i in mask_i]
-        for c in self.columns:
-            if isinstance(c.data, np.ndarray):
-                c2 = c[[i for i in xrange(len(mask_i)) if mask_i[i]]]
-            else:
-                c2 = list(compress(c.data, mask_i))
-            c.data = c2
-        self.resize(sum(mask_i))
-
     @classmethod
     def from_csv(cls, fname, headers, delimiter='\t', **kwargs):
+        '''load a dataset from a csv file
+
+        Args:
+            fname (string): the location of the csv file
+            headers ((string, int)[]) a list of tuples consisting of the name and
+                datatype of each column. e.g. [("column1", Dataset.TIME), ("column2", Dataset.INT)]
+            delimiters (char): the delimiter of the csv file
+
+        Returns:
+            (Dataset): the loaded Dataset object
+        '''
         from learntools.libs.utils import get_column
 
         # this is so we can allocate memory ahead of time
@@ -391,6 +480,7 @@ def load(*args, **kwargs):
     return Dataset.from_csv(*args, **kwargs)
 
 
+# TODO: this function is broken. Replicate its behavior inside Dataset.save
 def save(fname, numeric=None, numeric_float=None, enum=None, enum_dict=None,
          time=None, time_format=None, text_store=None, header=None):
     if text_store:
@@ -447,13 +537,3 @@ def save(fname, numeric=None, numeric_float=None, enum=None, enum_dict=None,
         writer.writerow(header)
         for row in izip(*columns):
             writer.writerow(row)
-
-
-if __name__ == "__main__":
-    data, enum_dict, _ = load('raw_data/task_large.xls', numeric=['cond'], enum=['subject', 'stim', 'block'],
-                              time=['start_time', 'end_time'], text=['latency'])
-    # a, b, c = load('raw_data/eeg_single.xls', numeric=['sigqual'], enum=['subject'],
-    #               time=['start_time', 'end_time'], text=['rawwave'])
-    save('asdf.xls', numeric={'cond': data['cond']}, enum={'subject': data['subject']}, enum_dict=enum_dict,
-         time={'start_time': data['start_time'], 'end_time': data['end_time']})
-    # save('asdf.xls', numeric={'a': [1, 2, 3]}, enum={'b': [0, 0, 1]}, enum_dict={'b': {'x': 0, 'y': 1}}, header=['b', 'a'])

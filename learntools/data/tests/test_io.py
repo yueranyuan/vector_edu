@@ -60,13 +60,11 @@ def test_timecolumn():
     col[0] = strtimes[0]
     col[1:3] = strtimes[1:3]
     assert all(col[:3] == timestamps)
-    col.mode = TimeColumn.ORIGINAL
-    assert col[:3] == strtimes
+    assert col.orig[:3] == strtimes
 
     col2 = TimeColumn('example', data=timestamps)
     assert all(col2[:3] == timestamps)
-    col2.mode = TimeColumn.ORIGINAL
-    assert col2[:3] == strtimes
+    assert col2.orig[:3] == strtimes
 
 
 def test_enumcolumn():
@@ -74,13 +72,11 @@ def test_enumcolumn():
     col[0] = enumstr[0]
     col[1:3] = enumstr[1:3]
     assert all(col[:3] == enumint)
-    col.mode = EnumColumn.ORIGINAL
-    assert col[:3] == enumstr
+    assert col.orig[:3] == enumstr
 
     col2 = EnumColumn('example', data=enumint, enum_dict={'jan': 0, 'feb': 1})
     assert all(col2[:3] == enumint)
-    col2.mode = EnumColumn.ORIGINAL
-    assert col2[:3] == enumstr
+    assert col2.orig[:3] == enumstr
 
 
 def test_matcolumn():
@@ -98,8 +94,7 @@ def test_dataset():
 
     for d, row in izip(islice(dataset, None, 3), izip(nums, enumint, timestamps)):
         assert tuple(d) == row
-    dataset.mode = Dataset.ORIGINAL
-    for d, row in izip(islice(dataset, None, 3), izip(numstr, enumstr, strtimes)):
+    for d, row in izip(islice(dataset.orig, None, 3), izip(numstr, enumstr, strtimes)):
         assert tuple(map(str, d)) == row
 
 '''

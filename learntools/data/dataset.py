@@ -34,10 +34,29 @@ class DynamicRecArray(object):
         return self._data[:len(self._data)]
 
 
+class OriginalColumnView(object):
+    def __init__(self, owner):
+        self.owner = owner
+
+    def __getitem__(self, key):
+        try:
+            oldmode = self.owner.mode
+            self.owner.mode = Column.ORIGINAL
+            v = self.owner[key]
+        finally:
+            self.owner.mode = oldmode
+        return v
+
+
 class Column(object):
+    NUM = 0
+    ORIGINAL = 1
+
     def __init__(self, name, data=None, **kwargs):
         self.name = name
         self.initialize_data(data, **kwargs)
+        self.mode = Column.NUM
+        self.orig = OriginalColumnView(self)
 
     def initialize_data(self, data, dtype='i4', size=10, **kwargs):
         if data is None:
@@ -97,13 +116,9 @@ class NumericColumn(Column):
 
 
 class TimeColumn(Column):
-    NUM = 0
-    ORIGINAL = 1
-
     def __init__(self, name, form=LISTEN_TIME_FORMAT, *args, **kwargs):
         super(TimeColumn, self).__init__(name, dtype='i8', *args, **kwargs)
         self.form = LISTEN_TIME_FORMAT
-        self.mode = TimeColumn.NUM
 
     def __setitem__(self, key, time_strs):
         if hasattr(time_strs, '__iter__') and not isinstance(time_strs, str):
@@ -146,14 +161,10 @@ class MatColumn(Column):
 
 
 class EnumColumn(Column):
-    NUM = 0
-    ORIGINAL = 1
-
     def __init__(self, name, enum_dict=None, *args, **kwargs):
         super(EnumColumn, self).__init__(name, dtype='i4', *args, **kwargs)
         self._enum_dict = {} if enum_dict is None else enum_dict
         self._enum_dict_reverse = None
-        self.mode = EnumColumn.NUM
 
     def __convert_to_dict__(self, str_value):
         if str_value in self._enum_dict:
@@ -194,6 +205,20 @@ class EnumColumn(Column):
             return value_
 
 
+class OriginalDatasetView(object):
+    def __init__(self, owner):
+        self.owner = owner
+
+    def __getitem__(self, key):
+        # key is a column header
+        if isinstance(key, str):
+            return self.owner.get_column(key).orig[:]
+        # key is a row number
+        if not isinstance(key, int):
+            raise Exception("only integer keys can be used for datasets (sorry)")
+        return [c.orig[key] for c in self.owner.columns]
+
+
 # TODO: make Dataset resizable (i.e. we need resize to propogate to all columns)
 class Dataset(object):
     ENUM = 0
@@ -219,6 +244,8 @@ class Dataset(object):
         self.headers = []
         for h, t in headers:
             self.set_column(h, t)
+
+        self.orig = OriginalDatasetView(self)
 
     def _make_column(self, h, t):
         if t == Dataset.ENUM:
@@ -309,10 +336,7 @@ class Dataset(object):
 
         # get data back in it's former format so it can be read back in the same way
         # TODO: more efficient serialization and reloading to save processing at least for some columns
-        old_mode = self.mode
-        self.mode = Dataset.ORIGINAL
-        data = zip(*[col.data for col in self.columns])
-        self.mode = old_mode
+        data = zip(*[col.orig for col in self.columns])
         return (headers, n_rows, time_form, data)
 
     @classmethod

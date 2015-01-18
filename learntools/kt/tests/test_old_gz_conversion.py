@@ -8,7 +8,6 @@ from learntools.data import Dataset
 from test_kt import use_logger_in_test
 
 
-
 def test_load():
     dataset_name = 'data/data4.gz'
     with gzip.open(dataset_name, 'rb') as f:
@@ -25,10 +24,9 @@ def test_load():
     assert all(dataset.get_data('start_time') == _mask(start_x))
     assert np.all(dataset.get_data('eeg') == _mask(eeg_x))
 
-    dataset.mode = Dataset.ORIGINAL
     stim_dict = {v: k for (k, v) in stim_pairs}
     skill_orig = [stim_dict[s] for s in skill_x]
-    assert dataset.get_data('skill') == list(compress(skill_orig, eeg_mask))
+    assert dataset.orig['skill'] == list(compress(skill_orig, eeg_mask))
 
 '''
 def test_new_align():

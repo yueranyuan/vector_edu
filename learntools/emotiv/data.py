@@ -26,16 +26,13 @@ def prepare_data(dataset_name, conds=None):
 
     # only keep selected conditions
     # TODO: turn this these temporary mode switches into a context
-    old_mode = data.mode
-    data.mode = Dataset.ORIGINAL
     if conds is not None:
-        all_conds = data['condition']  # TODO: follow up on possible deadlock caused
+        all_conds = data.orig['condition']  # TODO: follow up on possible deadlock caused
         # when I put data['condition'] in the filter
         selected = filter(lambda i: all_conds[i] in conds, xrange(data.n_rows))
         data.reorder(selected)
-        cond_data = data['condition']
+        cond_data = data.orig['condition']
         data.set_column('condition', Dataset.ENUM)  # reset the condition column
         for i, c in enumerate(cond_data):
             data.get_column('condition')[i] = c
-    data.mode = old_mode
     return data

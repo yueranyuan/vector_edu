@@ -1,122 +1,120 @@
-import os
-from operator import or_
-from itertools import imap, compress
 import gzip
 import cPickle
-from collections import defaultdict
+from itertools import groupby, compress, imap
+from operator import or_
 
 import numpy as np
 
+from learntools.data import Dataset
 from learntools.libs.logger import log, log_me
-from learntools.libs.utils import normalize_table, transpose, idx_to_mask
-
-BNTSM_TIME_FORMAT = '%m/%d/%y %I:%M %p'
+from learntools.libs.utils import normalize_table
 
 
-def to_lookup_table(x):
-    mask = np.asarray([v is not None for v in x], dtype=bool)
-    if not mask.any():
-        raise Exception("can't create lookup table from no data")
+def convert_task_from_xls(fname, outname=None):
+    headers = (('cond', Dataset.INT),
+               ('subject', Dataset.ENUM),
+               ('stim', Dataset.ENUM),
+               ('block', Dataset.ENUM),
+               ('start_time', Dataset.TIME),
+               ('end_time', Dataset.TIME))
+    data = Dataset.from_csv(fname, headers)
 
-    # create lookup table
-    valid_idxs = np.nonzero(mask)[0]
-    width = len(x[valid_idxs[0]])
-    table = np.zeros((1 + len(valid_idxs), width))  # leave the first row for "None"
-    for i, l in enumerate(compress(x, mask)):
-        table[i + 1] = np.asarray(l)
-    table[1:] = normalize_table(table[1:])
-    table[0] = table[1:].mean(axis=0)  # set the "None" vector to the average of all vectors
-
-    # create a way to index into lookup table
-    idxs = np.zeros(len(x), dtype='int32')
-    idxs[valid_idxs] = xrange(1, len(valid_idxs) + 1)
-
-    return idxs, table
-
-
-@log_me('... loading data')
-def prepare_eeglrkt_data(dataset_name='data/eeglrkt.txt', cv_fold=0, **kwargs):
-    from libs.loader import load
-    eeg_headers = ('kc_med', 'kc_att', 'kc_raww', 'kc_delta', 'fconf',
-                   'kc_alpha', 'kc_beta', 'kc_gamma')
-    data, enum_dict, _ = load(
-        dataset_name,
-        numeric=['fluent'],
-        time=['start_time'],
-        numeric_float=eeg_headers,
-        enum=['user', 'skill'],
-        time_format=BNTSM_TIME_FORMAT)
-    sorted_idxs, _ = transpose(sorted(enumerate(data['start_time']),
-                                      key=lambda v: v[1]))
-    N = len(sorted_idxs)
-    subject_x = data['user'][sorted_idxs]
-    skill_x = data['skill'][sorted_idxs]
-    start_x = data['start_time'][sorted_idxs]
-    correct_y = data['fluent'][sorted_idxs] - 1
-    eeg = np.column_stack([data[eh] for eh in eeg_headers])[sorted_idxs, :]
-
-    min_encounters = 2
-    skill_count = defaultdict(list)
-    for i in range(N):
-        skill_count[(subject_x[i], skill_x[i])].append(i)
-    bad_indices = []
-    for k, v in skill_count.iteritems():
-        if len(v) < min_encounters:
-            bad_indices += v
-    mask = np.logical_not(idx_to_mask(bad_indices, N))
-    subject_x = subject_x[mask]
-    skill_x = skill_x[mask]
-    start_x = start_x[mask]
-    correct_y = correct_y[mask]
-    eeg = eeg[mask]
-
-    eeg_x, eeg_table = to_lookup_table(eeg)
-    stim_pairs = list(enum_dict['skill'].iteritems())
-    sorted_subj = sorted(np.unique(subject_x),
-                         key=lambda s: sum(np.equal(subject_x, s)))
-    held_out_subj = cv_fold % (len(sorted_subj) - 4)
-    valid_subj_mask = np.equal(subject_x, held_out_subj)
-    log('subjects {} are held out'.format(held_out_subj), True)
-    train_idx = np.nonzero(np.logical_not(valid_subj_mask))[0]
-    valid_idx = np.nonzero(valid_subj_mask)[0]
-
-    return (subject_x, skill_x, correct_y, start_x, eeg_x, eeg_table, stim_pairs, train_idx, valid_idx)
-
-
-def prepare_fake_data():
-    import random
-    # specific data
-    correct_y = np.asarray([0, 0, 1, 1, 1, 0, 0, 1, 0, 1, 1, 0, 0, 0, 1, 1], dtype='int32')
-    skill_x = np.asarray([0, 0, 0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0], dtype='int32')
-    subject_x = np.asarray([0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2], dtype='int32')
-    held_out_subj = 2
-
-    # generate filler data
-    N = len(correct_y)
-    start_x = np.asarray(range(N))
-    eeg = np.random.rand(N, 4)
-    eeg_x, eeg_table = to_lookup_table(eeg)
-
-    def gen_random_word(word_len):
-        return [chr(random.randint(0, 26)) for i in xrange(word_len)]
-    stim_pairs = [(gen_random_word(5), s) for s in np.unique(skill_x)]
-
-    # generate CV folds
-    held_out = np.equal(subject_x, held_out_subj)
-    valid_idx = np.nonzero(held_out)
-    train_idx = np.nonzero(np.logical_not(held_out))
-    return (subject_x, skill_x, correct_y, start_x, eeg_x, eeg_table, stim_pairs, train_idx, valid_idx)
-
-
-def prepare_data(dataset_name, **kwargs):
-    if os.path.splitext(dataset_name)[1] == '.txt':
-        return prepare_eeglrkt_data(dataset_name, **kwargs)
+    if outname is not None:
+        with gzip.open(outname, 'w') as f:
+            cPickle.dump(data.to_pickle(), f)
     else:
-        return prepare_new_data2(dataset_name, **kwargs)
+        return data
+
+
+def convert_eeg_from_xls(fname, outname=None, cutoffs=(0.5, 4.0, 7.0, 12.0, 30.0)):
+    from eeg import signal_to_freq_bins
+    headers = (('sigqual', Dataset.INT),
+               ('subject', Dataset.ENUM),
+               ('start_time', Dataset.TIME),
+               ('end_time', Dataset.TIME),
+               ('rawwave', Dataset.STR))
+    data = Dataset.from_csv(fname, headers)
+    cutoffs = list(cutoffs)
+    eeg_freq = np.empty((len(data.get_data('rawwave')), len(cutoffs) - 1))
+    for i, eeg_str in enumerate(data['rawwave']):
+        eeg = [float(d) for d in eeg_str.strip().split(' ')]
+        eeg_freq[i] = tuple(signal_to_freq_bins(eeg, cutoffs=cutoffs, sampling_rate=512))
+    data.set_column('eeg', Dataset.MATFLOAT, data=eeg_freq)
+    if outname is not None:
+        with gzip.open(outname, 'w') as f:
+            cPickle.dump(data.to_pickle(), f)
+    return data
+
+
+def align_data(task_data, eeg_data, out_name=None, sigqual_cutoff=200):
+    # Step1: convert to dictionary with subject_id as keys and rows sorted by
+    # start_time as values
+    if isinstance(task_data, str):
+        with gzip.open(task_data, 'rb') as f:
+            task_data = Dataset.from_pickle(cPickle.load(f))
+    if isinstance(eeg_data, str):
+        with gzip.open(eeg_data, 'rb') as f:
+            eeg_data = Dataset.from_pickle(cPickle.load(f))
+
+    def convert_format(dataset):
+        sorted_i = sorted(xrange(dataset.n_rows),
+                          key=lambda i: (dataset['subject'][i], dataset['start_time'][i]))
+        subject_groups = groupby(sorted_i, lambda i: dataset['subject'][i])
+        subject_dict = dict((v, k) for (k, v) in dataset.get_column('subject').enum_pairs)
+        data_by_subject = {subject_dict[k]: list(v) for k, v in subject_groups}
+        return data_by_subject
+    task_by_subject = convert_format(task_data)
+    eeg_by_subject = convert_format(eeg_data)
+
+    # Step2: efficiently create mapping between task and eeg using the structured data
+    task_eeg_mapping = [None] * task_data.n_rows
+    for sub, task in task_by_subject.iteritems():
+        if sub not in eeg_by_subject:
+            continue
+        eeg = eeg_by_subject[sub]
+        num_sub_eegs = len(eeg)
+        e_i = 0
+        try:
+            for t_i in task:
+                t_start = task_data['start_time'][t_i]
+                t_end = task_data['end_time'][t_i]
+                # throw away eeg before the current task
+                # this works because the tasks are sorted by start_time
+                while e_i < num_sub_eegs and eeg_data['end_time'][eeg[e_i]] < t_start:
+                    e_i += 1
+                    if e_i > num_sub_eegs:
+                        raise StopIteration
+                # map eeg onto the current task
+                e_i2 = e_i
+                task_eeg = []
+                # TODO: refactor this while loop into a itertools.takewhile
+                while e_i2 < num_sub_eegs and eeg_data['start_time'][eeg[e_i2]] < t_end:
+                    if eeg_data['sigqual'][eeg[e_i2]] < sigqual_cutoff:
+                        task_eeg.append(eeg[e_i2])
+                    e_i2 += 1
+                if task_eeg:
+                    task_eeg_mapping[t_i] = task_eeg
+        except StopIteration:
+            pass
+
+    # Step3: compute eeg features for each task based on aligned eeg
+    eeg_mask = [bool(ei) for ei in task_eeg_mapping]
+    task_data.mask(eeg_mask)
+    itask_eeg_mapping = compress(task_eeg_mapping, eeg_mask)
+    task_data.set_column('eeg', Dataset.MATFLOAT)
+    for i, ei in enumerate(itask_eeg_mapping):
+        features = np.mean(eeg_data['eeg'][ei], axis=0)
+        task_data.get_column('eeg')[i] = features
+    # Step4: write data file for use by classifier
+    if out_name is not None:
+        with gzip.open(out_name, 'w') as f:
+            cPickle.dump(task_data.to_pickle(), f)
+    else:
+        return task_data
 
 
 @log_me('...loading data')
-def prepare_new_data2(dataset_name, top_eeg_n=0, top_n=0, cv_fold=0, **kwargs):
+def prepare_data(dataset_name, top_eeg_n=0, top_n=0, cv_fold=0, **kwargs):
     from learntools.data import Dataset
     with gzip.open(dataset_name, 'rb') as f:
         ds = Dataset.from_pickle(cPickle.load(f))
@@ -146,84 +144,17 @@ def prepare_new_data2(dataset_name, top_eeg_n=0, top_n=0, cv_fold=0, **kwargs):
     return ds, train_idx, valid_idx
 
 
-@log_me('...loading data')
-def prepare_new_data(dataset_name, top_n=0, top_eeg_n=0, eeg_only=1, normalize=0, cv_fold=0, **kwargs):
-    with gzip.open(dataset_name, 'rb') as f:
-        subject_x, skill_x, correct_y, start_x, eeg_x, stim_pairs = cPickle.load(f)
-    subjects = np.unique(subject_x)
-    indexable_eeg = np.asarray(eeg_x)
+if __name__ == "__main__":
+    import argparse
+    parser = argparse.ArgumentParser(description="generate kt data from raw task and eeg files")
+    parser.add_argument('-t', type=str, dest='task', default='raw_data/task_large.xls',
+                        help='location of the task file')
+    parser.add_argument('-e', type=str, dest='eeg', default='raw_data/eeg_data_thinkgear_2013_2014.xls',
+                        help='location of the eeg file')
+    parser.add_argument('outfile', type=str, nargs='*', default='data/data5.gz',
+                        help='where to store the output file')
+    args = parser.parse_args()
 
-    def row_count(subj):
-        return sum(np.equal(subject_x, subj))
-
-    def eeg_count(subj):
-        arr = indexable_eeg[np.equal(subject_x, subj)]
-        return sum(np.not_equal(arr, None))
-
-    # select only the subjects that have enough data
-    if top_n:
-        subjects = sorted(subjects, key=row_count)[-top_n:]
-    if top_eeg_n:
-        subjects = sorted(subjects, key=eeg_count)[-top_eeg_n:]
-    mask = reduce(or_, imap(lambda s: np.equal(subject_x, s), subjects))
-
-    # normalize eegs
-    eeg_mask = np.not_equal(indexable_eeg, None)
-    if normalize:
-        for s in subjects:
-            subj_mask = np.equal(subject_x, s)
-            subj_eeg_mask = subj_mask & eeg_mask
-            table = np.array([list(l) for l in indexable_eeg[subj_eeg_mask]])
-            table = normalize_table(table)
-            idxs = np.nonzero(subj_eeg_mask)
-            for i in range(len(idxs)):
-                eeg_x[i] = table[i]
-
-    # mask out unselected data
-    if eeg_only:
-        mask &= eeg_mask
-    subject_x = subject_x[mask]
-    skill_x = skill_x[mask]
-    correct_y = correct_y[mask]
-    start_x = start_x[mask]
-    eeg_x = list(compress(indexable_eeg, mask))
-
-    # break cv folds
-    # valid_subj_mask = random_unique_subset(subject_x, .9)
-    u_subjects = np.unique(subject_x)
-    heldout_subject = u_subjects[cv_fold % len(u_subjects)]
-    valid_subj_mask = np.equal(subject_x, heldout_subject)
-    log('subjects {} are held out'.format(np.unique(subject_x[valid_subj_mask])), True)
-    train_idx = np.nonzero(np.logical_not(valid_subj_mask))[0]
-    valid_idx = np.nonzero(valid_subj_mask)[0]
-
-    eeg_x, eeg_table = to_lookup_table(eeg_x)
-
-    return (subject_x, skill_x, correct_y, start_x, eeg_x, eeg_table, stim_pairs, train_idx, valid_idx)
-
-
-# TODO: get rid of "old.gz" style data format in all function so that we can
-# be rid of this gross function
-def old_gz_to_dataset(dataset_name='data/data4.gz'):
-    from learntools.data import Dataset
-    from itertools import izip
-    with gzip.open(dataset_name, 'rb') as f:
-        subject_x, skill_x, correct_y, start_x, eeg_x, stim_pairs = cPickle.load(f)
-    eeg_mask = np.not_equal(eeg_x, None)
-    true_size = sum(eeg_mask)
-
-    stim_dict = {v: k for (k, v) in stim_pairs}
-    skill_orig = [stim_dict[s] for s in skill_x]
-
-    ds = Dataset((('subject', Dataset.INT),
-                  ('skill', Dataset.ENUM),
-                  ('correct', Dataset.INT),
-                  ('start_time', Dataset.LONG),
-                  ('eeg', Dataset.MATFLOAT)),
-                 n_rows=true_size)
-    i = 0
-    for row in izip(subject_x, skill_orig, correct_y, start_x, eeg_x):
-        if row[-1] is not None:
-            ds[i] = row
-            i += 1
-    return ds
+    task = convert_task_from_xls(args.task)
+    eeg = convert_eeg_from_xls(args.eeg)
+    align_data(task, eeg, args.outfile)

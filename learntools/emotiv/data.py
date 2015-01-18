@@ -8,8 +8,15 @@ from learntools.libs.utils import normalize_table
 def prepare_data(dataset_name, conds=None):
     """load seigel data into a Dataset
 
-    Keyword arguments:
-    conds -- list of conditions that we want the dataset the contain e.g. ['EyesClosed', 'EyesOpen']
+    Args:
+        conds (string[], optional): list of conditions that we want the dataset to contain
+            e.g. ['EyesClosed', 'EyesOpen']. If not provided, all conditions will be loaded
+
+    Returns:
+        Dataset: a dataset with the following columns:
+            group: the source of the data (contains descriptives about the subject, etc.)
+            condition: the task that the subject was doing while the eeg was being recorded
+            eeg: eeg feature vector for each task
     """
     bands = ['theta', 'alpha', 'beta', 'gamma']
     channels = ['AF3', 'F7', 'F3', 'FC5', 'T7', 'P7', 'O1', 'O2', 'P8', 'T8', 'FC6', 'F4', 'F8', 'AF4']

@@ -24,16 +24,7 @@ def run(task_num, model_type=0, **kwargs):
     prepared_data = prepare_data(cv_fold=task_num, **kwargs)
 
     model = SelectedModel(prepared_data, **kwargs)
-
-    start_time = time.clock()
-    best_validation_loss, best_epoch = train_model(model, **kwargs)
-    end_time = time.clock()
-    training_time = (end_time - start_time) / 60.
-
-    log(('Optimization complete. Best validation score of %f %%') %
-        (best_validation_loss * 100.), True)
-    log('Code ran for ran for %.2fm' % (training_time))
-    return (best_validation_loss * 100., best_epoch + 1, training_time)
+    model.train_full()
 
 
 if __name__ == '__main__':
@@ -58,7 +49,7 @@ if __name__ == '__main__':
     elif 'dataset_name' not in params:
         params['dataset_name'] = default_dataset
     # params['task_num'] = args.task_num
-    log(run(0, **params))
+    run(0, **params)
     print "finished"
     if sys.platform.startswith('win'):
         from win_utils import winalert

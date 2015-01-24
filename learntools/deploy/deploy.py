@@ -165,7 +165,7 @@ def run_batch(param_set, n_workers, driver, existing_instances=False, no_install
                         consumer_factory=aws_consumer_factory)
     else:
         ids = ['worker{}'.format(i) for i in xrange(n_workers)]
-        do_jobs(ids, jobs=jobs, func=run_experiment_aws,
+        do_jobs(ids, jobs=jobs, func=run_experiment,
                 consumer_factory=JobConsumer)
 
 if __name__ == "__main__":

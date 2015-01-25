@@ -401,6 +401,9 @@ class Dataset(object):
     def __len__(self):
         return self.n_rows
 
+    def __str__(self):
+        return "<Dataset[" + ', '.join([c.name for c in self.columns]) + "]>"
+
     def to_pickle(self):
         '''convert the dataset into a serializable format
 

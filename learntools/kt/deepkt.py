@@ -94,10 +94,12 @@ class DeepKT(Model):
         # STEP2: connect up the model. See figures/vector_edu_model.png for diagram
         # TODO: make the above mentioned diagram
 
+        # make a skill matrix containing skill vectors for each skill
         skill_matrix = make_shared(gen_word_matrix(ds.get_data('skill'),
                                                    ds['skill'].enum_pairs,
                                                    vector_length=skill_vector_len))
 
+				# data preloaded into network
         skill_x = make_shared(skill_x, to_int=True, name='skill')
         correct_y = make_shared(correct_y, to_int=True, name='correct')
         eeg_full = make_shared(eeg_full, name='eeg')
@@ -124,6 +126,7 @@ class DeepKT(Model):
             classifier_n_in += combiner_width
         if current_eeg_on:
             classifier_n_in += eeg_vector_len
+        # final softmax classifier
         classifier = MLP(rng=rng,
                          n_in=classifier_n_in,
                          size=[main_net_width] * main_net_depth,
@@ -133,9 +136,10 @@ class DeepKT(Model):
         # STEP 3.1 stuff that goes in scan
         current_skill = skill_matrix[skill_x[base_indices]]
         previous_skill = skill_matrix[skill_x[base_indices - 1]]
-        previous_eeg_vector = eeg_full[base_indices]
+        previous_eeg_vector = eeg_full[base_indices - 1]
         current_eeg_vector = eeg_full[base_indices]
 
+        # need to convert list of indices of 1,2 into [0],[1] columns
         correct_vectors = make_shared([[0], [1]])
         correct_feature = correct_vectors[correct_y[base_indices - 1] - 1]
         correct_feature.name = 'correct_feature'
@@ -150,12 +154,14 @@ class DeepKT(Model):
             classifier_inputs.append(combiner_out)
         if current_eeg_on:
             classifier_inputs.append(current_eeg_vector)
+        # probability of y for each 0, 1, 2
         pY = classifier.instance(T.concatenate(classifier_inputs, axis=1))
         # ########
         # STEP3: create the theano functions to run the model
 
         y = correct_y[base_indices]
         loss = -T.mean(T.log(pY)[T.arange(y.shape[0]), y])
+        # used to help compute regularization terms
         subnets = [classifier]
         if combiner_on:
             subnets.append(combiner)
@@ -165,6 +171,7 @@ class DeepKT(Model):
             + L2_reg * sum([n.L2_sqr for n in subnets])
         )
 
+        # the same for both validation and training
         func_args = {
             'inputs': [base_indices],
             'outputs': [loss, pY[:, -2] - pY[:, -1], base_indices, pY, previous_eeg_vector],
@@ -172,19 +179,23 @@ class DeepKT(Model):
             'allow_input_downcast': True,
         }
 
+        # collect all theano updates
         params = chain.from_iterable(n.params for n in subnets)
         update_parameters = [(param, param - learning_rate * T.grad(cost, param))
                              for param in params]
+        # propagation of previous skill to next is computed as an update
         basic_updates = []
         if combiner_on:
             basic_updates += [(
                 skill_accumulator,
                 T.set_subtensor(skill_accumulator[base_indices - 1], combiner_out)
             )]
+        # validation uses no dropout and previous skill propagation
         self._tf_valid = theano.function(
             updates=basic_updates,
             givens={t_dropout: 0.},
             **func_args)
+        # training uses parameter updates plus previous skill propagation with dropout
         self._tf_train = theano.function(
             updates=update_parameters + basic_updates,
             givens={t_dropout: dropout_p},
@@ -201,6 +212,8 @@ class DeepKT(Model):
         Returns:
             float: an evaluation score (the higher the better)
         '''
+        # _correct_y is int-casted, go to owner op (int-cast) to get shared variable
+        # as first input and get its value without copying the value out
         _y = self._correct_y.owner.inputs[0].get_value(borrow=True)[idxs]
         return auc(_y[:len(pred)], pred, pos_label=1)
 

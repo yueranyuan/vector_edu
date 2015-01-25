@@ -111,7 +111,7 @@ class NumericColumn(Column):
 class TimeColumn(Column):
     def __init__(self, name, form=LISTEN_TIME_FORMAT, *args, **kwargs):
         super(TimeColumn, self).__init__(name, dtype='i8', *args, **kwargs)
-        self.form = LISTEN_TIME_FORMAT
+        self.form = form
 
     def __setitem__(self, key, time_strs):
         if hasattr(time_strs, '__iter__') and not isinstance(time_strs, str):

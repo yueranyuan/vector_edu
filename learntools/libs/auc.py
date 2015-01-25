@@ -49,9 +49,19 @@ def auc(actual, posterior, pos_label=1):
     score : double
             The mean squared error between actual and posterior
     """
+    if (len(actual) == 0):
+        raise Exception('actual is empty')
+    if (len(posterior) == 0):
+        raise Exception('posterior is empty')
+    if len(actual) != len(posterior):
+        raise Exception('actual and posterior lengths do not match')
     r = tied_rank(posterior)
     positives = np.equal(actual, pos_label)
     num_positive = sum(positives)
+    if (num_positive == 0):
+        raise Exception('actual is has no positives')
+    if (num_positive == len(actual)):
+        raise Exception('actual is all positives')
     num_negative = len(actual) - num_positive
     sum_positive = sum(r[positives])
     auc = ((sum_positive - num_positive * (num_positive + 1) / 2.0) /

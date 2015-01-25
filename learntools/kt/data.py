@@ -11,8 +11,7 @@ from learntools.libs.utils import normalize_table
 
 
 def convert_task_from_xls(fname, outname=None):
-    headers = (('cond', Dataset.INT),
-               ('subject', Dataset.ENUM),
+    headers = (('subject', Dataset.ENUM),
                ('stim', Dataset.ENUM),
                ('block', Dataset.ENUM),
                ('start_time', Dataset.TIME),
@@ -113,8 +112,34 @@ def align_data(task_data, eeg_data, out_name=None, sigqual_cutoff=200):
         return task_data
 
 
+def cv_split(ds, cv_fold=0, no_new_skills=False, percent=None, **kwargs):
+    subjects = np.unique(ds['subject'])
+
+    if percent is not None:
+        from random import sample
+        from math import ceil
+        heldout_subjects = sample(subjects, ceil(len(subjects) * percent))
+    else:
+        heldout_subjects = [subjects[cv_fold % len(subjects)]]
+    valid_subj_mask = reduce(or_, imap(lambda s: np.equal(ds['subject'], s), heldout_subjects))
+    train_idx = np.nonzero(np.logical_not(valid_subj_mask))[0]
+    valid_idx = np.nonzero(valid_subj_mask)[0]
+    log('subjects {} are held out'.format(np.unique(ds['subject'][valid_idx])), True)
+
+    if no_new_skills:
+        valid_skill_set = set(ds['skill'][valid_idx])
+        train_skill_set = set(ds['skill'][train_idx])
+        new_skills = valid_skill_set - train_skill_set
+        valid_skill_arr = ds['skill'][valid_idx]
+        new_skill_mask = reduce(or_, imap(lambda s: np.equal(valid_skill_arr, s), new_skills))
+        valid_idx = valid_idx[np.logical_not(new_skill_mask)]
+        log('{} rows are removed because they only occur in the validation set'.format(sum(new_skill_mask)), True)
+
+    return train_idx, valid_idx
+
+
 @log_me('...loading data')
-def prepare_data(dataset_name, top_eeg_n=0, top_n=0, cv_fold=0, **kwargs):
+def prepare_data(dataset_name, top_eeg_n=0, top_n=0, **kwargs):
     from learntools.data import Dataset
     with gzip.open(dataset_name, 'rb') as f:
         ds = Dataset.from_pickle(cPickle.load(f))
@@ -122,9 +147,12 @@ def prepare_data(dataset_name, top_eeg_n=0, top_n=0, cv_fold=0, **kwargs):
     ds.rename_column('cond', 'correct')
     subjects = np.unique(ds['subject'])
 
+    sorted_i = sorted(range(ds.n_rows), key=lambda i: ds['start_time'][i])
+    ds.reorder(sorted_i)
+
     def row_count(subj):
         return sum(np.equal(ds['subject'], subj))
-    top_n = top_eeg_n  # TODO: remove "top_eeg_n" as a config
+    top_n = top_n or top_eeg_n  # TODO: remove "top_eeg_n" as a config
 
     if top_n:
         subjects = sorted(subjects, key=row_count)[-top_n:]
@@ -132,16 +160,7 @@ def prepare_data(dataset_name, top_eeg_n=0, top_n=0, cv_fold=0, **kwargs):
     ds.mask(subject_mask)
     ds.get_column('eeg').data = normalize_table(ds['eeg'])
 
-    heldout_subject = subjects[cv_fold % len(subjects)]
-    valid_subj_mask = np.equal(ds['subject'], heldout_subject)
-    train_idx = np.nonzero(np.logical_not(valid_subj_mask))[0]
-    valid_idx = np.nonzero(valid_subj_mask)[0]
-
-    log('subjects {} are held out'.format(np.unique(ds['subject'][valid_idx])), True)
-    train_idx = np.nonzero(np.logical_not(valid_subj_mask))[0]
-    valid_idx = np.nonzero(valid_subj_mask)[0]
-
-    return ds, train_idx, valid_idx
+    return ds
 
 
 if __name__ == "__main__":

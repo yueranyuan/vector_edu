@@ -30,14 +30,14 @@ import learntools.deploy.config as config
 
 
 @log_me()
-def run(model_type=0, **kwargs):
+def run(task_num=0, model_type=0, **kwargs):
     if model_type == 0:
         from learntools.emotiv.base import BaseEmotiv as SelectedModel
     else:
         raise Exception("model type is not valid")
 
     dataset = prepare_data(**kwargs)
-    train_idx, valid_idx = cv_split(dataset, percent=0.1)
+    train_idx, valid_idx = cv_split(dataset, percent=0.1, fold_index=task_num)
     prepared_data = (dataset, train_idx, valid_idx)
 
     model = SelectedModel(prepared_data, **kwargs)

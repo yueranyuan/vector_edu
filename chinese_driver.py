@@ -9,12 +9,12 @@ import learntools.deploy.config as config
 
 
 @log_me()
-def run(task_num, **kwargs):
+def run(task_num=0, **kwargs):
     from learntools.kt.deepkt import DeepKT as SelectedModel
     from learntools.kt import chinese
 
     prepared_data = chinese.prepare_data(top_n=40, **kwargs)
-    train_idx, valid_idx = cv_split(prepared_data, percent=.1, **kwargs)
+    train_idx, valid_idx = cv_split(prepared_data, percent=.1, fold_index=task_num, **kwargs)
 
     model = SelectedModel((prepared_data, train_idx, valid_idx), **kwargs)
     model.train_full()

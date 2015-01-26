@@ -1,9 +1,15 @@
 from __future__ import division
-import numpy as np
+from math import ceil
 import csv
 from time import mktime
 from datetime import datetime
-from itertools import chain, starmap, imap, izip, compress
+from itertools import imap, izip, compress
+from operator import or_
+
+import numpy as np
+
+from learntools.libs.utils import idx_to_mask, mask_to_idx, get_column
+from learntools.libs.logger import log
 
 LISTEN_TIME_FORMAT = "%Y-%m-%d %H:%M:%S.%f"
 
@@ -447,7 +453,6 @@ class Dataset(object):
         Returns:
             (Dataset): the loaded Dataset object
         '''
-        from learntools.libs.utils import get_column
 
         # this is so we can allocate memory ahead of time
         # resizing arrays will be more costly than reading the file twice
@@ -483,29 +488,26 @@ def load(*args, **kwargs):
     return Dataset.from_csv(*args, **kwargs)
 
 
-def _cv_split_helper(splits, cv_fold=0, percent=None):
+def _cv_split_helper(splits, fold_index=0, percent=None):
     if percent is not None:
-        from math import ceil
         n_heldout = int(ceil(len(splits) * percent))
-        heldout = splits[(cv_fold * n_heldout):((cv_fold + 1) * n_heldout)]
+        heldout = splits[(fold_index * n_heldout):((fold_index + 1) * n_heldout)]
     else:
-        heldout = [splits[cv_fold % len(splits)]]
+        heldout = [splits[fold_index % len(splits)]]
     return heldout
 
 
-def cv_split(ds, cv_fold=0, split_on=None, percent=None, **kwargs):
+def cv_split(ds, fold_index=0, split_on=None, percent=None, **kwargs):
     # cross-validation split
     if split_on:
         splits = np.unique(ds[split_on])
-        heldout = _cv_split_helper(splits, cv_fold=cv_fold, percent=percent)
+        heldout = _cv_split_helper(splits, fold_index=fold_index, percent=percent)
 
-        from operator import or_
         mask = reduce(or_, imap(lambda s: np.equal(ds[split_on], s), heldout))
         train_idx = np.nonzero(np.logical_not(mask))[0]
         valid_idx = np.nonzero(mask)[0]
     else:
-        from learntools.libs.utils import idx_to_mask, mask_to_idx
-        heldout = _cv_split_helper(range(ds.n_rows), cv_fold=cv_fold, percent=percent)
+        heldout = _cv_split_helper(range(ds.n_rows), fold_index=fold_index, percent=percent)
         valid_idx = heldout
         train_mask = np.logical_not(idx_to_mask(valid_idx, mask_len=ds.n_rows))
         train_idx = mask_to_idx(train_mask)
@@ -513,7 +515,6 @@ def cv_split(ds, cv_fold=0, split_on=None, percent=None, **kwargs):
     # print/log what we held out
     split_on_str = split_on if split_on else 'index'
     info = '{split_on} {heldout} are held out'.format(split_on=split_on_str, heldout=heldout)
-    from learntools.libs.logger import log
     try:
         log(info, True)
     except:

@@ -6,6 +6,13 @@ def connect(region="us-east-1"):
     return boto.ec2.connect_to_region(region)
 
 
+def get_available_instances(conn=None, ids=None):
+    conn = conn or connect()
+
+    return [i for i in conn.get_only_instances(instance_ids=ids)
+            if i.state != 'terminated' and i.state != 'shutting-down']
+
+
 def terminate_all(ids=None, conn=None, **kwargs):
     conn = conn or connect()
     instances = conn.get_only_instances(instance_ids=ids)
@@ -42,8 +49,7 @@ def get_active_instance(conn=None, wait=180, interval=10, ids=None, **kwargs):
         print('looking for usable instance...')
         statuses = {s.id: s.instance_status.status
                     for s in conn.get_all_instance_status()}
-        instances = [i for i in conn.get_only_instances(instance_ids=ids)
-                     if i.state != 'terminated']
+        instances = get_available_instances(conn, ids=ids)
         if not instances:
             raise NoInstanceException("no instances have been started")
         for instance in instances:

@@ -1,1 +1,1 @@
-__all__ = ['data']
+import chinese

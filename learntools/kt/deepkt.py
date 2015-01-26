@@ -13,6 +13,10 @@ from learntools.model.math import rectifier
 from learntools.model.theano_utils import make_shared
 from learntools.model import Model, gen_batches_by_keys, gen_batches_by_size
 
+from theano import config
+
+config.exception_verbosity = 'high'
+
 
 def _gen_batches(idxs, subjects, batch_size):
     '''divide row indicies for deepkt.
@@ -94,13 +98,13 @@ class DeepKT(Model):
                                                    ds['skill'].enum_pairs,
                                                    vector_length=skill_vector_len))
 
-        skill_x = make_shared(skill_x, to_int=True)
-        correct_y = make_shared(correct_y, to_int=True)
-        eeg_full = make_shared(eeg_full)
+        skill_x = make_shared(skill_x, to_int=True, name='skill')
+        correct_y = make_shared(correct_y, to_int=True, name='correct')
+        eeg_full = make_shared(eeg_full, name='eeg')
 
         rng = np.random.RandomState(1234)
         t_dropout = T.scalar('dropout')
-        skill_accumulator = make_shared(np.zeros((N, combiner_width)))
+        skill_accumulator = make_shared(np.zeros((N, combiner_width)), name='skill_accumulator')
 
         # setup combiner component
         combiner_n_in = combiner_width + skill_vector_len + 1
@@ -134,10 +138,13 @@ class DeepKT(Model):
 
         correct_vectors = make_shared([[0], [1]])
         correct_feature = correct_vectors[correct_y[base_indices - 1] - 1]
+        correct_feature.name = 'correct_feature'
         combiner_inputs = [skill_accumulator[base_indices - 2], previous_skill, correct_feature]
         if previous_eeg_on:
             combiner_inputs.append(previous_eeg_vector)
-        combiner_out = combiner.instance(T.concatenate(combiner_inputs, axis=1))
+        t_combiner_inputs = T.concatenate(combiner_inputs, axis=1)
+        t_combiner_inputs.name = 'combiner_inputs'
+        combiner_out = combiner.instance(t_combiner_inputs)
         classifier_inputs = [current_skill]
         if combiner_on:
             classifier_inputs.append(combiner_out)
@@ -162,7 +169,7 @@ class DeepKT(Model):
             'inputs': [base_indices],
             'outputs': [loss, pY[:, -2] - pY[:, -1], base_indices, pY, previous_eeg_vector],
             'on_unused_input': 'ignore',
-            'allow_input_downcast': True
+            'allow_input_downcast': True,
         }
 
         params = chain.from_iterable(n.params for n in subnets)

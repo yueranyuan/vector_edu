@@ -1,4 +1,4 @@
-from itertools import imap, chain, groupby
+from itertools import groupby
 
 
 class Model(object):
@@ -82,6 +82,27 @@ class Model(object):
     @valid_batches.setter
     def valid_batches(self, valid_batches):
         self._valid_batches = valid_batches
+
+    def train_full(self, strategy=None, **kwargs):
+        import time
+        from learntools.model import train_model
+        from learntools.libs.logger import log
+
+        # use default strategy if no training strategy is provided
+        if strategy is None:
+            if hasattr(self, 'train_strategy'):
+                strategy = self.train_strategy
+            else:
+                strategy = train_model
+
+        start_time = time.clock()
+        best_validation_loss, best_epoch = train_model(self, **kwargs)
+        end_time = time.clock()
+        training_time = (end_time - start_time) / 60.
+
+        log(('Optimization complete. Best validation score of %f %%') %
+            (best_validation_loss * 100.), True)
+        log('Code ran for ran for %.2fm' % (training_time))
 
 
 def gen_batches_by_keys(idxs, keys):

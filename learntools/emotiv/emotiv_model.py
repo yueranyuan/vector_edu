@@ -17,8 +17,8 @@ from learntools.libs.logger import gen_log_name, log_me, log, set_log_file
 def _gen_batches(idxs, subjects, batch_size):
     return [idxs]
 
-def _gen_train_valid_idxs(ds, cv_fold=0):
-    validation_ratio = 0.1
+def _gen_train_valid_idxs(ds, valid_percentage, cv_fold=0):
+    validation_ratio = float(valid_percentage) / 100
     rng = np.random.RandomState(12345)
     rvec = rng.random_sample(len(ds))
     train_idx = mask_to_idx(rvec >= validation_ratio)
@@ -26,7 +26,7 @@ def _gen_train_valid_idxs(ds, cv_fold=0):
     return train_idx, valid_idx
 
 class EmotivModel(Model):
-    '''a trainable, applyable model for deep kt
+    '''a trainable, applyable model for emotiv
     Attributes:
         train_batches (int[][]): training batches are divided by subject_id and the rows of each subject
             are further divided by batch_size. The first 2 rows of each subject are removed by
@@ -35,40 +35,18 @@ class EmotivModel(Model):
     '''
     @log_me('...building model')
     def __init__(self, prepared_data, L1_reg=0., L2_reg=0., dropout_p=0., learning_rate=0.02,
-                 cond_vector_len=100, combiner_depth=1, combiner_width=200,
-                 main_net_depth=1, main_net_width=500, previous_eeg_on=1,
-                 current_eeg_on=1, combiner_on=1, mutable_skill=1, valid_percentage=0.8,
+                 combiner_depth=1, combiner_width=200,
+                 main_net_depth=1, main_net_width=500,
+                 valid_percentage=5,
                  batch_size=30, **kwargs):
-        '''
-        Args:
-            prepared_data (tuple(Dataset, int[], int[])): a tuple that holds the data to be used,
-                the row indices of the training set, and the row indices of the validation set
-        '''
-        # ##########
-        # STEP1: order the data properly so that we can read from it sequentially
-        # when training the model
-
-        #ds, train_idx, valid_idx = prepared_data
         ds = prepared_data
-        train_idx, valid_idx = _gen_train_valid_idxs(ds)
-        log('len of train_idx=%d, valid_idx=%d' % (len(train_idx), len(valid_idx)), True)
+        train_idx, valid_idx = _gen_train_valid_idxs(ds, valid_percentage)
         N = len(ds)
         eeg_vector_len = ds.get_data('eeg').shape[1]
-        train_mask = idx_to_mask(train_idx, len(ds['group']))
-        valid_mask = idx_to_mask(valid_idx, len(ds['group']))
-
-        sorted_i = sorted(xrange(N), key=lambda i: (ds['group'][i]))
-        ds.reorder(sorted_i)
-
-        train_mask = train_mask[sorted_i]
-        valid_mask = valid_mask[sorted_i]
-        train_idx = mask_to_idx(train_mask)
-        valid_idx = mask_to_idx(valid_mask)
         base_indices = T.ivector('idx')
 
         cond_x = ds.get_data('condition')
         cond_count = len(np.unique(cond_x))
-        group_x = ds.get_data('group')
         eeg_full = ds.get_data('eeg')
 
         rng = np.random.RandomState(1234)
@@ -77,10 +55,6 @@ class EmotivModel(Model):
         # ###########
         # STEP2: connect up the model. See figures/vector_edu_model.png for diagram
         # TODO: make the above mentioned diagram
-
-        cond_matrix = make_shared(gen_word_matrix(ds.get_data('condition'),
-                                                   ds['condition'].enum_pairs,
-                                                   vector_length=cond_vector_len))
 
         cond_x = make_shared(cond_x, to_int=True)
         eeg_full = make_shared(eeg_full)
@@ -101,11 +75,7 @@ class EmotivModel(Model):
                          n_out=cond_count + 1,
                          dropout=t_dropout)
 
-        # STEP 3.1 stuff that goes in scan
-        current_cond = cond_matrix[cond_x[base_indices]]
-        current_eeg_vector = eeg_full[base_indices]
-
-        combiner_inputs = [current_eeg_vector]
+        combiner_inputs = [eeg_full[base_indices]]
         combiner_out = combiner.instance(T.concatenate(combiner_inputs, axis=1))
         classifier_inputs = [combiner_out]
         pY = classifier.instance(T.concatenate(classifier_inputs, axis=1))
@@ -123,7 +93,7 @@ class EmotivModel(Model):
 
         func_args = {
             'inputs': [base_indices],
-            'outputs': [loss, pY[:, -2] - pY[:, -1], base_indices, pY],
+            'outputs': [loss, pY[:, 0] - pY[:, 1], base_indices],
             'on_unused_input': 'ignore',
             'allow_input_downcast': True
         }
@@ -138,8 +108,8 @@ class EmotivModel(Model):
             updates=update_parameters,
             givens={t_dropout: dropout_p},
             **func_args)
-        self.train_batches = _gen_batches(train_idx, group_x, batch_size)
-        self.valid_batches = _gen_batches(valid_idx, group_x, 1)
+        self.train_batches = gen_batches_by_size(train_idx, batch_size)
+        self.valid_batches = gen_batches_by_size(valid_idx, 1)
         self._correct_y = cond_x
 
     def evaluate(self, idxs, pred):

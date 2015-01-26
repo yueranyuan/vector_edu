@@ -5,7 +5,7 @@ Usage:
 
 Options:
     -p <param_set>, --param_set=<param_set>
-        The name of the parameter set to use [default: default].
+        The name of the parameter set to use [default: emotiv_wide_search].
     -f <file>, --file=<file>
         The data file to use.
     -o <file>, --out=<file>
@@ -17,7 +17,6 @@ Options:
 from __future__ import print_function, division
 
 import os
-import sys
 import warnings
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 

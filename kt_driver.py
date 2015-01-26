@@ -23,7 +23,7 @@ def run(task_num, model_type=0, **kwargs):
     train_idx, valid_idx = cv_split(prepared_data, fold_index=task_num, **kwargs)
 
     model = SelectedModel((prepared_data, train_idx, valid_idx), **kwargs)
-    model.train_full()
+    model.train_full(**kwargs)
 
 
 if __name__ == '__main__':

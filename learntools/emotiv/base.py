@@ -11,11 +11,12 @@ from learntools.model.math import rectifier
 from learntools.model.theano_utils import make_shared
 from learntools.model import Model, gen_batches_by_size
 
+
 class BaseEmotiv(Model):
     @log_me('...building BaseEmotiv')
     def __init__(self, prepared_data, batch_size=30, L1_reg=0., L2_reg=0.,
-        middle_width=100, middle_depth=1, classifier_width=500, classifier_depth=1,
-        rng_seed=42, dropout_p=0.5, learning_rate=0.02, **kwargs):
+                 middle_width=100, middle_depth=1, classifier_width=500, classifier_depth=1,
+                 rng_seed=42, dropout_p=0.5, learning_rate=0.02, **kwargs):
         """
         Args:
             prepared_data : (Dataset, [int], [int])
@@ -47,10 +48,10 @@ class BaseEmotiv(Model):
         )
 
         classifier = MLP(rng=rng,
-                                         n_in=middle_width,
-                                         size=[classifier_width] * classifier_depth,
-                                         n_out=2,
-                                         dropout=t_dropout)
+                         n_in=middle_width,
+                         size=[classifier_width] * classifier_depth,
+                         n_out=2,
+                         dropout=t_dropout)
 
         input_idxs = T.ivector('input_idxs')
         middle_out = middle_layer.instance(self._xs[input_idxs])
@@ -73,7 +74,7 @@ class BaseEmotiv(Model):
         }
         params = chain.from_iterable(net.params for net in subnets)
         update_parameters = [(param, param - learning_rate * T.grad(cost, param))
-                                                 for param in params]
+                             for param in params]
 
         self._tf_valid = theano.function(givens={t_dropout: 0.}, **func_args)
         self._tf_train = theano.function(

@@ -22,12 +22,10 @@ import warnings
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 
 from docopt import docopt
-import numpy as np
 
-from learntools.libs.utils import mask_to_idx
-from learntools.libs.logger import gen_log_name, log_me, log, set_log_file
+from learntools.libs.logger import gen_log_name, log_me, set_log_file
 from learntools.emotiv.data import prepare_data
-from learntools.model.train import train_model
+from learntools.data import cv_split
 import learntools.deploy.config as config
 
 
@@ -39,13 +37,7 @@ def run(model_type=0, **kwargs):
         raise Exception("model type is not valid")
 
     dataset = prepare_data(**kwargs)
-
-    # generate the train-validation split
-    validation_ratio = 0.1
-    rng = np.random.RandomState(1337)
-    rvec = rng.random_sample(len(dataset))
-    train_idx = mask_to_idx(rvec >= validation_ratio)
-    valid_idx = mask_to_idx(rvec < validation_ratio)
+    train_idx, valid_idx = cv_split(dataset, percent=0.1)
     prepared_data = (dataset, train_idx, valid_idx)
 
     model = SelectedModel(prepared_data, **kwargs)
@@ -53,7 +45,7 @@ def run(model_type=0, **kwargs):
 
 
 if __name__ == '__main__':
-    default_dataset = 'raw_data/all_siegle.txt'
+    default_dataset = "raw_data/all_siegle.txt"
 
     args = docopt(__doc__)
 
@@ -70,11 +62,5 @@ if __name__ == '__main__':
         params['dataset_name'] = default_dataset
 
     params['conds'] = ['EyesClosed', 'EyesOpen']
-
     run(0, **params)
-
     print("Finished")
-
-    if sys.platform.startswith('win'):
-        from win_utils import winalert
-        winalert()

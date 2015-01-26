@@ -43,6 +43,3 @@ if __name__ == '__main__':
         params['dataset_name'] = default_dataset
     run(0, **params)
     print "finished"
-    if sys.platform.startswith('win'):
-        from win_utils import winalert
-        winalert()

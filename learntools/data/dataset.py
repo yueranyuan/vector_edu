@@ -483,60 +483,40 @@ def load(*args, **kwargs):
     return Dataset.from_csv(*args, **kwargs)
 
 
-# TODO: this function is broken. Replicate its behavior inside Dataset.save
-def save(fname, numeric=None, numeric_float=None, enum=None, enum_dict=None,
-         time=None, time_format=None, text_store=None, header=None):
-    if text_store:
-        # TODO: implement text_store
-        raise NotImplemented('text_store serialization is not yet implemented')
+def _cv_split_helper(splits, cv_fold=0, percent=None):
+    if percent is not None:
+        from math import ceil
+        n_heldout = int(ceil(len(splits) * percent))
+        heldout = splits[(cv_fold * n_heldout):((cv_fold + 1) * n_heldout)]
+    else:
+        heldout = [splits[cv_fold % len(splits)]]
+    return heldout
 
-    # can't use {} as a default param value due to quirk in python
-    numeric = numeric or {}
-    numeric_float = numeric_float or {}
-    enum = enum or {}
-    enum_dict = enum_dict or {}
-    time = time or {}
-    time_format = time_format or {}
-    text_store = text_store or {}
 
-    # create iterators for processing each type of data
-    def iter_enum(key, data):
-        reverse_lookup_table = [None] * len(enum_dict[key])
-        for e, i in enum_dict[key].iteritems():
-            reverse_lookup_table[i] = e
-        for d in data:
-            yield reverse_lookup_table[int(d)]
+def cv_split(ds, cv_fold=0, split_on=None, percent=None, **kwargs):
+    # cross-validation split
+    if split_on:
+        splits = np.unique(ds[split_on])
+        heldout = _cv_split_helper(splits, cv_fold=cv_fold, percent=percent)
 
-    def iter_time(key, data):
-        for d in data:
-            yield format_time(d, time_format)
+        from operator import or_
+        mask = reduce(or_, imap(lambda s: np.equal(ds[split_on], s), heldout))
+        train_idx = np.nonzero(np.logical_not(mask))[0]
+        valid_idx = np.nonzero(mask)[0]
+    else:
+        from learntools.libs.utils import idx_to_mask, mask_to_idx
+        heldout = _cv_split_helper(range(ds.n_rows), cv_fold=cv_fold, percent=percent)
+        valid_idx = heldout
+        train_mask = np.logical_not(idx_to_mask(valid_idx, mask_len=ds.n_rows))
+        train_idx = mask_to_idx(train_mask)
 
-    # apply the appropriate type of processor to each column
-    def process(data_dict, to_iter=None):
-        if not to_iter:
-            iterable_columns = imap(iter, data_dict.itervalues())
-        else:
-            iterable_columns = starmap(to_iter, data_dict.iteritems())
-        return izip(data_dict.keys(), iterable_columns)
-    column_type_processor_pair = ((numeric,),
-                                  (numeric_float,),
-                                  (enum, iter_enum),
-                                  (time, iter_time))
-    header_column_pairs = list(chain(*starmap(process, column_type_processor_pair)))
+    # print/log what we held out
+    split_on_str = split_on if split_on else 'index'
+    info = '{split_on} {heldout} are held out'.format(split_on=split_on_str, heldout=heldout)
+    from learntools.libs.logger import log
+    try:
+        log(info, True)
+    except:
+        print '[was not logged] {}'.format(info)
 
-    # set headers, reorder columns based on headers
-    header_ = [h for h, c in header_column_pairs]
-    if not header:
-        header = header_
-    if sorted(header) != sorted(header_):
-        raise Exception("header {header_} from data dictionary differs from the provided header {header}".format(
-            header_=header_, header=header))
-    header_column_pairs = sorted(header_column_pairs, key=lambda (h, c): header.index(h))
-    columns = [c for h, c in header_column_pairs]
-
-    # out to file
-    with open(fname, 'w') as f:
-        writer = csv.writer(f, delimiter='\t')
-        writer.writerow(header)
-        for row in izip(*columns):
-            writer.writerow(row)
+    return train_idx, valid_idx

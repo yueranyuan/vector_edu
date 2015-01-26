@@ -116,9 +116,9 @@ def cv_split(ds, cv_fold=0, no_new_skills=False, percent=None, **kwargs):
     subjects = np.unique(ds['subject'])
 
     if percent is not None:
-        from random import sample
         from math import ceil
-        heldout_subjects = sample(subjects, ceil(len(subjects) * percent))
+        n_heldout = ceil(len(subjects) * percent)
+        heldout_subjects = subjects[(cv_fold * n_heldout):((cv_fold + 1) * n_heldout)]
     else:
         heldout_subjects = [subjects[cv_fold % len(subjects)]]
     valid_subj_mask = reduce(or_, imap(lambda s: np.equal(ds['subject'], s), heldout_subjects))

@@ -237,5 +237,4 @@ class DeepKT(Model):
                 and the row indices
         '''
         res = self._tf_valid(idxs)
-        print res[4]
         return res[:3]

@@ -8,7 +8,7 @@ from learntools.data import Dataset
 
 
 def test_prepare_data():
-    dataset_name = 'raw_data/all_seigel.txt'
+    dataset_name = 'raw_data/all_siegle.txt'
     data = prepare_data(dataset_name)
     with open(dataset_name, 'r') as f:
         reader = csv.reader(f, delimiter='\t')
@@ -23,7 +23,7 @@ def test_prepare_data():
 
 
 def test_prepare_data_select_cond():
-    dataset_name = 'raw_data/all_seigel.txt'
+    dataset_name = 'raw_data/all_siegle.txt'
     conds = ['EyesOpen', 'EyesClosed']
     data = prepare_data(dataset_name, conds=conds)
     with open(dataset_name, 'r') as f:

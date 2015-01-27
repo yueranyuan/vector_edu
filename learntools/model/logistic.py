@@ -5,15 +5,18 @@ import numpy
 import theano
 import theano.tensor as T
 
+from learntools.model.net import NetworkComponent
 
-class LogisticRegression(object):
-    def __init__(self, n_in, n_out):
+
+class LogisticRegression(NetworkComponent):
+    def __init__(self, n_in, n_out, name='logistic'):
+        super(LogisticRegression, self).__init__(name=name)
         self.W = theano.shared(
             value=numpy.zeros(
                 (n_in, n_out),
                 dtype=theano.config.floatX
             ),
-            name='W',
+            name=self.subname(self.name),
             borrow=True
         )
         self.b = theano.shared(
@@ -21,7 +24,7 @@ class LogisticRegression(object):
                 (n_out,),
                 dtype=theano.config.floatX
             ),
-            name='b',
+            name=self.subname(self.name),
             borrow=True
         )
 

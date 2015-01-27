@@ -113,18 +113,11 @@ def align_data(task_data, eeg_data, out_name=None, sigqual_cutoff=200):
 
 
 def cv_split(ds, cv_fold=0, no_new_skills=False, percent=None, **kwargs):
-    subjects = np.unique(ds['subject'])
-
-    if percent is not None:
-        from math import ceil
-        n_heldout = ceil(len(subjects) * percent)
-        heldout_subjects = subjects[(cv_fold * n_heldout):((cv_fold + 1) * n_heldout)]
-    else:
-        heldout_subjects = [subjects[cv_fold % len(subjects)]]
-    valid_subj_mask = reduce(or_, imap(lambda s: np.equal(ds['subject'], s), heldout_subjects))
-    train_idx = np.nonzero(np.logical_not(valid_subj_mask))[0]
-    valid_idx = np.nonzero(valid_subj_mask)[0]
-    log('subjects {} are held out'.format(np.unique(ds['subject'][valid_idx])), True)
+    from learntools.data import cv_split as general_cv_split
+    train_idx, valid_idx = general_cv_split(ds,
+                                            split_on='subject',
+                                            cv_fold=cv_fold,
+                                            percent=percent)
 
     if no_new_skills:
         valid_skill_set = set(ds['skill'][valid_idx])

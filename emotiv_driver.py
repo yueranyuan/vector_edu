@@ -12,6 +12,8 @@ Options:
         The name for the log file to be generated.
     -q, --quiet
         Do not output to a log file.
+    -t, --task_number=<task_num>
+        A counter representing the queue position of the current job.
 """
 
 from __future__ import print_function, division
@@ -26,6 +28,11 @@ from learntools.libs.logger import gen_log_name, log_me, set_log_file
 from learntools.emotiv.data import prepare_data
 from learntools.data import cv_split
 import learntools.deploy.config as config
+
+import release_lock
+release_lock.release()  # TODO: use theano config instead. We have to figure out
+# what they did with the config.compile.timeout variable because that's actually
+# what we need
 
 
 @log_me()

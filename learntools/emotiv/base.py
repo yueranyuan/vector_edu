@@ -28,8 +28,8 @@ class BaseEmotiv(Model):
         ds, train_idx, valid_idx = prepared_data
         input_size = ds.get_data('eeg').shape[1]
 
-        self._xs = make_shared(ds.get_data('eeg'))
-        self._ys = make_shared(ds.get_data('condition'), to_int=True)
+        self._xs = make_shared(ds.get_data('eeg'), name='eeg')
+        self._ys = make_shared(ds.get_data('condition'), to_int=True, name='condition')
 
         self.train_batches = gen_batches_by_size(train_idx, batch_size)
         self.valid_batches = gen_batches_by_size(valid_idx, 1)
@@ -45,17 +45,22 @@ class BaseEmotiv(Model):
                          dropout=t_dropout)
 
         input_idxs = T.ivector('input_idxs')
-        pY = classifier.instance(self._xs[input_idxs])
+        classifier_input = self._xs[input_idxs]
+        classifier_input.name = 'classifier_input'
+        pY = classifier.instance(classifier_input)
         true_y = self._ys[input_idxs]
+        true_y.name = 'true_y'
 
         # 3: Create theano functions
         loss = -T.mean(T.log(pY)[T.arange(input_idxs.shape[0]), true_y])
+        loss.name = 'loss'
         subnets = [classifier]
         cost = (
             loss
             + L1_reg * sum([net.L1 for net in subnets])
             + L2_reg * sum([net.L2_sqr for net in subnets])
         )
+        cost.name = 'overall_cost'
 
         func_args = {
             'inputs': [input_idxs],

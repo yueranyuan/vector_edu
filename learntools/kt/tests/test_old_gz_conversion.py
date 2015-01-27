@@ -5,7 +5,7 @@ from itertools import compress
 import numpy as np
 
 from learntools.data import Dataset
-from test_kt import use_logger_in_test
+from learntools.libs.utils_for_test import use_logger_in_test
 
 
 def test_load():

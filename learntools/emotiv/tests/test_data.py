@@ -4,7 +4,6 @@ import csv
 import numpy as np
 
 from learntools.emotiv.data import prepare_data
-from learntools.data import Dataset
 
 
 def test_prepare_data():

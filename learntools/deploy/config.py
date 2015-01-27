@@ -23,6 +23,8 @@ def get_config(param_set='default'):
     ALL_PARAMS[param_set]
 
     def instance_var(var):
+        if type(var) in (int, long, float, str):
+            return var
         if var.scale == LOG_SCALE:
             low, high = ln(var.low), ln(var.high)  # to log scale
         else:
@@ -148,8 +150,10 @@ ALL_PARAMS['deep_config5_nocombiner_noeeg'] = combine_dict(ALL_PARAMS['deep_conf
 ALL_PARAMS['emotiv_wide_search'] = {'learning_rate': GenVar(0.001, 0.02, scale=LOG_SCALE),
                                     'L2_reg': GenVar(0.00005, 0.0003),
                                     'classifier_width': GenVar(100, 700, type=int),
-                                    'classifier_depth': GenVar(1, type=int),
-                                    'dropout_p': GenVar(0, 0.4)}
+                                    'classifier_depth': GenVar(1, 3, type=int),
+                                    'dropout_p': GenVar(0, 0.4),
+                                    'n_epochs': 4000,
+                                    'patience': 4000}  # run at least 5000 epochs no matter what
 all_param_set_keys = ALL_PARAMS.keys()
 
 if __name__ == '__main__':

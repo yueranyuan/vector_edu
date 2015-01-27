@@ -6,8 +6,7 @@ from itertools import chain
 
 from learntools.libs.logger import log_me
 from learntools.libs.auc import auc
-from learntools.model.mlp import HiddenNetwork, MLP
-from learntools.model.math import rectifier
+from learntools.model.mlp import MLP
 from learntools.model.theano_utils import make_shared
 from learntools.model import Model, gen_batches_by_size
 
@@ -15,8 +14,8 @@ from learntools.model import Model, gen_batches_by_size
 class BaseEmotiv(Model):
     @log_me('...building BaseEmotiv')
     def __init__(self, prepared_data, batch_size=30, L1_reg=0., L2_reg=0.,
-                 middle_width=100, middle_depth=1, classifier_width=500, classifier_depth=1,
-                 rng_seed=42, dropout_p=0.5, learning_rate=0.02, **kwargs):
+                 classifier_width=500, classifier_depth=1, rng_seed=42, dropout_p=0.5,
+                 learning_rate=0.02, **kwargs):
         """
         Args:
             prepared_data : (Dataset, [int], [int])
@@ -39,28 +38,19 @@ class BaseEmotiv(Model):
         rng = np.random.RandomState(rng_seed)
         t_dropout = T.scalar('dropout')
 
-        middle_layer = HiddenNetwork(
-            rng=rng,
-            n_in=input_size,
-            size=[middle_width] * middle_depth,
-            activation=rectifier,
-            dropout=t_dropout
-        )
-
         classifier = MLP(rng=rng,
-                         n_in=middle_width,
+                         n_in=input_size,
                          size=[classifier_width] * classifier_depth,
                          n_out=2,
                          dropout=t_dropout)
 
         input_idxs = T.ivector('input_idxs')
-        middle_out = middle_layer.instance(self._xs[input_idxs])
-        pY = classifier.instance(middle_out)
+        pY = classifier.instance(self._xs[input_idxs])
         true_y = self._ys[input_idxs]
 
         # 3: Create theano functions
         loss = -T.mean(T.log(pY)[T.arange(input_idxs.shape[0]), true_y])
-        subnets = [middle_layer, classifier]
+        subnets = [classifier]
         cost = (
             loss
             + L1_reg * sum([net.L1 for net in subnets])

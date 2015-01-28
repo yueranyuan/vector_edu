@@ -1,7 +1,7 @@
 from learntools.kt.kt import build_model
 from learntools.kt.data import prepare_fake_data
 from learntools.model.train import train_model
-from learntools.libs.utils_for_test import use_logger_in_test
+from learntools.libs.common_test_utils import use_logger_in_test
 
 
 @use_logger_in_test

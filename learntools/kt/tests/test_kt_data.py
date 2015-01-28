@@ -1,7 +1,7 @@
 import numpy as np
 
 from learntools.kt.data import prepare_new_data2, prepare_new_data
-from learntools.libs.utils_for_test import use_logger_in_test
+from learntools.libs.common_test_utils import use_logger_in_test
 
 
 # TODO: this test is out of date. Replace it with a better one

@@ -7,6 +7,8 @@ from learntools.libs.common_test_utils import use_logger_in_test
 from learntools.data import cv_split
 from learntools.emotiv.base import BaseEmotiv
 from learntools.data import Dataset
+import pytest
+slow = pytest.mark.slow
 
 
 def gen_small_emotiv_data():
@@ -52,6 +54,7 @@ def test_emotive_base():
 
 
 @use_logger_in_test
+@slow
 def test_emotive_base_random():
     dataset = gen_random_emotiv_data()
     train_idx, valid_idx = cv_split(dataset, percent=0.2, fold_index=0)

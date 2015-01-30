@@ -5,7 +5,7 @@ Usage:
 
 Options:
     -p <param_set>, --param_set=<param_set>
-        The name of the parameter set to use [default: emotiv_wide_search].
+        The name of the parameter set to use [default: emotiv_wide_search_no_drop].
     -f <file>, --file=<file>
         The data file to use.
     -o <file>, --out=<file>

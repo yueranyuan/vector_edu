@@ -153,8 +153,11 @@ ALL_PARAMS['emotiv_wide_search'] = {'learning_rate': GenVar(0.001, 0.02, scale=L
                                     'classifier_depth': GenVar(1, 3, type=int),
                                     'dropout_p': GenVar(0, 0.4),
                                     'n_epochs': 4000,
-                                    'patience': 4000}  # run at least 5000 epochs no matter what
+                                    'patience': 4000}
+ALL_PARAMS['emotiv_update1'] = {'dropout_p': 0.,
+                                'n_epochs': 50000,
+                                'patience': 4000,
+                                'patience_increase': 2000}
+ALL_PARAMS['emotiv_wide_search2'] = combine_dict(ALL_PARAMS['emotiv_wide_search'],
+                                                 ALL_PARAMS['emotiv_update1'])
 all_param_set_keys = ALL_PARAMS.keys()
-
-if __name__ == '__main__':
-    print get_config('t1v1')

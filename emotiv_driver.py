@@ -64,7 +64,7 @@ def convert_raw(directory, output):
     subjects = {}
     headers = [
         ('subject', Dataset.STR),
-        ('eeg_sequence', Dataset.SEQ), # TODO: actually implement Column for this
+        ('eeg_sequence', Dataset.SEQFLOAT), # TODO: actually implement Column for this
         ('condition', Dataset.ENUM),
         ('time', Dataset.TIME),
     ]

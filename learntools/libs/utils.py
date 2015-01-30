@@ -2,7 +2,7 @@ import operator
 from itertools import chain, imap
 
 import numpy
-
+import scipy.io
 
 # I should probably split these into separate files but it would kind of be a
 # waste of a files right now since they'll probably all be in separate ones
@@ -81,3 +81,38 @@ def iget_column(data, i):
 
 def get_column(data, i):
     return [d[i] for d in data]
+
+
+# from http://stackoverflow.com/questions/7008608
+def loadmat(filename):
+    '''
+    this function should be called instead of direct spio.loadmat
+    as it cures the problem of not properly recovering python dictionaries
+    from mat files. It calls the function check keys to cure all entries
+    which are still mat-objects
+    '''
+    data = scipy.io.loadmat(filename, struct_as_record=False, squeeze_me=True)
+    return _check_keys(data)
+
+def _check_keys(dict):
+    '''
+    checks if entries in dictionary are mat-objects. If yes
+    todict is called to change them to nested dictionaries
+    '''
+    for key in dict:
+        if isinstance(dict[key], scipy.io.matlab.mio5_params.mat_struct):
+            dict[key] = _todict(dict[key])
+    return dict        
+
+def _todict(matobj):
+    '''
+    A recursive function which constructs from matobjects nested dictionaries
+    '''
+    dict = {}
+    for strg in matobj._fieldnames:
+        elem = matobj.__dict__[strg]
+        if isinstance(elem, scipy.io.matlab.mio5_params.mat_struct):
+            dict[strg] = _todict(elem)
+        else:
+            dict[strg] = elem
+    return dict

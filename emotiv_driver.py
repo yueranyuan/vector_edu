@@ -1,7 +1,11 @@
-"""Emotiv driver. Accepts raw data as a text file.
+"""Emotiv driver.
+run accepts processed data as a text file, trains and validates the model.
+convert_raw accepts raw data from a directory of .mat files and pickles them
+into a Dataset object stored in the output file.
 
 Usage:
-    emotiv_driver.py [options]
+    emotiv_driver.py run [options]
+    emotiv_driver.py convert_raw <directory> <output>
 
 Options:
     -p <param_set>, --param_set=<param_set>
@@ -18,7 +22,10 @@ Options:
 
 from __future__ import print_function, division
 
+from datetime import datetime
 import os
+import glob
+import pickle
 import warnings
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 
@@ -26,8 +33,10 @@ from docopt import docopt
 
 from learntools.libs.logger import gen_log_name, log_me, set_log_file
 from learntools.emotiv.data import prepare_data
-from learntools.data import cv_split
+from learntools.data import cv_split, Dataset
+from learntools.data.dataset import LISTEN_TIME_FORMAT
 import learntools.deploy.config as config
+from learntools.libs.utils import loadmat
 
 import release_lock
 release_lock.release()  # TODO: use theano config instead. We have to figure out
@@ -49,6 +58,41 @@ def run(task_num=0, model_type=0, **kwargs):
     model.train_full(**kwargs)
 
 
+def convert_raw(directory, output):
+    raw_files = glob.glob(os.path.join(directory, '*.mat'))
+
+    subjects = {}
+    headers = [
+        ('subject', Dataset.STR),
+        ('eeg_sequence', Dataset.SEQ), # TODO: actually implement Column for this
+        ('condition', Dataset.ENUM),
+        ('time', Dataset.TIME),
+    ]
+
+    n_rows = len(raw_files)
+    ds = Dataset(headers, n_rows)
+
+    for i, raw_filename in enumerate(raw_files):
+        print(raw_filename)
+        try:
+            raw_file = loadmat(raw_filename)
+            filename, extension = os.path.splitext(os.path.basename(raw_filename))
+            p = raw_file['p']
+            eeg_sequence = p['EEG']
+            condition = p['OtherData'][2, :]
+            dt = datetime(*tuple(p['hdr']['orig']['T0']))
+            timestr = dt.strftime(LISTEN_TIME_FORMAT)
+
+            ds[i] = (filename, eeg_sequence, condition, timestr)
+        except Exception as e:
+            print(e)
+            return # fail hard
+
+    print(len(subjects), "files loaded")
+
+    pickle.dump(ds.to_pickle(), output)
+
+
 if __name__ == '__main__':
     default_dataset = "raw_data/all_siegle.txt"
 
@@ -67,5 +111,10 @@ if __name__ == '__main__':
         params['dataset_name'] = default_dataset
 
     params['conds'] = ['EyesClosed', 'EyesOpen']
-    run(0, **params)
+
+    if args['run']:
+        run(0, **params)
+    elif args['convert_raw']:
+        convert_raw(args['<directory>'], args['<output>'])
+    
     print("Finished")

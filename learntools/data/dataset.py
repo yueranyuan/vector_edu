@@ -5,6 +5,7 @@ from time import mktime
 from datetime import datetime
 from itertools import imap, izip, compress
 from operator import or_
+from functools import wraps
 
 import numpy as np
 
@@ -143,6 +144,22 @@ class MatColumn(Column):
         self.dtype = dtype
         self._data = None
 
+    def has_data(self):
+        return self._data is not None
+
+    def _requires_data(func):
+        @wraps(func)
+        def wrapper(_self, *args, **kwargs):
+            if not _self.has_data():
+                raise Exception("Matrix column '{}' not initialized".format(_self.name))
+            return func(_self, *args, **kwargs)
+        return wrapper
+
+    @property
+    @_requires_data
+    def width(self):
+        return self._data.shape[1]
+
     def __setitem__(self, key, value):
         if not isinstance(value, (np.ndarray)):
             value = np.array(value)
@@ -152,9 +169,8 @@ class MatColumn(Column):
             self._data = np.zeros((self.n_rows, n_cols), dtype=self.dtype)
         return super(MatColumn, self).__setitem__(key, value)
 
+    @_requires_data
     def __getitem__(self, key):
-        if self._data is None:
-            raise Exception("Matrix column '{}' not initialized".format(self.name))
         return super(MatColumn, self).__getitem__(key)
 
 

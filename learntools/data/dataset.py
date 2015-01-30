@@ -1,5 +1,5 @@
 from __future__ import division
-from math import ceil
+from math import ceil, floor
 import csv
 from time import mktime
 from datetime import datetime
@@ -507,7 +507,8 @@ def load(*args, **kwargs):
 def _cv_split_helper(splits, fold_index=0, percent=None):
     if percent is not None:
         n_heldout = int(ceil(len(splits) * percent))
-        heldout = splits[(fold_index * n_heldout):((fold_index + 1) * n_heldout)]
+        _fold_index = int(fold_index % floor(1. / percent))
+        heldout = splits[(_fold_index * n_heldout):((_fold_index + 1) * n_heldout)]
     else:
         heldout = [splits[fold_index % len(splits)]]
     return heldout
@@ -518,7 +519,6 @@ def cv_split(ds, fold_index=0, split_on=None, percent=None, **kwargs):
     if split_on:
         splits = np.unique(ds[split_on])
         heldout = _cv_split_helper(splits, fold_index=fold_index, percent=percent)
-
         mask = reduce(or_, imap(lambda s: np.equal(ds[split_on], s), heldout))
         train_idx = np.nonzero(np.logical_not(mask))[0]
         valid_idx = np.nonzero(mask)[0]

@@ -24,6 +24,7 @@ from __future__ import print_function, division
 
 from datetime import datetime
 import os
+import traceback
 import glob
 import pickle
 import warnings
@@ -64,8 +65,8 @@ def convert_raw(directory, output):
     subjects = {}
     headers = [
         ('subject', Dataset.STR),
-        ('eeg_sequence', Dataset.SEQFLOAT), # TODO: actually implement Column for this
-        ('condition', Dataset.ENUM),
+        ('eeg_sequence', Dataset.SEQFLOAT),
+        ('condition', Dataset.SEQINT), # TODO is this the column type we really want?
         ('time', Dataset.TIME),
     ]
 
@@ -85,12 +86,13 @@ def convert_raw(directory, output):
 
             ds[i] = (filename, eeg_sequence, condition, timestr)
         except Exception as e:
-            print(e)
+            traceback.print_exc()
             return # fail hard
 
-    print(len(subjects), "files loaded")
-
-    pickle.dump(ds.to_pickle(), output)
+    print(len(raw_files), "files loaded")
+    
+    with open(output, 'w') as f:
+        pickle.dump(ds.to_pickle(), f)
 
 
 if __name__ == '__main__':

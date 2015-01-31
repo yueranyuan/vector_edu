@@ -5,15 +5,15 @@ Usage:
 
 Options:
     -p <param_set>, --param_set=<param_set>
-        The name of the parameter set to use [default: emotiv_wide_search].
+        The name of the parameter set to use [default: emotiv_wide_search2].
     -f <file>, --file=<file>
         The data file to use.
     -o <file>, --out=<file>
         The name for the log file to be generated.
     -q, --quiet
         Do not output to a log file.
-    -t, --task_number=<task_num>
-        A counter representing the queue position of the current job.
+    -t, --task_number=<int>
+        A counter representing the queue position of the current job. [default: 0].
 """
 
 from __future__ import print_function, division
@@ -67,5 +67,5 @@ if __name__ == '__main__':
         params['dataset_name'] = default_dataset
 
     params['conds'] = ['EyesClosed', 'EyesOpen']
-    run(0, **params)
+    run(task_num=int(args['--task_number']), **params)
     print("Finished")

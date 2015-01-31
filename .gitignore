@@ -8,3 +8,4 @@
 /temp_store/
 /temp.py
 *.egg-info/
+/.idea/

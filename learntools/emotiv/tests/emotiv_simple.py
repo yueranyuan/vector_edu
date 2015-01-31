@@ -1,21 +1,18 @@
 import theano
 import theano.tensor as T
-import numpy as np
 
 from itertools import chain
 
 from learntools.libs.logger import log_me
 from learntools.libs.auc import auc
-from learntools.model.mlp import MLP
+from learntools.model.logistic import LogisticRegression
 from learntools.model.theano_utils import make_shared
 from learntools.model import Model, gen_batches_by_size
 
 
-class BaseEmotiv(Model):
-    @log_me('...building BaseEmotiv')
-    def __init__(self, prepared_data, batch_size=30, L1_reg=0., L2_reg=0.,
-                 classifier_width=500, classifier_depth=1, rng_seed=42, dropout_p=0.5,
-                 learning_rate=0.02, **kwargs):
+class SimpleEmotiv(Model):
+    @log_me('...building SimpleEmotiv')
+    def __init__(self, prepared_data, batch_size=30, learning_rate=0.02, **kwargs):
         """
         Args:
             prepared_data : (Dataset, [int], [int])
@@ -35,14 +32,8 @@ class BaseEmotiv(Model):
         self.valid_batches = gen_batches_by_size(valid_idx, 1)
 
         # 2: Connect the model
-        rng = np.random.RandomState(rng_seed)
-        t_dropout = T.scalar('dropout')
-
-        classifier = MLP(rng=rng,
-                         n_in=input_size,
-                         size=[classifier_width] * classifier_depth,
-                         n_out=2,
-                         dropout=t_dropout)
+        classifier = LogisticRegression(n_in=input_size,
+                                        n_out=2)
 
         input_idxs = T.ivector('input_idxs')
         classifier_input = self._xs[input_idxs]
@@ -55,11 +46,7 @@ class BaseEmotiv(Model):
         loss = -T.mean(T.log(pY)[T.arange(input_idxs.shape[0]), true_y])
         loss.name = 'loss'
         subnets = [classifier]
-        cost = (
-            loss
-            + L1_reg * sum([net.L1 for net in subnets])
-            + L2_reg * sum([net.L2_sqr for net in subnets])
-        )
+        cost = loss
         cost.name = 'overall_cost'
 
         func_args = {
@@ -71,10 +58,9 @@ class BaseEmotiv(Model):
         update_parameters = [(param, param - learning_rate * T.grad(cost, param))
                              for param in params]
 
-        self._tf_valid = theano.function(givens={t_dropout: 0.}, **func_args)
+        self._tf_valid = theano.function(**func_args)
         self._tf_train = theano.function(
             updates=update_parameters,
-            givens={t_dropout: dropout_p},
             **func_args)
 
     def evaluate(self, idxs, pred):

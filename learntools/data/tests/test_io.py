@@ -4,7 +4,6 @@ import numpy as np
 import pytest
 
 from learntools.data.dataset import Column, TimeColumn, EnumColumn, MatColumn, Dataset
-from test_data import assert_sample_data
 
 
 # match by getting a single truth value (this is complicated by the fact that

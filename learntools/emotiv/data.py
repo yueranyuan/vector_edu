@@ -2,7 +2,7 @@ import itertools
 from itertools import izip
 
 from learntools.data import Dataset
-from learntools.libs.utils import normalize_table, loadmat
+from learntools.libs.utils import normalize_table
 
 
 def prepare_data(dataset_name, conds=None, **kwargs):

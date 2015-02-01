@@ -26,7 +26,7 @@ from datetime import datetime
 import os
 import traceback
 import glob
-import pickle
+import cPickle as pickle
 import warnings
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 
@@ -91,8 +91,8 @@ def convert_raw(directory, output):
 
     print(len(raw_files), "files loaded")
     
-    with open(output, 'w') as f:
-        pickle.dump(ds.to_pickle(), f)
+    with open(output, 'wb') as f:
+        pickle.dump(ds.to_pickle(), f, protocol=pickle.HIGHEST_PROTOCOL)
 
 
 if __name__ == '__main__':

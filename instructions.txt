@@ -1,0 +1,6 @@
+WORKS:
+python kt_driver.py -p deep_config5
+
+DOESN'T WORK:
+python kt_driver.py -p kt_config5 -> 73%
+python kt_driver.py -p lrkt_config5 -> 73%

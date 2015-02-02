@@ -12,6 +12,7 @@ from learntools.libs.utils import normalize_table
 
 def convert_task_from_xls(fname, outname=None):
     headers = (('subject', Dataset.ENUM),
+               ('cond', Dataset.INT),
                ('stim', Dataset.ENUM),
                ('block', Dataset.ENUM),
                ('start_time', Dataset.TIME),
@@ -26,7 +27,7 @@ def convert_task_from_xls(fname, outname=None):
 
 
 def convert_eeg_from_xls(fname, outname=None, cutoffs=(0.5, 4.0, 7.0, 12.0, 30.0)):
-    from eeg import signal_to_freq_bins
+    from learntools.libs.eeg import signal_to_freq_bins
     headers = (('sigqual', Dataset.INT),
                ('subject', Dataset.ENUM),
                ('start_time', Dataset.TIME),
@@ -38,7 +39,9 @@ def convert_eeg_from_xls(fname, outname=None, cutoffs=(0.5, 4.0, 7.0, 12.0, 30.0
     for i, eeg_str in enumerate(data['rawwave']):
         eeg = [float(d) for d in eeg_str.strip().split(' ')]
         eeg_freq[i] = tuple(signal_to_freq_bins(eeg, cutoffs=cutoffs, sampling_rate=512))
-    data.set_column('eeg', Dataset.MATFLOAT, data=eeg_freq)
+    data.set_column('eeg', Dataset.MATFLOAT)
+    for i, eeg in enumerate(eeg_freq):
+        data.get_column('eeg')[i] = eeg
     if outname is not None:
         with gzip.open(outname, 'w') as f:
             cPickle.dump(data.to_pickle(), f)
@@ -112,19 +115,12 @@ def align_data(task_data, eeg_data, out_name=None, sigqual_cutoff=200):
         return task_data
 
 
-def cv_split(ds, cv_fold=0, no_new_skills=False, percent=None, **kwargs):
-    subjects = np.unique(ds['subject'])
-
-    if percent is not None:
-        from math import ceil
-        n_heldout = ceil(len(subjects) * percent)
-        heldout_subjects = subjects[(cv_fold * n_heldout):((cv_fold + 1) * n_heldout)]
-    else:
-        heldout_subjects = [subjects[cv_fold % len(subjects)]]
-    valid_subj_mask = reduce(or_, imap(lambda s: np.equal(ds['subject'], s), heldout_subjects))
-    train_idx = np.nonzero(np.logical_not(valid_subj_mask))[0]
-    valid_idx = np.nonzero(valid_subj_mask)[0]
-    log('subjects {} are held out'.format(np.unique(ds['subject'][valid_idx])), True)
+def cv_split(ds, fold_index=0, no_new_skills=False, percent=None, **kwargs):
+    from learntools.data import cv_split as general_cv_split
+    train_idx, valid_idx = general_cv_split(ds,
+                                            split_on='subject',
+                                            fold_index=fold_index,
+                                            percent=percent)
 
     if no_new_skills:
         valid_skill_set = set(ds['skill'][valid_idx])

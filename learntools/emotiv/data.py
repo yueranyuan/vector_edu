@@ -5,8 +5,8 @@ from learntools.data import Dataset
 from learntools.libs.utils import normalize_table
 
 
-def prepare_data(dataset_name, conds=None):
-    """load seigel data into a Dataset
+def prepare_data(dataset_name, conds=None, **kwargs):
+    """load siegle data into a Dataset
 
     Args:
         conds (string[], optional): list of conditions that we want the dataset to contain

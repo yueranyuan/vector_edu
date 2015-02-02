@@ -1,6 +1,8 @@
-from learntools.kt.deepkt import build_model
-from learntools.kt.tests.test_kt import smoke_build_model
+from learntools.kt.deepkt import DeepKT
+from learntools.kt.tests.test_kt import smoke_kt_model
+import pytest
+slow = pytest.mark.slow
 
-
+@slow
 def test_deepkt_smoke():
-    smoke_build_model(build_model)
+    smoke_kt_model(DeepKT)

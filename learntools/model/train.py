@@ -8,7 +8,8 @@ from learntools.libs.utils import transpose
 @log_me('... training')
 def train_model(model, n_epochs=500, patience=50,
                 patience_increase=40, improvement_threshold=1,
-                validation_frequency=5, learning_rate=0.02, **kwargs):
+                validation_frequency=5, learning_rate=0.02,
+                rng_seed=1023, **kwargs):
     best_valid_accuracy = 0
     best_epoch = 0
 
@@ -18,6 +19,10 @@ def train_model(model, n_epochs=500, patience=50,
     valid_batches = model.valid_batches
     train_eval = model.train_evaluate
     valid_eval = model.valid_evaluate
+
+    # batch shuffling should be deterministic
+    prev_rng_state = random.getstate()
+    random.seed(rng_seed)
 
     def run_batches(model, batches, f_eval, shuffle=True, **kwargs):
         batch_order = range(len(batches))
@@ -50,4 +55,8 @@ def train_model(model, n_epochs=500, patience=50,
 
             if patience <= epoch:
                 break
+
+    # restore rng state
+    random.setstate(prev_rng_state)
+
     return best_valid_accuracy, best_epoch

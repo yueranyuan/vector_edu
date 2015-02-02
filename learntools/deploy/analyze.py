@@ -4,14 +4,13 @@ import os
 from itertools import ifilter, imap, chain, compress, tee, dropwhile
 from collections import defaultdict
 from datetime import datetime
-from math import sqrt, ceil
 
 from scipy import stats
 import numpy as np
-import matplotlib.pyplot as plt
 
 from learntools.libs import s3
 from learntools.libs.utils import transpose, max_idx
+from learntools.libs.plottools import grid_plot
 
 
 # not using iterators in this code because log files are small
@@ -131,20 +130,10 @@ def analyze(bucket=None, subfolder=None, cache_dir=None, start_time=None,
         print o
 
     plot_args = [arg for arg in arg_all.keys() if max(arg_all[arg]) != min(arg_all[arg])]
-    h = int(sqrt(len(plot_args)))
-    w = ceil(len(plot_args) / h)
-
-    for i, arg in enumerate(plot_args):
-        xs = arg_all[arg]
-        min_, max_ = min(xs), max(xs)
-        margin = (max_ - min_) * 0.1
-        plt.subplot(h, w, i + 1)
-        plt.scatter(xs, error_all)
-        plt.xlabel(arg)
-        plt.ylabel('error')
-        plt.xlim(min_ - margin, max_ + margin)
-    plt.show()
-
+    grid_plot(xs=[arg_all[arg] for arg in plot_args],
+              ys=error_all,
+              x_labels=plot_args,
+              y_labels='error')
 
 if __name__ == '__main__':
     start_time = datetime(2015, 1, 05, 18, 00)

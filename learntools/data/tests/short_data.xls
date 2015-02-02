@@ -1,0 +1,6 @@
+machine	subject	start_time	end_time	stim	block	correct	latency	cond	rawwave	sigqual
+machine1	subject1	2013-10-15 09:15:51.484	2013-10-15 09:15:51.584000	THE	The New Deal	1	\N	1	10 20 30 40 50	0
+machine1	subject1	2013-10-15 09:15:51.594	2013-10-15 09:15:51.874000	NEW	The New Deal	1	0.0100	2	20 30 40 50 60	0
+machine1	subject2	2013-10-15 09:35:40.023	2013-10-15 09:35:40.633000	IS	Is Dad sad?	1	\N	1	30 40 50 60 70	0
+machine1	subject2	2013-10-15 09:35:40.643	2013-10-15 09:35:41.293000	DAD	Is Dad sad?	1	0.0100	2	10 20 30 40 50	200
+machine1	subject2	2013-10-15 09:36:17.173	2013-10-15 09:36:17.783000	THE	Tad is at the mat.	1	0.0100	2	20 30 40 50 60	50

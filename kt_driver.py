@@ -20,10 +20,10 @@ def run(task_num, model_type=0, **kwargs):
         raise Exception("model type is not valid")
 
     prepared_data = prepare_data(**kwargs)
-    train_idx, valid_idx = cv_split(prepared_data, **kwargs)
+    train_idx, valid_idx = cv_split(prepared_data, fold_index=task_num, **kwargs)
 
     model = SelectedModel((prepared_data, train_idx, valid_idx), **kwargs)
-    model.train_full()
+    model.train_full(**kwargs)
 
 
 if __name__ == '__main__':
@@ -33,11 +33,11 @@ if __name__ == '__main__':
     parser.add_argument('-p', dest='param_set', type=str, default='default',
                         choices=config.all_param_set_keys,
                         help='the name of the parameter set that we want to use')
-    parser.add_argument('--f', dest='file', type=str, default=None,
+    parser.add_argument('-f', dest='file', type=str, default=None,
                         help='the data file to use')
     parser.add_argument('-o', dest='outname', type=str, default=gen_log_name(),
                         help='name for the log file to be generated')
-    parser.add_argument('-tn', dest='task_num', type=int, default=0,
+    parser.add_argument('-t', dest='task_num', type=int, default=0,
                         help='a way to separate different runs of the same parameter-set')
     args = parser.parse_args()
 

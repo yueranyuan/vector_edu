@@ -1,2 +1,2 @@
 from word import gen_word_matrix
-from dataset import Dataset
+from dataset import Dataset, cv_split

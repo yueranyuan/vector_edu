@@ -141,7 +141,7 @@ def run_experiment(driver, param_set, task_num=0, **kwargs):
             to the repo root.
     '''
     log_name = gen_log_name()
-    run('python {driver} -p {param_set} -o {log_name} -tn {task_num}'.format(
+    run('python {driver} -p {param_set} -o {log_name} -t {task_num}'.format(
         **locals()))
     return log_name
 

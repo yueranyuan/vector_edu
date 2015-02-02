@@ -13,9 +13,9 @@ def run(task_num, model_type=0, **kwargs):
     if model_type == 0:
         from learntools.kt.deepkt import DeepKT as SelectedModel
     elif model_type == 1:
-        from learntools.kt.lrkt import BLRmodel as SelectedModel # TODO: UNBREAK
+        from learntools.kt.lrkt import build_model  # TODO: UNBREAK
     elif model_type == 2:
-        from learntools.kt.kt2 import Bmodel as SelectedModel # TODO: UNBREAK
+        from learntools.kt.kt2 import build_model  # TODO: UNBREAK
     else:
         raise Exception("model type is not valid")
 

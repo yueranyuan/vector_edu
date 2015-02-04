@@ -16,3 +16,7 @@ def release():
     else:
         # for some reason this is only a problem on windows
         pass
+
+
+if __name__ == "__main__":
+    release()

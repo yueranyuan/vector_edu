@@ -1,3 +1,4 @@
+from __future__ import division
 import theano
 import theano.tensor as T
 import numpy as np
@@ -79,7 +80,9 @@ class BaseEmotiv(Model):
 
     def evaluate(self, idxs, pred):
         y = self._ys.owner.inputs[0].get_value(borrow=True)[idxs]
-        return auc(y[:len(pred)], pred, pos_label=1)
+        predicted_class = np.zeros(len(pred))
+        predicted_class[np.greater_equal(pred, 0)] = 1
+        return sum(np.equal(predicted_class, y)) / len(pred)
 
     def validate(self, idxs, **kwargs):
         return self._tf_valid(idxs)

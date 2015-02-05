@@ -1,6 +1,8 @@
+import os
 import datetime
 from random import randint
 import inspect
+import functools
 
 
 __LOG_FILE__ = None
@@ -50,6 +52,36 @@ def gen_log_name(uid=None):
     return '{time}_{uid}.log'.format(
         time=datetime.datetime.now().strftime("%Y_%m_%d_%H_%M_%S"),
         uid=uid)
+
+
+class _TempLog(object):
+    """ Context that creates a temporary log and deletes it after the context exits
+    """
+    def __init__(self, log_name):
+        self.log_name = log_name
+
+    def __enter__(self):
+        set_log_file(self.log_name)
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        try:
+            os.remove(self.log_name)
+        except WindowsError:
+            if os.path.exists(self.log_name):
+                raise
+        return False
+
+
+def temp_log(func):
+    """ Decorator that creates a temporary log and deletes it after the function exits.
+
+    The log name is of the format templog_{random_number}.log
+    """
+    @functools.wraps(func)
+    def decorated_func(*args, **kwargs):
+        with _TempLog("templog_{}.log".format(randint(0, 99999))):
+            return func(*args, **kwargs)
+    return decorated_func
 
 
 # the following two functions are copied from http://wordaligned.org/articles/echo

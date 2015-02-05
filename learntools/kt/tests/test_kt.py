@@ -1,9 +1,9 @@
 from learntools.kt.data import prepare_data, cv_split
-from learntools.libs.common_test_utils import use_logger_in_test
+from learntools.libs.logger import temp_log
 import pytest
 slow = pytest.mark.slow
 
-@use_logger_in_test
+@temp_log
 def smoke_kt_model(model_cls):
     data = prepare_data(dataset_name='data/data5.gz', top_n=14)
     train_idx, valid_idx = cv_split(data, fold_index=0)

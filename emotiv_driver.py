@@ -42,7 +42,7 @@ def run(task_num=0, model_type=0, **kwargs):
     else:
         raise Exception("model type is not valid")
     dataset = prepare_data(**kwargs)
-    train_idx, valid_idx = cv_split(dataset, percent=0.1, fold_index=task_num)
+    train_idx, valid_idx = cv_split(dataset, percent=0.5, fold_index=task_num)
     prepared_data = (dataset, train_idx, valid_idx)
 
     model = SelectedModel(prepared_data, **kwargs)

@@ -146,7 +146,7 @@ def analyze_recent(seconds=0, minutes=0, hours=0, days=0, delta=None, **kwargs):
 
 
 def analyze(local_dir=None, bucket=None, subfolder=None, start_time=None,
-            print_individual_trials=False, create_plot=True):
+            print_individual_trials=False, create_plot=True, most_recent_n=None):
     """analyze log files
 
     Args:
@@ -173,6 +173,11 @@ def analyze(local_dir=None, bucket=None, subfolder=None, start_time=None,
 
     # sort logs in chronological order
     chronological = sorted(contents.iteritems(), key=lambda (name, _): name)
+
+    # only analyze the most recent n
+    if most_recent_n is not None:
+        most_recent_n = min(len(chronological), most_recent_n)
+        chronological = chronological[-most_recent_n:]
 
     # don't analyze any logs before start_time
     if start_time:
@@ -271,4 +276,4 @@ if __name__ == '__main__':
     # analyze(bucket='cmu-data', subfolder='vectoredu/results', cache_dir='results', start_time=start_time)
     # analyze(cache_dir='results', start_time=start_time)
     # analyze_recent(days=2, local_dir='.')
-    analyze(start_time=datetime(2015, 1, 31, 19, 00), local_dir='.')
+    analyze(start_time=datetime(2015, 1, 31, 19, 00), local_dir='.', most_recent_n=20)

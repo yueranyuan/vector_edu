@@ -9,14 +9,14 @@ from learntools.model.net import NetworkComponent
 
 
 class LogisticRegression(NetworkComponent):
-    def __init__(self, n_in, n_out, name='logistic'):
+    def __init__(self, n_in, n_out, activation=T.nnet.softmax, name='logistic'):
         super(LogisticRegression, self).__init__(name=name)
         self.W = theano.shared(
             value=numpy.zeros(
                 (n_in, n_out),
                 dtype=theano.config.floatX
             ),
-            name=self.subname(self.name),
+            name=self.subname('W'),
             borrow=True
         )
         self.b = theano.shared(
@@ -24,9 +24,10 @@ class LogisticRegression(NetworkComponent):
                 (n_out,),
                 dtype=theano.config.floatX
             ),
-            name=self.subname(self.name),
+            name=self.subname('b'),
             borrow=True
         )
+        self.activation = activation
 
         self.params = [self.W, self.b]
 
@@ -34,4 +35,6 @@ class LogisticRegression(NetworkComponent):
         self.L2_sqr = (self.W ** 2).sum()
 
     def instance(self, x, **kwargs):
-        return T.nnet.softmax(T.dot(x, self.W) + self.b)
+        lin_output = T.dot(x, self.W) + self.b
+        lin_output.name = self.subname('lin_output')
+        return self.activation(lin_output)

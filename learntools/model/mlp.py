@@ -8,7 +8,7 @@ from learntools.model.net import NetworkComponent, HiddenNetwork
 
 
 class MLP(NetworkComponent):
-    def __init__(self, rng, n_in, size, n_out, activation=rectifier,
+    def __init__(self, rng, n_in, size, n_out, activation=rectifier, output_activation=T.nnet.softmax,
                  dropout=None, name='MLP'):
         super(MLP, self).__init__(name=name)
         self.dropout = T.scalar('dropout') if dropout is None else dropout
@@ -18,13 +18,14 @@ class MLP(NetworkComponent):
             size=size,
             activation=activation,
             dropout=self.dropout,
-            name=self.subname('hidden')
+            name=self.subname('hiddenlayer')
         )
 
         self.logRegressionLayer = LogisticRegression(
             n_in=size[-1],
             n_out=n_out,
-            name=self.subname('softmax')
+            activation=output_activation,
+            name=self.subname('outputlayer')
         )
         self.components = [self.hidden, self.logRegressionLayer]
 

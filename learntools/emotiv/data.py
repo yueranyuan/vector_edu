@@ -176,7 +176,7 @@ def segment_raw_data(dataset_name, conds=None, duration=10, sample_rate=128, **k
 
         # The beginning/ending of a recording is denoted by 132 and 136, respectively;
         # only use the sequence if they exist
-        if CONDITIONS['BEGIN'] not in segment_cond and CONDITIONS['END'] not in segment_cond:
+        if CONDITIONS['BEGIN'] not in segment_cond or CONDITIONS['END'] not in segment_cond:
             print("begin and end not in eeg sequence", subject)
             continue
 

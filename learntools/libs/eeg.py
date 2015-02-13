@@ -7,7 +7,8 @@ import math
 
 def signal_to_freq_bins(y, cutoffs, sampling_rate=512.0):
     Y = fft(y)
-    f = 2 * abs(Y[0:len(y) / 10])
+    f = abs(Y)
+    cutoffs = [c * sampling_rate / len(y) for c in cutoffs]
     # need a vectorlike zero element for bins to have the same dimensions
     bins = [reduce(add, f[math.ceil(low):math.floor(high)], np.zeros(f.shape[1:])) for low, high
             in izip(cutoffs, islice(cutoffs, 1, None))]

@@ -1,11 +1,10 @@
-from itertools import imap, chain, groupby, islice, ifilter
+from itertools import imap, chain, islice, ifilter
 
 import theano
 import theano.tensor as T
 import numpy as np
 
 from learntools.libs.utils import idx_to_mask, mask_to_idx
-from learntools.data import gen_word_matrix
 from learntools.libs.logger import log_me
 from learntools.libs.auc import auc
 from learntools.model.mlp import HiddenNetwork, MLP
@@ -56,8 +55,8 @@ class DeepKT(Model):
         valid_batches (int[][]): validation batches. See train_batches
     '''
     @log_me('...building deepkt')
-    def __init__(self, prepared_data, L1_reg=0., L2_reg=0., dropout_p=0., learning_rate=0.02,
-                 skill_vector_len=100, combiner_depth=1, combiner_width=200,
+    def __init__(self, prepared_data, skill_matrix, L1_reg=0., L2_reg=0., dropout_p=0., learning_rate=0.02,
+                 combiner_depth=1, combiner_width=200,
                  main_net_depth=1, main_net_width=500, previous_eeg_on=1,
                  current_eeg_on=1, combiner_on=1, mutable_skill=1, valid_percentage=0.8,
                  batch_size=30, **kwargs):
@@ -95,11 +94,10 @@ class DeepKT(Model):
         # TODO: make the above mentioned diagram
 
         # make a skill matrix containing skill vectors for each skill
-        skill_matrix = make_shared(gen_word_matrix(ds.get_data('skill'),
-                                                   ds['skill'].enum_pairs,
-                                                   vector_length=skill_vector_len))
+        skill_matrix_width = skill_matrix.shape[1]
+        skill_matrix = make_shared(skill_matrix, name='skill_matrix')
 
-				# data preloaded into network
+        # data preloaded into network
         skill_x = make_shared(skill_x, to_int=True, name='skill')
         correct_y = make_shared(correct_y, to_int=True, name='correct')
         eeg_full = make_shared(eeg_full, name='eeg')
@@ -109,7 +107,7 @@ class DeepKT(Model):
         skill_accumulator = make_shared(np.zeros((N, combiner_width)), name='skill_accumulator')
 
         # setup combiner component
-        combiner_n_in = combiner_width + skill_vector_len + 1
+        combiner_n_in = combiner_width + skill_matrix_width + 1
         if previous_eeg_on:
             combiner_n_in += eeg_vector_len
         combiner = HiddenNetwork(
@@ -121,7 +119,7 @@ class DeepKT(Model):
         )
 
         # setup main network component
-        classifier_n_in = skill_vector_len
+        classifier_n_in = skill_matrix_width
         if combiner_on:
             classifier_n_in += combiner_width
         if current_eeg_on:

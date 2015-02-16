@@ -86,7 +86,7 @@ class HiddenLayer(NetworkComponent):
     def __init__(self, rng, n_in, n_out=None, W=None, b=None,
                  activation=rectifier, dropout=None, name='hiddenlayer'):
         super(HiddenLayer, self).__init__(name=name)
-        self.dropout = T.scalar('dropout') if dropout is None else dropout
+        self.dropout = 0. if dropout is None else dropout
         self.srng = theano.tensor.shared_randomstreams.RandomStreams(
             rng.randint(999999))
 
@@ -127,16 +127,17 @@ class HiddenLayer(NetworkComponent):
 
 
 class HiddenNetwork(NetworkComponent):
-    def __init__(self, n_in, size, input=None, name='hiddennetwork', **kwargs):
+    def __init__(self, rng, n_in, size, input=None, name='hiddennetwork', **kwargs):
         super(HiddenNetwork, self).__init__(name=name)
         self.name = name
         self.layers = []
         for i, (n_in_, n_out_) in enumerate(zip([n_in] + size, size)):
-            self.layers.append(HiddenLayer(n_in=n_in_,
+            self.layers.append(HiddenLayer(rng,
+                                           n_in=n_in_,
                                            n_out=n_out_,
                                            name=self.subname('layer{i}'.format(i=i)),
                                            **kwargs))
-        self.n_out = n_out_
+        self.n_out = n_out_ if self.layers else n_in
         self.components = self.layers
 
     def instance(self, x, **kwargs):

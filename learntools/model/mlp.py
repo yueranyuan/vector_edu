@@ -22,7 +22,7 @@ class MLP(NetworkComponent):
         )
 
         self.logRegressionLayer = LogisticRegression(
-            n_in=size[-1],
+            n_in=self.hidden.n_out,
             n_out=n_out,
             name=self.subname('softmax')
         )

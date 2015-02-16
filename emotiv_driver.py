@@ -8,6 +8,7 @@ Usage:
     emotiv_driver.py run_raw [options]
     emotiv_driver.py convert_raw <directory> <output>
     emotiv_driver.py run_subject [options]
+    emotiv_driver.py run_autoencoder [options]
 
 Options:
     -p <param_set>, --param_set=<param_set>
@@ -46,6 +47,7 @@ class ModelType(object):
     BASE = 0
     RAW_BASE = 1
     SUBJECT = 2
+    AUTOENCODER = 3
 
 @log_me()
 def run(task_num=0, model_type=ModelType.BASE, **kwargs):
@@ -62,6 +64,10 @@ def run(task_num=0, model_type=ModelType.BASE, **kwargs):
         dataset = segment_raw_data(**kwargs)
         train_idx, valid_idx = cv_split_within_column(dataset, percent=0.25, fold_index=task_num, min_length=4,
                                                       key='subject')
+    elif model_type == ModelType.AUTOENCODER:
+        from learntools.emotiv.emotiv_autoencode import AutoencodeEmotiv as SelectedModel
+        dataset = segment_raw_data(**kwargs)
+        train_idx, valid_idx = cv_split(dataset, percent=0.1, fold_index=task_num)
     else:
         raise Exception("model type is not valid")
     prepared_data = (dataset, train_idx, valid_idx)
@@ -93,5 +99,7 @@ if __name__ == '__main__':
         convert_raw_data(args['<directory>'], args['<output>'])
     elif args['run_subject']:
         run(task_num=0, model_type=ModelType.SUBJECT, **params)
+    elif args['run_autoencoder']:
+        run(task_num=0, model_type=ModelType.AUTOENCODER, **params)
     
     print("Finished")

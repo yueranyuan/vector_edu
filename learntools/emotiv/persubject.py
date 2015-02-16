@@ -32,7 +32,7 @@ class SubjectEmotiv(BaseEmotiv):
         self._ys = make_shared(ds.get_data('condition'), to_int=True, name='condition')
 
         self.train_batches = gen_batches_by_size(train_idx, batch_size)
-        self.valid_batches = gen_batches_by_size(valid_idx, 1)
+        self.valid_batches = gen_batches_by_size(valid_idx, batch_size)
 
         # 2: Connect the model
         rng = np.random.RandomState(rng_seed)

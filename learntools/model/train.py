@@ -1,8 +1,9 @@
+from __future__ import division
 from itertools import imap, chain
 import random
 
 from learntools.libs.logger import log_me, log
-from learntools.libs.utils import transpose
+from learntools.libs.utils import transpose, flatten
 
 
 @log_me('... training')
@@ -13,37 +14,34 @@ def train_model(model, n_epochs=500, patience=50,
     best_valid_accuracy = 0
     best_epoch = 0
 
-    train_model = model.train
-    valid_model = model.validate
-    train_batches = model.train_batches
-    valid_batches = model.valid_batches
-    train_eval = model.train_evaluate
-    valid_eval = model.valid_evaluate
-
     # batch shuffling should be deterministic
     prev_rng_state = random.getstate()
     random.seed(rng_seed)
 
-    def run_batches(model, batches, f_eval, shuffle=True, **kwargs):
-        batch_order = range(len(batches))
-        if shuffle:
-            random.shuffle(batch_order)
-        # Aaron: this is not really a speed critical part of the code but we
-        # can come back and redo AUC in theano if we want to make this suck less
-        results = imap(lambda i: model(batches[i], **kwargs), batch_order)
-        (losses, preds, idxs) = transpose(results)
-        accuracy = f_eval(list(chain.from_iterable(idxs)),
-                          list(chain.from_iterable(preds)))
-        return accuracy, losses
+    def run_epoch(gen_batch, shuffle=True, **kwargs):
+        return list(gen_batch())
+        sum_acc = 0
+        sum_n = 0
+        for n, acc in gen_batch(shuffle=shuffle, **kwargs):
+            sum_acc += acc * n
+            sum_n += n
+        return sum_acc / sum_n
+
+    def aggregate_epoch_results(results):
+        idxs, preds = transpose(results)
+        return flatten(idxs), flatten(preds)
 
     for epoch in range(n_epochs):
-        train_accuracy, train_losses = run_batches(train_model, train_batches, train_eval,
-                                                   learning_rate=learning_rate)
+        results = list(model.gen_train(shuffle=True, learning_rate=learning_rate))
+        idxs, preds = aggregate_epoch_results(results)
+        train_accuracy = model.train_evaluate(idxs, preds)
         log('epoch {epoch}, train accuracy {err:.2%}'.format(
             epoch=epoch, err=train_accuracy), True)
 
         if (epoch + 1) % validation_frequency == 0:
-            valid_accuracy, _ = run_batches(valid_model, valid_batches, valid_eval, shuffle=False)
+            results = list(model.gen_valid(shuffle=False))
+            idxs, preds = aggregate_epoch_results(results)
+            valid_accuracy = model.train_evaluate(idxs, preds)
             log('epoch {epoch}, validation accuracy {acc:.2%}'.format(
                 epoch=epoch, acc=valid_accuracy), True)
 

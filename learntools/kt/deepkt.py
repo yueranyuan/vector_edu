@@ -99,7 +99,7 @@ class DeepKT(Model):
                                                    ds['skill'].enum_pairs,
                                                    vector_length=skill_vector_len))
 
-				# data preloaded into network
+        # data preloaded into network
         skill_x = make_shared(skill_x, to_int=True, name='skill')
         correct_y = make_shared(correct_y, to_int=True, name='correct')
         eeg_full = make_shared(eeg_full, name='eeg')
@@ -201,7 +201,7 @@ class DeepKT(Model):
             givens={t_dropout: dropout_p},
             **func_args)
         self.train_batches = _gen_batches(train_idx, subject_x, batch_size)
-        self.valid_batches = _gen_batches(valid_idx, subject_x, 1)
+        self.valid_batches = _gen_batches(valid_idx, subject_x, batch_size)
         self._correct_y = correct_y
 
     def evaluate(self, idxs, pred):

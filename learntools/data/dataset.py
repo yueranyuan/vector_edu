@@ -532,38 +532,3 @@ def format_time(time_int, form=LISTEN_TIME_FORMAT):
 
 def load(*args, **kwargs):
     return Dataset.from_csv(*args, **kwargs)
-
-
-def _cv_split_helper(splits, fold_index=0, percent=None):
-    if percent is not None:
-        n_heldout = int(ceil(len(splits) * percent))
-        heldout = splits[(fold_index * n_heldout):((fold_index + 1) * n_heldout)]
-    else:
-        heldout = [splits[fold_index % len(splits)]]
-    return heldout
-
-
-def cv_split(ds, fold_index=0, split_on=None, percent=None, **kwargs):
-    # cross-validation split
-    if split_on:
-        splits = np.unique(ds[split_on])
-        heldout = _cv_split_helper(splits, fold_index=fold_index, percent=percent)
-
-        mask = reduce(or_, imap(lambda s: np.equal(ds[split_on], s), heldout))
-        train_idx = np.nonzero(np.logical_not(mask))[0]
-        valid_idx = np.nonzero(mask)[0]
-    else:
-        heldout = _cv_split_helper(range(ds.n_rows), fold_index=fold_index, percent=percent)
-        valid_idx = heldout
-        train_mask = np.logical_not(idx_to_mask(valid_idx, mask_len=ds.n_rows))
-        train_idx = mask_to_idx(train_mask)
-
-    # print/log what we held out
-    split_on_str = split_on if split_on else 'index'
-    info = '{split_on} {heldout} are held out'.format(split_on=split_on_str, heldout=heldout)
-    try:
-        log(info, True)
-    except:
-        print '[was not logged] {}'.format(info)
-
-    return train_idx, valid_idx

@@ -4,13 +4,13 @@ convert_raw accepts raw data from a directory of .mat files and pickles them
 into a Dataset object stored in the output file.
 
 Usage:
-    emotiv_driver.py run [options]
-    emotiv_driver.py run_raw [options]
+    emotiv_driver.py run [--cond=<cond>]... [options]
+    emotiv_driver.py run_raw [--cond=<cond>]... [options]
     emotiv_driver.py convert_raw <directory> <output>
 
 Options:
     -p <param_set>, --param_set=<param_set>
-        The name of the parameter set to use [default: emotiv_wide_search].
+        The name of the parameter set to use [default: emotiv_wide_search2].
     -f <file>, --file=<file>
         The data file to use [default: raw_data/all_siegle.txt].
     -o <file>, --out=<file>
@@ -19,6 +19,8 @@ Options:
         Do not output to a log file.
     -t, --task_number=<task_num>
         A counter representing the queue position of the current job.
+    -c, --cond=<cond>
+        String representing a condition to include [default: EyesOpen EyesClosed].
 """
 
 from __future__ import print_function, division
@@ -73,7 +75,8 @@ if __name__ == '__main__':
     if args['--file']:
         params['dataset_name'] = args['--file']
 
-    params['conds'] = ['EyesClosed', 'EyesOpen']
+    params['conds'] = args['--cond']
+    print("Conditions:", args['--cond'])
 
     if args['run']:
         run(task_num=0, model_type=ModelType.BASE, **params)

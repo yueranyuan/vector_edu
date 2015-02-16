@@ -194,6 +194,7 @@ def segment_raw_data(dataset_name, conds=None, duration=10, sample_rate=128, **k
                 continue
 
             # if segment is too short, don't use
+            # TODO: do something about this
             segment_samples = segment_end - segment_begin
 
             if segment_samples < duration * sample_rate:
@@ -216,13 +217,23 @@ def segment_raw_data(dataset_name, conds=None, duration=10, sample_rate=128, **k
                 # Window size of 1 s, overlap by 0.5 s
                 eeg_freqs = []
 
+                if 'finer_freq_bins' in kwargs:
+                    cutoffs = [2.0 ** (i * 0.5) for i in xrange(10)]
+                else:
+                    cutoffs = [0.5, 4.0, 7.0, 12.0, 30.0]
+
                 for i in (x * 0.5 for x in xrange(duration * 2)):
                     # window is half second duration (in samples) by eeg vector length
                     window = eeg_segment[int(i * sample_rate/2) : int((i + 1) * sample_rate/2)]
                     # there are len(cutoffs)-1 bins, window_freq is a list of will have a frequency vector of num channels
-                    window_freq = signal_to_freq_bins(window, cutoffs=[0.5, 4.0, 7.0, 12.0, 30.0], sampling_rate=128.0)
+                    window_freq = signal_to_freq_bins(window, cutoffs=cutoffs, sampling_rate=128.0)
 
                     eeg_freqs.append(np.concatenate(window_freq))
+
+                if 'larger_intervals' in kwargs:
+                    for i in (x * 2.5 for x in xrange(duration // 4)):
+                        window = eeg_segment[int(i * sample_rate * 2.5) : int((i + 1) * sample_rate * 2.5)]
+                        eeg_freqs.append(np.concatenate(signal_to_freq_bins(window, cutoffs=cutoffs, sampling_rate=128.0)))
 
                 # (num windows * num bins) * num channels
                 eeg_freqs = np.concatenate(eeg_freqs)

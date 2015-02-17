@@ -218,7 +218,7 @@ def segment_raw_data(dataset_name, conds=None, duration=10, sample_rate=128, **k
                 eeg_freqs = []
 
                 if 'finer_freq_bins' in kwargs:
-                    cutoffs = [2.0 ** (i * 0.5) for i in xrange(10)]
+                    cutoffs = [2.0 ** (i * 0.5) for i in xrange(1, 10)]
                 else:
                     cutoffs = [0.5, 4.0, 7.0, 12.0, 30.0]
 
@@ -233,7 +233,7 @@ def segment_raw_data(dataset_name, conds=None, duration=10, sample_rate=128, **k
                 if 'larger_intervals' in kwargs:
                     for i in (x * 2.5 for x in xrange(duration // 4)):
                         window = eeg_segment[int(i * sample_rate * 2.5) : int((i + 1) * sample_rate * 2.5)]
-                        eeg_freqs.append(np.concatenate(signal_to_freq_bins(window, cutoffs=cutoffs, sampling_rate=128.0)))
+                        eeg_freqs.append(np.concatenate(signal_to_freq_bins(window, cutoffs=[7.0, 12.0, 30.0], sampling_rate=128.0)))
 
                 # (num windows * num bins) * num channels
                 eeg_freqs = np.concatenate(eeg_freqs)

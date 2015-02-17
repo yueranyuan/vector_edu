@@ -1,6 +1,8 @@
 from __future__ import print_function, division
 
 from datetime import datetime
+from collections import Counter
+from math import log
 import itertools
 import cPickle as pickle
 import glob
@@ -26,6 +28,7 @@ SEGMENTED_HEADERS = [
     ('subject', Dataset.ENUM), # subject id
     ('source', Dataset.STR), # denotes the file and eeg index where the segment was taken from
     ('eeg', Dataset.MATFLOAT), # fixed duration due to truncation for uniformity
+    #('entropy', Dataset.MATFLOAT),
     ('condition', Dataset.ENUM), # only one label characterizes the sequence
 ]
 
@@ -125,6 +128,14 @@ def convert_raw_data(directory, output):
         pickle.dump(ds.to_pickle(), f, protocol=pickle.HIGHEST_PROTOCOL)
 
 
+def calc_entropy(data):
+    c = Counter(data)
+    entropy = 0.0
+    for v in c.keys():
+        entropy -= v * log(v)
+    return entropy
+
+
 def _segment_gen(segment_idx, segment_cond):
     """Generator for segment (begin, end, label). Coalesces cascading segments with the same label.
     segment_idx: numpy array for the indices for the beginning of each label
@@ -215,20 +226,29 @@ def segment_raw_data(dataset_name, conds=None, duration=10, sample_rate=128, **k
                 # Fourier transform on eeg
                 # Window size of 1 s, overlap by 0.5 s
                 eeg_freqs = []
+                eeg_entropies = []
 
                 for i in (x * 0.5 for x in xrange(duration * 2)):
                     # window is half second duration (in samples) by eeg vector length
                     window = eeg_segment[int(i * sample_rate/2) : int((i + 1) * sample_rate/2)]
                     # there are len(cutoffs)-1 bins, window_freq is a list of will have a frequency vector of num channels
                     window_freq = signal_to_freq_bins(window, cutoffs=[0.5, 4.0, 7.0, 12.0, 30.0], sampling_rate=128.0)
+                    # one entropy per channel over all freqs
+                    entropies = [calc_entropy(vals) for vals in window_freq]
+                    eeg_entropies.append(entropies)
 
                     eeg_freqs.append(np.concatenate(window_freq))
 
                 # (num windows * num bins) * num channels
                 eeg_freqs = np.concatenate(eeg_freqs)
+                # TODO
+                eeg_entropies = np.concatenate(eeg_entropies)
 
                 # Flatten into a vector
                 eeg_freqs_flattened = np.ravel(eeg_freqs)
+                eeg_entropies_flattened = np.ravel(eeg_entropies)
+                #FIXME
+                eeg_freqs_flattened = np.append(eeg_freqs_flattened, eeg_entropies_flattened)
 
                 segments.append((subject_id, source, eeg_freqs_flattened, label))
 

@@ -13,6 +13,8 @@ from learntools.data.dataset import LISTEN_TIME_FORMAT
 from learntools.libs.utils import normalize_table, loadmat
 from learntools.libs.eeg import signal_to_freq_bins
 
+DEFAULT_CALIBRATION_FILE_LOCATION = 'raw_data/allcalibqualityreport.csv'
+
 # headers used in the raw data taken directly from matlab
 RAW_HEADERS = [
     ('subject', Dataset.STR),
@@ -28,7 +30,6 @@ SEGMENTED_HEADERS = [
     ('eeg', Dataset.MATFLOAT), # fixed duration due to truncation for uniformity
     ('condition', Dataset.ENUM), # only one label characterizes the sequence
 ]
-
 
 ACTIVITY_CONDITIONS = {
     'EyesOpen': 1,
@@ -97,8 +98,6 @@ def prepare_data(dataset_name, conds=None, **kwargs):
 
 def convert_raw_data(directory, output):
     raw_files = glob.glob(os.path.join(directory, '*.mat'))
-
-    subjects = {}
 
     n_rows = len(raw_files)
     ds = Dataset(RAW_HEADERS, n_rows)
@@ -230,7 +229,7 @@ def segment_raw_data(dataset_name, conds=None, duration=10, sample_rate=128, **k
                 # Flatten into a vector
                 eeg_freqs_flattened = np.ravel(eeg_freqs)
 
-                segments.append((subject_id, source, eeg_freqs_flattened, label))
+                segments.append((subject, source, eeg_freqs_flattened, label))
 
     # add all segments to the new dataset
     new_ds = Dataset(SEGMENTED_HEADERS, len(segments))

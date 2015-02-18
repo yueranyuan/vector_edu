@@ -31,7 +31,8 @@ from docopt import docopt
 
 from learntools.libs.logger import gen_log_name, log_me, set_log_file
 from learntools.emotiv.data import prepare_data, convert_raw_data, segment_raw_data
-from learntools.data import cv_split, Dataset
+from learntools.emotiv.filter import filter_data
+from learntools.data import cv_split
 import learntools.deploy.config as config
 
 import release_lock
@@ -51,6 +52,7 @@ def run(task_num=0, model_type=ModelType.BASE, **kwargs):
     elif model_type == ModelType.RAW_BASE:
         from learntools.emotiv.base import BaseEmotiv as SelectedModel
         dataset = segment_raw_data(**kwargs)
+        filter_data(dataset)
     else:
         raise Exception("model type is not valid")
     train_idx, valid_idx = cv_split(dataset, percent=0.1, fold_index=task_num)

@@ -58,7 +58,7 @@ def run(task_num=0, model_type=ModelType.BASE, **kwargs):
     elif model_type == ModelType.RAW_BASE:
         from learntools.emotiv.base import BaseEmotiv as SelectedModel
         dataset = segment_raw_data(**kwargs)
-        train_idx, valid_idx = cv_split(dataset, percent=0.1, fold_index=task_num)
+        train_idx, valid_idx = cv_split(dataset, percent=0.50, fold_index=task_num)
     elif model_type == ModelType.SUBJECT:
         from learntools.emotiv.persubject import SubjectEmotiv as SelectedModel
         dataset = segment_raw_data(**kwargs)
@@ -67,7 +67,7 @@ def run(task_num=0, model_type=ModelType.BASE, **kwargs):
     elif model_type == ModelType.AUTOENCODER:
         from learntools.emotiv.emotiv_autoencode import AutoencodeEmotiv as SelectedModel
         dataset = segment_raw_data(**kwargs)
-        train_idx, valid_idx = cv_split(dataset, percent=0.1, fold_index=task_num)
+        train_idx, valid_idx = cv_split(dataset, percent=0.50, fold_index=task_num)
     else:
         raise Exception("model type is not valid")
     prepared_data = (dataset, train_idx, valid_idx)

@@ -1,8 +1,9 @@
+import random
+from itertools import chain
+
 import theano
 import theano.tensor as T
 import numpy as np
-
-from itertools import chain
 
 from learntools.libs.logger import log_me
 from learntools.model.mlp import MLP
@@ -16,7 +17,8 @@ class AutoencodeEmotiv(BaseEmotiv):
     @log_me('...building AutoencodeEmotiv')
     def __init__(self, prepared_data, batch_size=30, L1_reg=0., L2_reg=0.,
                  classifier_width=500, classifier_depth=1, rng_seed=42, dropout_p=0.5,
-                 learning_rate=0.02, autoencoder_weight=0.3, **kwargs):
+                 learning_rate=0.02, autoencoder_weight=0.3, autoencoder_frequency=10,
+                 **kwargs):
         """
         Args:
             prepared_data : (Dataset, [int], [int])
@@ -25,6 +27,8 @@ class AutoencodeEmotiv(BaseEmotiv):
             batch_size : int
                 The size of the batches used to train
         """
+        self.autoencoder_frequency = autoencoder_frequency
+
         # 1: Organize data into batches
         ds, train_idx, valid_idx = prepared_data
         input_size = ds.get_data('eeg').shape[1]
@@ -99,6 +103,9 @@ class AutoencodeEmotiv(BaseEmotiv):
                                         for param in reconstruction_params]
 
         self._tf_valid = theano.function(
+            givens={t_dropout: 0.},
+            **func_args)
+        self._tf_autoencode = theano.function(
             updates=update_reconstruction_params,
             givens={t_dropout: 0.},
             **func_args)
@@ -106,3 +113,22 @@ class AutoencodeEmotiv(BaseEmotiv):
             updates=update_parameters,
             givens={t_dropout: dropout_p},
             **func_args)
+
+    def _autoencode(self, idxs, **kwargs):
+        return self._tf_autoencode(idxs)
+
+    def gen_train(self, shuffle=False, **kwargs):
+        batch_order = range(len(self.train_batches))
+
+        if shuffle:
+            random.shuffle(batch_order)
+
+        for batch_num, i in enumerate(batch_order):
+
+            # run autoencoder at an interval
+            if batch_num % self.autoencoder_frequency == 0:
+                for valid_batch in self.valid_batches:
+                    self._autoencode(valid_batch, **kwargs)
+
+            losses, preds, idxs = self.train(self.train_batches[i], **kwargs)
+            yield idxs, preds

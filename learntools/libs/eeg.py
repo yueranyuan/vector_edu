@@ -1,8 +1,10 @@
-from numpy.fft import fft
-import numpy as np
+from __future__ import division
 from itertools import izip, islice
 from operator import add
 import math
+
+from numpy.fft import fft
+import numpy as np
 
 
 def signal_to_freq_bins(y, cutoffs, sampling_rate=512.0):

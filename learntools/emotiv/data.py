@@ -12,23 +12,31 @@ from learntools.data import Dataset
 from learntools.data.dataset import LISTEN_TIME_FORMAT
 from learntools.libs.utils import normalize_table, loadmat
 from learntools.libs.eeg import signal_to_freq_bins
+from learntools.libs.wavelet import signal_to_wavelet
 
 # headers used in the raw data taken directly from matlab
 RAW_HEADERS = [
     ('subject', Dataset.STR),
     ('eeg_sequence', Dataset.SEQFLOAT),
-    ('condition', Dataset.SEQINT), # TODO is this the column type we really want?
+    ('condition', Dataset.SEQINT),
     ('time', Dataset.TIME),
 ]
 
 # headers used in the raw data that has been segmented
 SEGMENTED_HEADERS = [
-    ('subject', Dataset.ENUM), # subject id
-    ('source', Dataset.STR), # denotes the file and eeg index where the segment was taken from
-    ('eeg', Dataset.MATFLOAT), # fixed duration due to truncation for uniformity
-    ('condition', Dataset.ENUM), # only one label characterizes the sequence
+    ('subject', Dataset.ENUM),  # subject id
+    ('source', Dataset.STR),  # denotes the file and eeg index where the segment was taken from
+    ('eeg', Dataset.SEQFLOAT),  # fixed duration due to truncation for uniformity
+    ('condition', Dataset.ENUM),  # only one label characterizes the sequence
 ]
 
+# headers used in the segmented data that has been labeled with features
+FEATURED_HEADERS = [
+    ('subject', Dataset.ENUM),  # subject id
+    ('source', Dataset.STR),  # denotes the file and eeg index where the segment was taken from
+    ('eeg', Dataset.MATFLOAT),  # fixed duration due to truncation for uniformity
+    ('condition', Dataset.ENUM),  # only one label characterizes the sequence
+]
 
 ACTIVITY_CONDITIONS = {
     'EyesOpen': 1,
@@ -197,47 +205,110 @@ def segment_raw_data(dataset_name, conds=None, duration=10, sample_rate=128, **k
             segment_samples = segment_end - segment_begin
 
             if segment_samples < duration * sample_rate:
-                print(source, "with length", segment_samples, "too small")
+                print('{0} with length {1} too small'.format(source, segment_samples))
                 continue
             else:
                 # truncate sample to duration seconds
                 segment_end = min(segment_end, segment_begin + duration * sample_rate)
                 # shape should be (duration * sample_rate) by eeg vector length
                 eeg_segment = eeg_seq[segment_begin:segment_end, :]
-
-                # get subject id or generate one
-                if subject not in subjects:
-                    subjects.append(subject)
-                    subject_id = subjects.index(subject)
-                else:
-                    subject_id = subjects.index(subject)
-
-                # Fourier transform on eeg
-                # Window size of 1 s, overlap by 0.5 s
-                eeg_freqs = []
-
-                for i in (x * 0.5 for x in xrange(duration * 2)):
-                    # window is half second duration (in samples) by eeg vector length
-                    window = eeg_segment[int(i * sample_rate/2) : int((i + 1) * sample_rate/2)]
-                    # there are len(cutoffs)-1 bins, window_freq is a list of will have a frequency vector of num channels
-                    window_freq = signal_to_freq_bins(window, cutoffs=[0.5, 4.0, 7.0, 12.0, 30.0], sampling_rate=128.0)
-
-                    eeg_freqs.append(np.concatenate(window_freq))
-
-                # (num windows * num bins) * num channels
-                eeg_freqs = np.concatenate(eeg_freqs)
-
-                # Flatten into a vector
-                eeg_freqs_flattened = np.ravel(eeg_freqs)
-
-                segments.append((subject_id, source, eeg_freqs_flattened, label))
+                segments.append((subject, source, eeg_segment, label))
 
     # add all segments to the new dataset
     new_ds = Dataset(SEGMENTED_HEADERS, len(segments))
     for i, seg_data in enumerate(segments):
         new_ds[i] = seg_data
 
+    new_ds = gen_wavelet_features(new_ds, duration=duration, sample_rate=sample_rate)
+
+    return new_ds
+
+
+class FeatureGenerationException(Exception):
+    pass
+
+
+def _gen_featured_dataset(ds, func, *args, **kwargs):
+    """Helper function that applies 'func' to generate features for the eeg segment of each row.
+
+    Normalizes eeg features
+
+    Args:
+        ds (Dataset): segmented dataset
+        func (function): feature transformation function to apply to each row
+
+    Returns:
+        Dataset: featured dataset
+    """
+    featured_rows = []
+    for i in xrange(len(ds)):
+        _, source, eeg_segment, _ = ds[i]
+        subject, _, _, label = ds.orig[i]
+        try:
+            eeg_features = func(eeg_segment, *args, **kwargs)
+        except FeatureGenerationException:
+            # TODO: convert to a warning
+            print('could not generate features for row {i}, (subject: {subject}, source: {source}, label: {label})'.format(
+                i=i,
+                subject=subject,
+                source=source,
+                label=label
+            ))
+            continue
+        featured_rows.append((subject, source, eeg_features, label))
+
+    # add all rows to the new dataset
+    new_ds = Dataset(FEATURED_HEADERS, len(featured_rows))
+    for i, row in enumerate(featured_rows):
+        new_ds[i] = row
+
     # TODO normalization should be shared across some columns
+    print('feature vector width: {}'.format(new_ds.get_column('eeg').data.shape[1]))  # TODO: replace with 'width' once we merge
     new_ds.get_column('eeg').data = normalize_table(new_ds['eeg'])
 
     return new_ds
+
+
+def gen_fft_features(ds, duration=10, sample_rate=128, cutoffs=None):
+    if cutoffs is None:
+        cutoffs = [0.5, 4.0, 7.0, 12.0, 30.0]
+
+    def _fft_eeg_segment(eeg_segment, duration, sample_rate, cutoffs):
+        # Fourier transform on eeg
+        # Window size of 1 s, overlap by 0.5 s
+        eeg_freqs = []
+
+        for i in (x * 0.5 for x in xrange(duration * 2)):
+            # window is half second duration (in samples) by eeg vector length
+            window = eeg_segment[int(i * sample_rate/2) : int((i + 1) * sample_rate/2)]
+            # there are len(cutoffs)-1 bins, window_freq is a list of will have a frequency vector of num channels
+            window_freq = signal_to_freq_bins(window, cutoffs=cutoffs, sampling_rate=sample_rate)
+
+            eeg_freqs.append(np.concatenate(window_freq))
+
+        # (num windows * num bins) * num channels
+        eeg_freqs = np.concatenate(eeg_freqs)
+        return eeg_freqs
+
+    return _gen_featured_dataset(ds, _fft_eeg_segment, duration=duration, sample_rate=sample_rate, cutoffs=cutoffs)
+
+
+def gen_wavelet_features(ds, duration=10, sample_rate=128, depth=5, min_length=3, max_length=5, family='db6'):
+    def _wavelet_eeg_segment(eeg_segment, duration, sample_rate, depth, min_length, max_length, family):
+        # cut eeg to desired length (so that all wavelets are the same length)
+        desired_length = duration * sample_rate
+        if len(eeg_segment) < desired_length:
+            raise FeatureGenerationException("signal not long enough")
+        eeg_segment = eeg_segment[:desired_length]
+
+        # wavelet transform
+        eeg_wavelets = []
+        for i in xrange(eeg_segment.shape[1]):
+            eeg_wavelet = signal_to_wavelet(eeg_segment[:, i], min_length=min_length, max_length=max_length,
+                                            depth=depth, family=family)
+            eeg_wavelets += eeg_wavelet
+
+        return np.concatenate(eeg_wavelets)
+
+    return _gen_featured_dataset(ds, _wavelet_eeg_segment, duration=duration, sample_rate=sample_rate,
+                                 depth=depth, min_length=min_length, max_length=max_length, family=family)

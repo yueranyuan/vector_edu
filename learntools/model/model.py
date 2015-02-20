@@ -96,7 +96,7 @@ class Model(object):
                 strategy = train_model
 
         start_time = time.clock()
-        best_validation_loss, best_epoch = train_model(self, **kwargs)
+        best_validation_loss, best_epoch = strategy(self, **kwargs)
         end_time = time.clock()
         training_time = (end_time - start_time) / 60.
 

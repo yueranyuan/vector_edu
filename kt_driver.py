@@ -9,10 +9,17 @@ from learntools.kt.skill import gen_skill_matrix
 import learntools.deploy.config as config
 
 
+class ModelType(object):
+    DEEPKT = 0
+    LOGKT = 1
+
+
 @log_me()
-def run(task_num, model_type=0, **kwargs):
-    if model_type == 0:
+def run(task_num, model_type=ModelType.LOGKT, **kwargs):
+    if model_type == ModelType.DEEPKT:
         from learntools.kt.deepkt import DeepKT as SelectedModel
+    elif model_type == ModelType.LOGKT:
+        from learntools.kt.logkt import LogKT as SelectedModel
     else:
         raise Exception("model type is not valid")
 

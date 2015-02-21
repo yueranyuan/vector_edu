@@ -176,9 +176,9 @@ def segment_raw_data(dataset_name, conds=None, duration=10, sample_rate=128, **k
 
         # The beginning/ending of a recording is denoted by 132 and 136, respectively;
         # only use the sequence if they exist
-        if CONDITIONS['BEGIN'] not in segment_cond or CONDITIONS['END'] not in segment_cond:
-            print("begin and end not in eeg sequence", subject)
-            continue
+        #if CONDITIONS['BEGIN'] not in segment_cond or CONDITIONS['END'] not in segment_cond:
+        #    print("begin and end not in eeg sequence", subject)
+        #    continue
 
         # The beginning of a segment is denoted by that label; inside the segment,
         # the label is 0; the end is denoted by another label.

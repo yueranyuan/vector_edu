@@ -241,3 +241,11 @@ def segment_raw_data(dataset_name, conds=None, duration=10, sample_rate=128, **k
     new_ds.get_column('eeg').data = normalize_table(new_ds['eeg'])
 
     return new_ds
+
+
+def filter_indices_by_condition(dataset, idx, conds):
+    mapping = dict(dataset['condition'].ienum_pairs)
+    idx = np.array(idx)
+    # convert from cond string to cond enum, to internal cond enum, to mask
+    want = [dataset.get_data('condition')[idx] == mapping[ACTIVITY_CONDITIONS[cond]] for cond in conds]
+    return idx[reduce(np.logical_or, want)]

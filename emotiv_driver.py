@@ -9,6 +9,7 @@ Usage:
     emotiv_driver.py convert_raw <directory> <output>
     emotiv_driver.py run_subject [options]
     emotiv_driver.py run_autoencoder [options]
+    emotiv_driver.py run_multistage [options]
 
 Options:
     -p <param_set>, --param_set=<param_set>
@@ -101,5 +102,8 @@ if __name__ == '__main__':
         run(task_num=0, model_type=ModelType.SUBJECT, **params)
     elif args['run_autoencoder']:
         run(task_num=0, model_type=ModelType.AUTOENCODER, **params)
+    elif args['run_multistage']:
+        from learntools.emotiv.multistage import run_multistage
+        run_multistage(task_num=0, **params)
     
     print("Finished")

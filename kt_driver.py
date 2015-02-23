@@ -12,14 +12,17 @@ import learntools.deploy.config as config
 class ModelType(object):
     DEEPKT = 0
     LOGKT = 1
+    PREVLOGKT = 2
 
 
 @log_me()
-def run(task_num, model_type=ModelType.LOGKT, **kwargs):
+def run(task_num, model_type=ModelType.PREVLOGKT, **kwargs):
     if model_type == ModelType.DEEPKT:
         from learntools.kt.deepkt import DeepKT as SelectedModel
     elif model_type == ModelType.LOGKT:
         from learntools.kt.logkt import LogKT as SelectedModel
+    elif model_type == ModelType.PREVLOGKT:
+        from learntools.kt.prevlogkt import PrevLogKT as SelectedModel
     else:
         raise Exception("model type is not valid")
 

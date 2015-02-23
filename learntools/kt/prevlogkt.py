@@ -1,21 +1,34 @@
-from itertools import chain
+from itertools import chain, imap, islice, ifilter
 
 import numpy as np
 import theano
 import theano.tensor as T
 from theano.tensor.shared_randomstreams import RandomStreams as TRandomStreams
 
-from learntools.libs.utils import idx_to_mask, mask_to_idx
+from learntools.libs.utils import idx_to_mask, mask_to_idx, combine_dict
 from learntools.libs.logger import log_me
 from learntools.model.logistic import LogisticRegression
 from learntools.model.mlp import MLP
 from learntools.model.theano_utils import make_shared
-from learntools.kt.deepkt import deep_gen_batches
+from learntools.model import gen_batches_by_keys, gen_batches_by_size
 from learntools.kt.base import BaseKT
 
 from theano import config
 
 config.exception_verbosity = 'high'
+
+
+def _gen_batches(idxs, subjects, batch_size):
+    batches = gen_batches_by_keys(idxs, [subjects])
+    batches = imap(lambda idxs: islice(idxs, 2, None), batches)
+    sub_batches = imap(lambda idxs: gen_batches_by_size(list(idxs), batch_size=batch_size), batches)
+    sub_batches_with_subj = map(lambda batch_group: [(batch, batch_group[0][0]) for batch in batch_group],
+                                sub_batches)
+    batches = chain.from_iterable(sub_batches_with_subj)
+    batches = list(batches)
+    batches = ifilter(lambda b: b[0], batches)  # remove empty batches
+    batches = list(batches)
+    return batches
 
 
 class ClassifierTypes:
@@ -34,13 +47,14 @@ class PrevLogKT(BaseKT):
     @log_me('...building prevlogkt')
     def __init__(self, prepared_data, skill_matrix, L1_reg=0., L2_reg=0., learning_rate=0.02,
                  current_eeg_on=1, batch_size=30, classifier_type=ClassifierTypes.MLP,
-                 empty_prev=False, main_classifier_width=500, main_classifier_depth=2,
-                 dropout_p=0.3, **kwargs):
+                 empty_prev=False, previous_on=True, main_classifier_width=500, main_classifier_depth=2,
+                 dropout_p=0.7, aggregate=0, day_on=True, time_vector_width=5, **kwargs):
         '''
         Args:
             prepared_data (tuple(Dataset, int[], int[])): a tuple that holds the data to be used,
                 the row indices of the training set, and the row indices of the validation set
         '''
+        self.aggregate = aggregate
         # ##########
         # STEP1: order the data properly so that we can read from it sequentially
         # when training the model
@@ -62,6 +76,7 @@ class PrevLogKT(BaseKT):
 
         skill_x = ds.get_data('skill')
         subject_x = ds.get_data('subject')
+        time_x = ds.get_data('start_time')
         correct_y = ds.get_data('correct') - 1
         eeg_full = ds.get_data('eeg')
 
@@ -74,13 +89,30 @@ class PrevLogKT(BaseKT):
 
         # data preloaded into network
         skill_x = make_shared(skill_x, to_int=True, name='skill')
+        if day_on:
+            day_in_centiseconds = 100 * 60 * 60 * 24
+            date_x = make_shared(time_x / day_in_centiseconds, to_int=True, name='date')
         correct_y = make_shared(correct_y, to_int=True, name='correct')
         eeg_full = make_shared(eeg_full, name='eeg')
 
+        # parse time
+        day_in_centiseconds = 100 * 60 * 60 * 24
+        three_day_in_centiseconds = 3 * day_in_centiseconds
+        week_in_centiseconds = 7 * day_in_centiseconds
+        two_week_in_centiseconds = 2 * week_in_centiseconds
+        t = 100
+        time_vector = t
+
         # create the classifier
-        input_size = skill_matrix_width * 2 + 1
+        input_size = skill_matrix_width
+        if previous_on:
+            input_size += skill_matrix_width + 1
+            if day_on:
+                input_size += time_vector_width
         if current_eeg_on:
-            input_size += eeg_vector_len * 2
+            input_size += eeg_vector_len
+            if previous_on:
+                input_size += eeg_vector_len
         if classifier_type == ClassifierTypes.LOGREG:
             classifier = LogisticRegression(n_in=input_size,
                                             n_out=2)
@@ -97,27 +129,52 @@ class PrevLogKT(BaseKT):
         if empty_prev:
             prev_indices = [0] * batch_size
         else:
-            srng = TRandomStreams(seed=234)
-            max_backtrack = range(batch_size, 0, -1)
-            rand_backtrack_full = srng.random_integers(base_indices.shape, low=0, high=batch_size - 1)
-            rand_backtrack_full.name = 'rand_backtrack_full'
-            rand_backtrack_scaled = rand_backtrack_full / max_backtrack + 1
-            rand_backtrack_scaled.name = 'rand_backtrack_scaled'
-            prev_indices = base_indices - rand_backtrack_scaled
+            # subject_start_idx = T.scalar('subject_start')
+            subject_start_idx = base_indices[0]
+            srng = TRandomStreams()
+            rand_floats = srng.uniform(size=base_indices.shape)
+            prev_indices_relative = T.cast((base_indices - subject_start_idx) * rand_floats, 'int32')
+            prev_indices_absolute = prev_indices_relative + subject_start_idx
 
         # STEP 3.1 stuff that goes in scan
         # need to convert list of indices of 1,2 into [0],[1] columns
-        correct_vectors = make_shared([[0], [1]])
-        correct_feature = correct_vectors[correct_y[prev_indices]]
-        correct_feature.name = 'correct_feature'
-        previous_skill = skill_matrix[skill_x[prev_indices]]
-        previous_eeg_vector = eeg_full[prev_indices]
+        prev_indices = T.ivector('prev_indices')
+        if previous_on:
+            correct_vectors = make_shared([[0], [1]])
+            correct_feature = correct_vectors[correct_y[prev_indices]]
+            correct_feature.name = 'correct_feature'
+            previous_skill = skill_matrix[skill_x[prev_indices]]
+            previous_eeg_vector = eeg_full[prev_indices]
+
+            # create date vector that represents how long ago the previous skill was
+            if day_on:
+                # build a date vector table to index into
+                days_back = np.zeros((2 ** time_vector_width, time_vector_width))
+                for i in xrange(time_vector_width):
+                    i_exp = 2 ** i
+                    days_back[i_exp:(2 * i_exp), i] = 1
+                farthest_day_back = days_back.shape[0] - 1
+                t_days_back = make_shared(days_back, name='days_back')
+
+                # compute which date vector to use for each index
+                t_delta = T.cast(date_x[base_indices] - date_x[prev_indices], 'int64')
+                t_delta.name = 't_delta'
+                t_delta_capped = T.clip(t_delta, 0, farthest_day_back)
+                t_delta_capped.name = 't_delta_capped'
+                time_vector = t_days_back[t_delta_capped]
+
         current_skill = skill_matrix[skill_x[base_indices]]
         current_eeg_vector = eeg_full[base_indices]
 
-        classifier_inputs = [current_skill, correct_feature, previous_skill]
+        classifier_inputs = [current_skill]
+        if previous_on:
+            classifier_inputs += [correct_feature, previous_skill]
+            if day_on:
+                classifier_inputs += [time_vector]
         if current_eeg_on:
-            classifier_inputs += [current_eeg_vector, previous_eeg_vector]
+            classifier_inputs += [current_eeg_vector]
+            if previous_on:
+                classifier_inputs += [previous_eeg_vector]
         # probability of y for each 0, 1, 2
         pY = classifier.instance(T.concatenate(classifier_inputs, axis=1))
 
@@ -136,8 +193,8 @@ class PrevLogKT(BaseKT):
 
         # the same for both validation and training
         func_args = {
-            'inputs': [base_indices],
-            'outputs': [loss, pY[:, 1] - pY[:, 0], base_indices],
+            'inputs': [base_indices, subject_start_idx],
+            'outputs': [loss, pY[:, 1] - pY[:, 0], base_indices, subject_start_idx],
             'on_unused_input': 'ignore',
             'allow_input_downcast': True,
         }
@@ -146,7 +203,7 @@ class PrevLogKT(BaseKT):
         train_givens = []
         if classifier_type == ClassifierTypes.MLP:
             valid_givens += [(t_dropout, 0.)]
-            train_givens += [(t_dropout, dropout_p)]
+            train_givens += [(t_dropout, dropout_p), (prev_indices, prev_indices_absolute)]
 
         # collect all theano updates
         params = chain.from_iterable(n.params for n in subnets)
@@ -154,13 +211,59 @@ class PrevLogKT(BaseKT):
                              for param in params]
         # validation uses no dropout and previous skill propagation
         self._tf_valid = theano.function(
-            givens=valid_givens,
+            givens=valid_givens + [(prev_indices, prev_indices_absolute)],
             **func_args)
         # training uses parameter updates plus previous skill propagation with dropout
         self._tf_train = theano.function(
             updates=update_parameters,
             givens=train_givens,
             **func_args)
-        self.train_batches = deep_gen_batches(train_idx, subject_x, batch_size)
-        self.valid_batches = deep_gen_batches(valid_idx, subject_x, batch_size)
+
+        # setup lookback validation for use in aggregation
+        if self.aggregate == 1:
+            lookback = T.iscalar('lookback')
+            lookback_func_args = combine_dict(func_args, {'inputs': func_args['inputs'] + [lookback]})
+            self._tf_valid_lookback = theano.function(
+                givens=valid_givens + [(prev_indices, base_indices - lookback)],
+                **lookback_func_args)
+
+        self.train_batches = _gen_batches(train_idx, subject_x, batch_size)
+        self.valid_batches = _gen_batches(valid_idx, subject_x, batch_size)
         self._correct_y = correct_y
+
+    def train(self, (idxs, subject_idx), **kwargs):
+        '''perform one iteration of training on some indices
+        Args:
+            idxs (int[]): the indices of the rows to be used in training
+            subject_idx (int): the starting index for the subject in this batch
+        Returns:
+            (float, float[], int[]): a tuple of the loss, the predictions over the rows,
+                and the row indices
+        '''
+        res = self._tf_train(idxs, subject_idx)
+        return res[:3]
+
+    def _aggregated_validation(self, idxs, subject_idx):
+        aggregate_length = 30
+        aggregated_pY = np.zeros_like(idxs, dtype='float32')
+        first_of_batch = min(idxs)
+        for lookback in xrange(1, max(aggregate_length, first_of_batch - subject_idx)):
+            res = self._tf_valid_lookback(idxs, subject_idx, lookback)
+            loss, pY, out_idxs = res[:3]
+            aggregated_pY += pY
+        return loss, aggregated_pY, out_idxs
+
+    def validate(self, (idxs, subject_idx), **kwargs):
+        '''perform one iteration of validation
+        Args:
+            idxs (int[]): the indices of the rows to be used in validation
+            subject_idx (int): the starting index for the subject in this batch
+        Returns:
+            (float, float[], int[]): a tuple of the loss, the predictions over the rows,
+                and the row indices
+        '''
+        if self.aggregate == 0:
+            res = self._tf_valid(idxs, subject_idx)
+        else:
+            res = self._aggregated_validation(idxs, subject_idx)
+        return res[:3]

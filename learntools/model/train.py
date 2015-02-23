@@ -8,7 +8,7 @@ from learntools.libs.utils import transpose
 @log_me('... training')
 def train_model(model, n_epochs=500, patience=500,
                 patience_increase=40, improvement_threshold=1,
-                validation_frequency=5, learning_rate=0.02,
+                validation_frequency=1, learning_rate=0.02,
                 rng_seed=1023, **kwargs):
     best_valid_accuracy = 0
     best_epoch = 0

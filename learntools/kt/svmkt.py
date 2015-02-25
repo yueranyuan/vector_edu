@@ -4,11 +4,11 @@ import numpy as np
 import theano
 import theano.tensor as T
 from theano.tensor.shared_randomstreams import RandomStreams as TRandomStreams
+from sklearn import svm
 
-from learntools.libs.utils import idx_to_mask, mask_to_idx, combine_dict
+from learntools.libs.utils import idx_to_mask, mask_to_idx
 from learntools.libs.logger import log_me
-from learntools.model.logistic import LogisticRegression
-from learntools.model.mlp import MLP
+from learntools.libs.auc import auc
 from learntools.model.theano_utils import make_shared
 from learntools.model import gen_batches_by_keys, gen_batches_by_size
 from learntools.kt.base import BaseKT
@@ -36,7 +36,7 @@ class ClassifierTypes:
     MLP = 1
 
 
-class PrevLogKT(BaseKT):
+class SvmKT(BaseKT):
     '''a trainable, applyable model for logistic regression based kt with a previous result as reference
     Attributes:
         train_batches (int[][]): training batches are divided by subject_id and the rows of each subject
@@ -44,7 +44,7 @@ class PrevLogKT(BaseKT):
             necessity due to the recursive structure of the model
         valid_batches (int[][]): validation batches. See train_batches
     '''
-    @log_me('...building prevlogkt')
+    @log_me('...building svmkt')
     def __init__(self, prepared_data, skill_matrix, L1_reg=0., L2_reg=0., learning_rate=0.02,
                  current_eeg_on=1, batch_size=30, classifier_type=ClassifierTypes.MLP,
                  empty_prev=False, previous_on=True, main_classifier_width=500, main_classifier_depth=2,
@@ -158,94 +158,20 @@ class PrevLogKT(BaseKT):
 
         # ###########
         # STEP2.5: build the classifier
-
-        # initialize classifier
-        if classifier_type == ClassifierTypes.LOGREG:
-            classifier = LogisticRegression(n_in=input_size,
-                                            n_out=2)
-        elif classifier_type == ClassifierTypes.MLP:
-            rng = np.random.RandomState(1234)
-            t_dropout = T.scalar('dropout')
-            classifier = MLP(rng=rng,
-                             n_in=input_size,
-                             size=[main_classifier_width] * main_classifier_depth,
-                             n_out=2,
-                             dropout=t_dropout)
-        # instance classifier
-        pY = classifier.instance(T.concatenate(classifier_inputs, axis=1))
-
-        # ########
-        # STEP3: create the theano functions to run the model
-
         y = correct_y[base_indices]
-        loss = -T.mean(T.log(pY)[T.arange(y.shape[0]), y])
-        subnets = [classifier]
-        # used to help compute regularization terms
-        cost = (
-            loss
-            + L1_reg * sum([n.L1 for n in subnets])
-            + L2_reg * sum([n.L2_sqr for n in subnets])
-        )
+        self._correct_y = correct_y
 
-        # the same for both validation and training
-        func_args = {
-            'inputs': [base_indices, subject_start_idx],
-            'outputs': [loss, pY[:, 1] - pY[:, 0], base_indices, subject_start_idx],
-            'on_unused_input': 'ignore',
-            'allow_input_downcast': True,
-        }
-
-        if previous_on:
-            previous_givens = [(prev_indices, prev_indices_absolute)]
-        else:
-            previous_givens = []
-
-        valid_givens = []
-        train_givens = []
-        if classifier_type == ClassifierTypes.MLP:
-            valid_givens += [(t_dropout, 0.)]
-            train_givens += [(t_dropout, dropout_p)]
-
-        # collect all theano updates
-        params = chain.from_iterable(n.params for n in subnets)
-        update_parameters = [(param, param - learning_rate * T.grad(cost, param))
-                             for param in params]
-        # validation uses no dropout and previous skill propagation
-        self._tf_valid = theano.function(
-            givens=valid_givens + previous_givens,
-            **func_args)
-        # training uses parameter updates plus previous skill propagation with dropout
-        self._tf_train = theano.function(
-            updates=update_parameters,
-            givens=train_givens + previous_givens,
-            **func_args)
-
-        # setup lookback validation for use in aggregation
-        if self.aggregate == 1:
-            lookback = T.iscalar('lookback')
-            lookback_func_args = combine_dict(func_args, {'inputs': func_args['inputs'] + [lookback]})
-            givens = [valid_givens]
-            if previous_on:
-                givens += [(prev_indices, base_indices - lookback)]
-            self._tf_valid_lookback = theano.function(
-                givens=givens,
-                **lookback_func_args)
+        self.svm = svm.SVR(kernel='poly', degree=2, C=0.001)
+        feature_vector = T.concatenate(classifier_inputs, axis=1)
+        feature_vector.name = 'feature_vector'
+        self.gen_inputs = theano.function(
+            inputs=[base_indices, subject_start_idx],
+            outputs=[feature_vector, y],
+            givens=[(prev_indices, prev_indices_absolute)],
+            allow_input_downcast=True)
 
         self.train_batches = _gen_batches(train_idx, subject_x, batch_size)
         self.valid_batches = _gen_batches(valid_idx, subject_x, batch_size)
-        self._correct_y = correct_y
-
-    def train(self, (idxs, subject_idx), **kwargs):
-        '''perform one iteration of training on some indices
-        Args:
-            idxs (int[]): the indices of the rows to be used in training
-            subject_idx (int): the starting index for the subject in this batch
-        Returns:
-            (float, float[], int[]): a tuple of the loss, the predictions over the rows,
-                and the row indices
-        '''
-        res = self._tf_train(idxs, subject_idx)
-        return res[:3]
 
     def _aggregated_validation(self, idxs, subject_idx):
         aggregate_length = 30
@@ -257,17 +183,37 @@ class PrevLogKT(BaseKT):
             aggregated_pY += pY
         return loss, aggregated_pY, out_idxs
 
-    def validate(self, (idxs, subject_idx), **kwargs):
-        '''perform one iteration of validation
-        Args:
-            idxs (int[]): the indices of the rows to be used in validation
-            subject_idx (int): the starting index for the subject in this batch
-        Returns:
-            (float, float[], int[]): a tuple of the loss, the predictions over the rows,
-                and the row indices
-        '''
-        if self.aggregate == 0:
-            res = self._tf_valid(idxs, subject_idx)
-        else:
-            res = self._aggregated_validation(idxs, subject_idx)
-        return res[:3]
+    def _get_data_from_batches(self, batches):
+        first_loop = True
+
+        for idxs, subject_start_idx in batches:
+            feats, y = self.gen_inputs(idxs, subject_start_idx)
+
+            if first_loop:
+                all_feats = feats
+                all_y = y
+                first_loop = False
+            else:
+                all_feats = np.vstack((all_feats, feats))
+                all_y = np.hstack((all_y, y))
+
+        return all_feats, all_y
+
+    def train_full(self, **kwargs):
+        train_feats, train_y = self._get_data_from_batches(self.train_batches)
+
+        print("training svm...")
+        self.svm.fit(train_feats, train_y)
+        print("finished training svm")
+
+        sum_preds = None
+        for i in xrange(20):
+            test_feats, test_y = self._get_data_from_batches(self.valid_batches)
+            preds = self.svm.predict(test_feats)
+            print(preds)
+            if sum_preds is None:
+                sum_preds = preds
+            else:
+                sum_preds += preds
+        print(sum_preds)
+        print(auc(test_y, sum_preds, pos_label=1))

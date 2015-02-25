@@ -188,7 +188,8 @@ class FeatureScaler(Codec):
 
 
 class Autoencoder(Codec):
-    def __init__(self, size=None, weights=None, wrapper=None, L1_reg=0.0, L2_reg=0.0, learning_rate=1.0, rng_state=None, batch_size=30, activation='rectifier', **kwargs):
+    def __init__(self, size=None, weights=None, wrapper=None, L1_reg=0.0, L2_reg=0.0, learning_rate=1.0, rng_state=None,
+        batch_size=30, activation='rectifier', encoding_L1=0.0, **kwargs):
         """Builds an autoencoder.
         size: a list [input_dim (, layer_widths...), encoding_dim];
             input_dim: width of the input.
@@ -205,6 +206,7 @@ class Autoencoder(Codec):
         rng_state: numpy state tuple for rng.
         batch_size: size of each minibatch during training.
         activation: type of activation (as a string).
+        encoding_L1: L1 regularization on the encoding layer.
         """
         rng = np.random.RandomState()
         if rng_state is not None:
@@ -268,8 +270,9 @@ class Autoencoder(Codec):
         loss = T.mean(T.sqr(transformed_input_vec - transformed_reconstruction))
         L1 = sum(abs(tf_W).sum() for tf_W in tf_Ws)
         L2_sqr = sum((tf_W ** 2).sum() for tf_W in tf_Ws)
+        encoding_reg = abs(encoding).sum() #(T.jacobian(T.flatten(encoding), transformed_input_vec) ** 2).sum()
 
-        cost = loss + L1_reg * L1 + L2_reg * L2_sqr
+        cost = loss + L1_reg * L1 + L2_reg * L2_sqr + encoding_L1 * encoding_reg
 
         params = tf_Ws + tf_bs
         updates = [(param, param - learning_rate * T.grad(cost, param)) for param in params]
@@ -290,6 +293,7 @@ class Autoencoder(Codec):
         self.learning_rate = learning_rate
         self.batch_size = batch_size
         self.activation = activation
+        self.encoding_L1 = encoding_L1
 
     def fit(self, dataset, train_idx, valid_idx, valid_frequency=0.2, **kwargs):
         """Performs training and sets the parameters of the model to those that minimize validation cost,
@@ -363,6 +367,7 @@ class Autoencoder(Codec):
             'rng_state': self._rng.get_state(),
             'batch_size': self.batch_size,
             'activation': self.activation,
+            'encoding_L1': self.encoding_L1,
         }
 
 

@@ -283,7 +283,7 @@ class Autoencoder(Codec):
 
         # includes newly initialized values
         self.size = size
-        self.weights = weights
+        self.weights = (Ws, b_e, b_d)
         self.wrapper = wrapper
         self.L1_reg = L1_reg
         self.L2_reg = L2_reg
@@ -446,7 +446,7 @@ class Classifier(object):
         self._rng = rng
 
         self.size = size
-        self.weights = weights
+        self.weights = (Ws, bs)
         self.wrapper = wrapper
         self.L1_reg = L1_reg
         self.L2_reg = L2_reg
@@ -541,7 +541,10 @@ class Classifier(object):
             'batch_size': self.batch_size,
             'activation': self.activation,
         }
-    
+
+    def save_parameters(self, location):
+        with open(location, 'wb') as f:
+            pickle.dump(self.parameters, f, pickle.HIGHEST_PROTOCOL)
 
 if __name__ == '__main__':
     set_log_file(os.devnull)

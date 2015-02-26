@@ -29,6 +29,12 @@ SEGMENTED_HEADERS = [
     ('condition', Dataset.ENUM), # only one label characterizes the sequence
 ]
 
+# siegle's data
+SIEGLE_HEADERS = [
+    ('eeg', Dataset.MATFLOAT),
+    ('condition', Dataset.ENUM),
+]
+
 
 ACTIVITY_CONDITIONS = {
     'EyesOpen': 1,
@@ -93,6 +99,27 @@ def prepare_data(dataset_name, conds=None, **kwargs):
         for i, c in enumerate(cond_data):
             data.get_column('condition')[i] = c
     return data
+
+
+def load_siegle_data(dataset_name, conds=None, **kwargs):
+    if conds is None:
+        conds = ACTIVITY_CONDITIONS.keys()
+    cond_values = [ACTIVITY_CONDITIONS[cond] for cond in conds]
+    f = loadmat(dataset_name)
+    M = f['M']
+    n_rows = len(M)
+    # data is sorted by cond
+    np.random.shuffle(M)
+    Xs = M[:, 3:]
+    ys = M[:, 1]
+
+    idxs = np.arange(n_rows)[reduce(np.logical_or, [ys == ACTIVITY_CONDITIONS[cond] for cond in conds])]
+
+    ds = Dataset(SIEGLE_HEADERS, len(idxs))
+    for i in xrange(len(idxs)):
+        ds[i] = (Xs[idxs[i]], ys[idxs[i]])
+
+    return ds
 
 
 def convert_raw_data(directory, output):

@@ -14,7 +14,7 @@ from learntools.model import Model, gen_batches_by_size
 class BaseEmotiv(Model):
     @log_me('...building BaseEmotiv')
     def __init__(self, prepared_data, batch_size=30, L1_reg=0., L2_reg=0.,
-                 classifier_width=500, classifier_depth=1, rng_seed=42, dropout_p=0.5,
+                 field_width=20, ds_factor=2, rng_seed=42, dropout_p=0.5,
                  learning_rate=0.02, **kwargs):
         """
         Args:
@@ -42,6 +42,8 @@ class BaseEmotiv(Model):
                          n_in=input_size,
                          size=[input_size],
                          n_out=2,
+                         field_width=field_width,
+                         ds_factor=ds_factor,
                          dropout=t_dropout)
 
         input_idxs = T.ivector('input_idxs')

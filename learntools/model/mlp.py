@@ -41,7 +41,7 @@ class MLP(NetworkComponent):
 
 class ConvolutionalMLP(NetworkComponent):
     def __init__(self, rng, n_in, size, n_out, activation=rectifier,
-                 dropout=None, name='MLP'):
+                 dropout=None, field_width=3, ds_factor=2, name='MLP'):
         super(ConvolutionalMLP, self).__init__(name=name)
         self.dropout = T.scalar('dropout') if dropout is None else dropout
         self.hidden = ConvolutionalNetwork(
@@ -50,11 +50,14 @@ class ConvolutionalMLP(NetworkComponent):
             size=size,
             activation=activation,
             dropout=self.dropout,
+            field_width=field_width,
+            ds_factor=ds_factor,
             name=self.subname('convolutional')
         )
 
+        conv_n_out = (n_in - field_width + 1) / ds_factor + (1 if field_width % ds_factor == 0 else 0)
         self.logRegressionLayer = LogisticRegression(
-            n_in=n_in-2,
+            n_in=conv_n_out,
             n_out=n_out,
             name=self.subname('softmax')
         )

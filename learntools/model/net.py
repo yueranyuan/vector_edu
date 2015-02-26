@@ -3,6 +3,7 @@ import numpy
 import theano
 import theano.tensor as T
 from theano.tensor.nnet import conv
+from theano.tensor.signal import downsample
 
 from learntools.model.math import rectifier
 
@@ -147,8 +148,9 @@ class HiddenNetwork(NetworkComponent):
         return inp
 
 
+# inspired by http://deeplearning.net/tutorial/lenet.html
 class ConvolutionalLayer(NetworkComponent):
-    def __init__(self, rng, n_in, n_out=None, W=None, b=None, field_width=3,
+    def __init__(self, rng, n_in, n_out=None, W=None, b=None, field_width=3, ds_factor=2,
                  activation=rectifier, dropout=None, name='convolutionallayer'):
         super(ConvolutionalLayer, self).__init__(name=name)
         self.dropout = T.scalar('dropout') if dropout is None else dropout
@@ -182,6 +184,8 @@ class ConvolutionalLayer(NetworkComponent):
         self.L1 = abs(self.W).sum()
         self.L2_sqr = (self.W ** 2).sum()
 
+        self.ds_factor = ds_factor
+
     def instance(self, x, **kwargs):
         # dropouts
         mask = self.srng.binomial(n=1, p=1 - self.dropout, size=x.shape)
@@ -190,13 +194,15 @@ class ConvolutionalLayer(NetworkComponent):
         
         x_reshaped = T.reshape(x, (x.shape[0], 1, x.shape[1], 1), ndim=4)
         conv_output = conv.conv2d(x_reshaped, self.W)
-        lin_output = (conv_output + self.b.dimshuffle('x', 0, 'x', 'x')) * (1 / (1 - self.dropout))
+        pooled_output = downsample.max_pool_2d(conv_output, (self.ds_factor, 1))
+        lin_output = (pooled_output + self.b.dimshuffle('x', 0, 'x', 'x')) * (1 / (1 - self.dropout))
         ret = self.activation(lin_output.reshape((lin_output.shape[0], lin_output.shape[2])))
         return ret
 
 
 class ConvolutionalNetwork(NetworkComponent):
-    def __init__(self, n_in, size, input=None, name='convolutionalnetwork', **kwargs):
+    def __init__(self, n_in, size, input=None, name='convolutionalnetwork', field_width=3,
+                 ds_factor=2, **kwargs):
         super(ConvolutionalNetwork, self).__init__(name=name)
         self.name = name
         self.layers = []
@@ -204,6 +210,8 @@ class ConvolutionalNetwork(NetworkComponent):
             self.layers.append(ConvolutionalLayer(n_in=n_in_,
                                            n_out=n_out_,
                                            name=self.subname('layer{i}'.format(i=i)),
+                                           field_width=field_width,
+                                           ds_factor=ds_factor,
                                            **kwargs))
         self.n_out = n_out_
         self.components = self.layers

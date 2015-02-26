@@ -6,7 +6,7 @@ from itertools import chain
 
 from learntools.libs.logger import log_me
 from learntools.libs.auc import auc
-from learntools.model.mlp import MLP
+from learntools.model.mlp import ConvolutionalMLP
 from learntools.model.theano_utils import make_shared
 from learntools.model import Model, gen_batches_by_size
 
@@ -38,9 +38,9 @@ class BaseEmotiv(Model):
         rng = np.random.RandomState(rng_seed)
         t_dropout = T.scalar('dropout')
 
-        classifier = MLP(rng=rng,
+        classifier = ConvolutionalMLP(rng=rng,
                          n_in=input_size,
-                         size=[classifier_width] * classifier_depth,
+                         size=[input_size],
                          n_out=2,
                          dropout=t_dropout)
 

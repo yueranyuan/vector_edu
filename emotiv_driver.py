@@ -78,7 +78,7 @@ if __name__ == '__main__':
     if args['run']:
         run(task_num=0, model_type=ModelType.BASE, **params)
     elif args['run_raw']:
-        run(task_num=0, model_type=ModelType.RAW_BASE, **params)
+        run(task_num=2, model_type=ModelType.RAW_BASE, **params)
     elif args['convert_raw']:
         convert_raw_data(args['<directory>'], args['<output>'])
     

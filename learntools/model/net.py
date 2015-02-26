@@ -2,6 +2,7 @@ import numpy
 
 import theano
 import theano.tensor as T
+from theano.tensor.nnet import conv
 
 from learntools.model.math import rectifier
 
@@ -140,6 +141,75 @@ class HiddenNetwork(NetworkComponent):
         self.components = self.layers
 
     def instance(self, x, **kwargs):
+        inp = x
+        for layer in self.layers:
+            inp = layer.instance(inp)
+        return inp
+
+
+class ConvolutionalLayer(NetworkComponent):
+    def __init__(self, rng, n_in, n_out=None, W=None, b=None, field_width=3,
+                 activation=rectifier, dropout=None, name='convolutionallayer'):
+        super(ConvolutionalLayer, self).__init__(name=name)
+        self.dropout = T.scalar('dropout') if dropout is None else dropout
+        self.srng = theano.tensor.shared_randomstreams.RandomStreams(
+            rng.randint(999999))
+
+        if W is None:
+            W_values = numpy.asarray(
+                rng.uniform(
+                    low=-numpy.sqrt(6. / (n_in + n_out)),
+                    high=numpy.sqrt(6. / (n_in + n_out)),
+                    size=(1, 1, field_width, 1)
+                ),
+                dtype=theano.config.floatX
+            )
+            if activation == theano.tensor.nnet.sigmoid:
+                W_values *= 4
+
+            W = theano.shared(value=W_values, name=self.subname('W'), borrow=True)
+
+        if b is None:
+            b_values = numpy.zeros((1,), dtype=theano.config.floatX)
+            b = theano.shared(value=b_values, name=self.subname('b'), borrow=True)
+
+        self.W = W
+        self.b = b
+
+        self.activation = activation
+        self.params = [self.W, self.b]
+
+        self.L1 = abs(self.W).sum()
+        self.L2_sqr = (self.W ** 2).sum()
+
+    def instance(self, x, **kwargs):
+        # dropouts
+        mask = self.srng.binomial(n=1, p=1 - self.dropout, size=x.shape)
+        # cast because int * float32 = float64 which does not run on GPU
+        x = x * T.cast(mask, theano.config.floatX)
+        
+        x_reshaped = T.reshape(x, (x.shape[0], 1, x.shape[1], 1), ndim=4)
+        conv_output = conv.conv2d(x_reshaped, self.W)
+        lin_output = (conv_output + self.b.dimshuffle('x', 0, 'x', 'x')) * (1 / (1 - self.dropout))
+        ret = self.activation(lin_output.reshape((lin_output.shape[0], lin_output.shape[2])))
+        return ret
+
+
+class ConvolutionalNetwork(NetworkComponent):
+    def __init__(self, n_in, size, input=None, name='convolutionalnetwork', **kwargs):
+        super(ConvolutionalNetwork, self).__init__(name=name)
+        self.name = name
+        self.layers = []
+        for i, (n_in_, n_out_) in enumerate(zip([n_in] + size, size)):
+            self.layers.append(ConvolutionalLayer(n_in=n_in_,
+                                           n_out=n_out_,
+                                           name=self.subname('layer{i}'.format(i=i)),
+                                           **kwargs))
+        self.n_out = n_out_
+        self.components = self.layers
+
+    def instance(self, x, **kwargs):
+        shape = x.shape
         inp = x
         for layer in self.layers:
             inp = layer.instance(inp)

@@ -1,5 +1,7 @@
-import numpy
+import abc
+import cPickle as pickle
 
+import numpy as np
 import theano
 import theano.tensor as T
 
@@ -7,28 +9,51 @@ from learntools.model.math import rectifier
 
 
 class NetworkComponent(object):
-    '''Abstract network object that is not meant to be used. Holds some convenience functions
-    and the signature for NetworkComponents'''
-    def __init__(self, name):
-        '''create all theano variables at initialization
+    """Abstract network object that is not meant to be used. Holds some convenience functions
+    and the signature for NetworkComponents"""
+    __metaclass__ = abc.ABCMeta
+
+    def __init__(self, name, rng_state=None, inp=None, *args, **kwargs):
+        """create all theano variables at initialization
 
         Args:
             name (str): the name of the network. Use subname() to generate names for
                 all theano variables which are a part of this network so that debug will
                 display an appropriate name for the variable that indicates its place in the
-                network hierarchy'''
+                network hierarchy
+        """
         self.name = name
 
+        if rng_state is not None:
+            self._rng = np.random.RandomState()
+            self._rng.set_state(rng_state)
+
+        if inp is not None:
+            self.input = inp
+        else:
+            self.input = None
+
+    @abc.abstractmethod
     def instance(self, x, **kwargs):
-        '''generate the theano variable for the output of this network given the input x
+        """generate the theano variable for the output of this network given the input x
 
         Args:
             x: a theano variable that represents the input to this network
 
         Returns:
             a theano variable that represents the output of this network
-        '''
-        raise Exception('instance has not been implemented for this network')
+        """
+        pass
+
+    @property
+    def rng(self):
+        if not hasattr(self, '_rng'):
+            self._rng = np.random.RandomState()
+        return self._rng
+
+    @property
+    def output(self):
+        return self.instance(self.input)
 
     def subname(self, suffix):
         '''generate a name for a theano variable. Make sure all theano variables that are a
@@ -80,6 +105,66 @@ class NetworkComponent(object):
     def params(self, params):
         self._params = params
 
+    def infer(self, input_vec):
+        """Returns probability vector for each class."""
+        return self._tf_infer(input_vec)[0]
+
+    def __pickle__(self):
+        return {
+            'name': self.name,
+            'rng_state': self.rng.get_state(),
+        }
+
+    def _serialize_to_file(self, file):
+        pickle.dump(self.serialize(), file, pickle.HIGHEST_PROTOCOL)
+
+    def serialize(self, file=None):
+        """Serialize network component
+
+        Args:
+            file (str or file optional): the file to write this network component to
+
+        Returns:
+            (dict): a dictionary of the keyword arguments to initialize this network component
+        """
+        # serialize parameters out to a file
+        if file is not None:
+            if isinstance(file, str):  # file is the string location of the file
+                with open(file, 'wb') as f:
+                    self._serialize_to_file(f)
+            else:  # file is the file object itself
+                self._serialize_to_file(file)
+
+        return self.__pickle__()
+
+    @classmethod
+    def deserialize(cls, parameters=None, data_file=None, inp=None):
+        """Deserialize the network component
+
+        Args:
+            parameters (dict optional): the keyword dictionary of arguments to instantiate this class
+            file (str or file optional): a string location or a fileio object where the parameters are pickled
+
+        Returns:
+            NetworkComponent: the deserialized network component
+        """
+        # deserialize parameters from a file
+        if data_file is not None:
+            if isinstance(data_file, str):  # data_file is the string location of the file
+                with open(data_file, 'wb') as f:
+                    parameters = pickle.load(f)
+            else:  # data_file is the file object itself
+                parameters = pickle.load(data_file)
+
+        return cls(inp=inp, **parameters)
+
+
+def generate_batches(rng, train_idx, batch_size):
+    shuffled_idx = rng.permutation(train_idx)
+
+    for begin in xrange(0, len(shuffled_idx), batch_size):
+        yield shuffled_idx[begin : begin + batch_size]
+
 
 # inspired by https://github.com/mdenil/dropout/blob/master/mlp.py
 class HiddenLayer(NetworkComponent):
@@ -91,10 +176,10 @@ class HiddenLayer(NetworkComponent):
             rng.randint(999999))
 
         if W is None:
-            W_values = numpy.asarray(
+            W_values = np.asarray(
                 rng.uniform(
-                    low=-numpy.sqrt(6. / (n_in + n_out)),
-                    high=numpy.sqrt(6. / (n_in + n_out)),
+                    low=-np.sqrt(6. / (n_in + n_out)),
+                    high=np.sqrt(6. / (n_in + n_out)),
                     size=(n_in, n_out)
                 ),
                 dtype=theano.config.floatX
@@ -105,7 +190,7 @@ class HiddenLayer(NetworkComponent):
             W = theano.shared(value=W_values, name=self.subname('W'), borrow=True)
 
         if b is None:
-            b_values = numpy.zeros((n_out,), dtype=theano.config.floatX)
+            b_values = np.zeros((n_out,), dtype=theano.config.floatX)
             b = theano.shared(value=b_values, name=self.subname('b'), borrow=True)
 
         self.W = W

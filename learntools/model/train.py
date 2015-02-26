@@ -18,15 +18,6 @@ def train_model(model, n_epochs=500, patience=50,
     prev_rng_state = random.getstate()
     random.seed(rng_seed)
 
-    def run_epoch(gen_batch, shuffle=True, **kwargs):
-        return list(gen_batch())
-        sum_acc = 0
-        sum_n = 0
-        for n, acc in gen_batch(shuffle=shuffle, **kwargs):
-            sum_acc += acc * n
-            sum_n += n
-        return sum_acc / sum_n
-
     def aggregate_epoch_results(results):
         idxs, preds = transpose(results)
         return flatten(idxs), flatten(preds)

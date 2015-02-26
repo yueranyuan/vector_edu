@@ -9,6 +9,7 @@ Usage:
     emotiv_driver.py convert_raw <directory> <output>
     emotiv_driver.py run_subject [options]
     emotiv_driver.py run_autoencoder [options]
+    emotiv_driver.py run_batchnorm [options]
     emotiv_driver.py run_multistage [options]
 
 Options:
@@ -49,6 +50,7 @@ class ModelType(object):
     RAW_BASE = 1
     SUBJECT = 2
     AUTOENCODER = 3
+    BATCH_NORM = 4
 
 @log_me()
 def run(task_num=0, model_type=ModelType.BASE, **kwargs):
@@ -69,6 +71,10 @@ def run(task_num=0, model_type=ModelType.BASE, **kwargs):
         from learntools.emotiv.emotiv_autoencode import AutoencodeEmotiv as SelectedModel
         dataset = segment_raw_data(**kwargs)
         train_idx, valid_idx = cv_split(dataset, percent=0.50, fold_index=task_num)
+    elif model_type == ModelType.BATCH_NORM:
+        from learntools.emotiv.batchnorm import BatchNorm as SelectedModel
+        dataset = segment_raw_data(**kwargs)
+        train_idx, valid_idx = cv_split(dataset, percent=0.1, fold_index=task_num)
     else:
         raise Exception("model type is not valid")
     prepared_data = (dataset, train_idx, valid_idx)
@@ -102,6 +108,8 @@ if __name__ == '__main__':
         run(task_num=0, model_type=ModelType.SUBJECT, **params)
     elif args['run_autoencoder']:
         run(task_num=0, model_type=ModelType.AUTOENCODER, **params)
+    elif args['run_batchnorm']:
+        run(task_num=0, model_type=ModelType.BATCH_NORM, **params)
     elif args['run_multistage']:
         from learntools.emotiv.multistage import run_multistage
         run_multistage(task_num=0, **params)

@@ -10,13 +10,14 @@ from learntools.model.math import rectifier, sigmoid
 from learntools.libs.logger import log
 from learntools.libs.auc import auc
 from learntools.libs.utils import transpose
+import sys
 
 
 class NetworkComponent(object):
     """Abstract network object that is not meant to be used. Holds some convenience functions
     and the signature for NetworkComponents"""
     __metaclass__ = abc.ABCMeta
-
+    
     def __init__(self, name, rng_state=None, inp=None, *args, **kwargs):
         """create all theano variables at initialization
 
@@ -443,3 +444,52 @@ class HiddenNetwork(NetworkComponent):
             'activation': self.activation,
         }
         return combine_dict(super_pickle, my_pickle)
+
+
+class BatchNormLayer(HiddenLayer):
+    def __init__(self, rng, n_in, n_out, W=None, b=None, beta=None, gamma=None, alpha=0.999, mean=None, variance=None, activation=rectifier, name='batchnormlayer'):
+        """alpha is the exponential moving average falloff multiplier"""
+        super(BatchNormLayer, self).__init__(rng, n_in, n_out, W=W, b=b, activation=activation, name=name)
+        if beta is None:
+            beta_values = np.zeros((n_out,), dtype=theano.config.floatX)
+            beta = theano.shared(value=beta_values, name=self.subname('beta'), borrow=True)
+
+        if gamma is None:
+            gamma_values = np.ones((n_out,), dtype=theano.config.floatX)
+            gamma = theano.shared(value=gamma_values, name=self.subname('gamma'), borrow=True)
+
+        if mean is None:
+            mean_values = np.zeros((n_out,), dtype=theano.config.floatX)
+            mean = theano.shared(value=mean_values, name=self.subname('mean'), borrow=True)
+
+        if variance is None:
+            variance_values = np.ones((n_out,), dtype=theano.config.floatX)
+            variance = theano.shared(value=variance_values, name=self.subname('variance'), borrow=True)
+
+        self.beta = beta
+        self.gamma = gamma
+        self.alpha = alpha
+        self.mean = mean
+        self.variance = variance
+
+        self.activation = activation
+        self.params.extend([beta, gamma])
+
+    def instance(self, train_x, infer_x, epsilon=1e-8, **kwargs):
+        """Returns (train_output, inference_output, statistics_updates)"""
+        train_lin_output = T.dot(train_x, self.W) + self.b
+        batch_mean = T.mean(train_lin_output)
+        offset_output = train_lin_output - batch_mean
+        batch_var = T.var(offset_output)
+        normalized_lin_output =  offset_output / T.sqrt(batch_var + epsilon)
+        train_output = self.activation(self.gamma * normalized_lin_output + self.beta)
+
+        infer_lin_output = T.dot(infer_x, self.W) + self.b
+        sd = T.sqrt(self.variance + epsilon)
+        inference_output = self.activation(self.gamma / sd * infer_lin_output + (self.beta - (self.gamma * self.mean) / sd))
+        # exponential moving average for batch mean/variance
+        statistics_updates = [
+            (self.mean, self.alpha * self.mean + (1.0 - self.alpha) * batch_mean),
+            (self.variance, self.alpha * self.variance + (1.0 - self.alpha) * batch_var)
+        ]
+        return (train_output, inference_output, statistics_updates)

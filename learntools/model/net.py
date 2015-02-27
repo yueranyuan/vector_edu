@@ -1,11 +1,15 @@
 import abc
 import cPickle as pickle
+from copy import deepcopy
 
 import numpy as np
 import theano
 import theano.tensor as T
 
-from learntools.model.math import rectifier
+from learntools.model.math import rectifier, sigmoid
+from learntools.libs.logger import log
+from learntools.libs.auc import auc
+from learntools.libs.utils import transpose
 
 
 class NetworkComponent(object):
@@ -24,8 +28,8 @@ class NetworkComponent(object):
         """
         self.name = name
 
+        self._rng = np.random.RandomState()
         if rng_state is not None:
-            self._rng = np.random.RandomState()
             self._rng.set_state(rng_state)
 
         if inp is not None:
@@ -53,7 +57,9 @@ class NetworkComponent(object):
 
     @property
     def output(self):
-        return self.instance(self.input)
+        if not hasattr(self, '_output'):
+            self._output = self.instance(self.input)
+        return self._output
 
     def subname(self, suffix):
         '''generate a name for a theano variable. Make sure all theano variables that are a
@@ -71,7 +77,10 @@ class NetworkComponent(object):
         '''L1 regularization value'''
         if hasattr(self, '_L1'):
             return self._L1
-        self._L1 = sum([c.L1 for c in self.components])
+        if hasattr(self, 'components') and len(self.components) > 0:
+            self._L1 = sum([c.L1 for c in self.components])
+        else:
+            self._L1 = sum([abs(param).sum() for param in self.params])
         self._L1.name = self.subname('L1')
         return self._L1
 
@@ -85,8 +94,12 @@ class NetworkComponent(object):
         '''L2 regularization value'''
         if hasattr(self, '_L2_sqr'):
             return self._L2_sqr
-        self.L2_sqr = sum([c.L2_sqr for c in self.components])
-        return self.L2_sqr
+        if hasattr(self, 'components'):
+            self._L2_sqr = sum([c.L2_sqr for c in self.components])
+        else:
+            self._L2_sqr = sum([(param ** 2).sum() for param in self.params])
+        self._L2_sqr.name = self.subname('L2_sqr')
+        return self._L2_sqr
 
     @L2_sqr.setter
     def L2_sqr(self, L2_sqr):
@@ -159,6 +172,131 @@ class NetworkComponent(object):
         return cls(inp=inp, **parameters)
 
 
+class TrainableNetwork(NetworkComponent):
+    """Abstract Network that has an objective function and can be trained and applied
+    """
+
+    __metaclass__ = abc.ABCMeta
+
+    def __init__(self, name='trainable_network', inp=None, rng_state=None, **kwargs):
+        super(TrainableNetwork, self).__init__(inp=inp, name=name, rng_state=rng_state)
+
+    @abc.abstractmethod
+    def instance(self, x, **kwargs):
+        pass
+
+    @property
+    def loss(self):
+        if hasattr(self, '_loss'):
+            return self._loss
+        self._loss = -T.mean(T.log(self.output)[T.arange(self.true_output.shape[0]), self.true_output])
+        return self._loss
+
+    @loss.setter
+    def loss(self, loss):
+        self._loss = loss
+        self._loss.name = self.subname('loss')
+
+    def compile(self):
+        """ compile theano functions
+        """
+        self.t_L1_reg = T.fscalar('L1_reg')
+        self.t_L2_reg = T.fscalar('L2_reg')
+        self.t_learning_rate = T.fscalar('learning_rate')
+        cost = self.loss + self.t_L1_reg * self.L1 + self.t_L2_reg * self.L2_sqr
+
+        updates = [(param, param - self.t_learning_rate * T.grad(cost, param)) for param in self.params]
+
+        self._tf_train = theano.function(inputs=[self.input, self.true_output, self.t_L1_reg, self.t_L2_reg, self.t_learning_rate],
+                                         outputs=[self.loss], allow_input_downcast=True, updates=updates)
+        self._tf_infer = theano.function(inputs=[self.input], outputs=[self.output], allow_input_downcast=True)
+        self._tf_evaluate = theano.function(inputs=[self.input, self.true_output], outputs=[self.loss],
+                                            allow_input_downcast=True)
+
+    def fit(self, Xs, ys, train_idx, valid_idx, valid_frequency=0.2, n_epochs=1000, binary=True,
+            L1_reg=0.0, L2_reg=0.0, learning_rate=0.5, batch_size=30, **kwargs):
+        """Performs training and sets the parameters of the model to those that minimize validation cost,
+        and returns the best score achieved.
+        binary: whether or not the classes are binary classes. If so, show auc score instead of confusion matrix score.
+        L1_reg: L1 regularization constant.
+        L2_reg: L2 regularization constant.
+        learning_rate: learning rate.
+        batch_size: batch size.
+        """
+        log("...fitting Classifier", True)
+
+        valid_epoch = 0.0
+
+        best_parameters = None
+        best_score = 0.0
+
+        for epoch_i in xrange(n_epochs):
+            try:
+                # stochastic gradient descent training
+                for batch in generate_batches(self._rng, train_idx, batch_size):
+                    self.train(Xs[batch], ys[batch], L1_reg, L2_reg, learning_rate)
+
+                score = self.evaluate(Xs[train_idx], ys[train_idx], binary=binary)
+
+                log("epoch {}, train score {}".format(epoch_i, score), True)
+
+                # validation
+                if int(valid_epoch + valid_frequency) != int(valid_epoch):
+                    valid_epoch -= 1.0
+                    valid_score = self.evaluate(Xs[valid_idx], ys[valid_idx], binary=binary)
+                    log("epoch {}, validation score {}".format(epoch_i, valid_score), True)
+
+                    if valid_score > best_score:
+                        best_score = valid_score
+                        best_parameters = deepcopy(self.__pickle__())
+
+                valid_epoch += valid_frequency
+            except KeyboardInterrupt:
+                break
+
+        # import pdb; pdb.set_trace()
+        # self.__init__(**best_parameters)  # this is causing a lot of problems with theano redeclarations
+
+        # roll back
+        return best_score
+
+    def train(self, input_vec, true_y, L1_reg=0.0, L2_reg=0.0, learning_rate=0.5):
+        return self._tf_train(input_vec, true_y, L1_reg, L2_reg, learning_rate)[0]
+
+    def evaluate(self, input_vec, true_y):
+        return self.auc(input_vec, true_y)
+
+    def auc(self, input_vec, true_y, pos_label=1):
+        """Returns auc score for binary classification."""
+        return auc(true_y, self.infer(input_vec)[:, pos_label], pos_label=pos_label)
+
+    def predict(self, input_vec):
+        """Returns the class values with the highest probability."""
+        return np.argmax(self.infer(input_vec), axis=1)
+
+
+class Codec(NetworkComponent):
+    """Abstract network that can encode and decode"""
+    __metaclass__ = abc.ABCMeta
+
+    @abc.abstractmethod
+    def instance(self, x, **kwargs):
+        pass
+
+    def encode(self, values, *args, **kwargs):
+        """Encodes the value table."""
+        return self.infer(values)
+
+    @abc.abstractmethod
+    def decode(self, values, *args, **kwargs):
+        """Decodes an encoding."""
+        pass
+
+    def reconstruct(self, values, *args, **kwargs):
+        """Applies the encoder, then the decoder."""
+        return self.decode(self.encode(values, *args, **kwargs), *args, **kwargs)
+
+
 def generate_batches(rng, train_idx, batch_size):
     shuffled_idx = rng.permutation(train_idx)
 
@@ -168,65 +306,133 @@ def generate_batches(rng, train_idx, batch_size):
 
 # inspired by https://github.com/mdenil/dropout/blob/master/mlp.py
 class HiddenLayer(NetworkComponent):
-    def __init__(self, rng, n_in, n_out=None, W=None, b=None,
-                 activation=rectifier, dropout=None, name='hiddenlayer'):
-        super(HiddenLayer, self).__init__(name=name)
-        self.dropout = 0. if dropout is None else dropout
-        self.srng = theano.tensor.shared_randomstreams.RandomStreams(
-            rng.randint(999999))
+    def __init__(self, inp=None, n_in=None, n_out=None, rng_state=None, W=None, b=None,
+                 activation='rectifier', name='hiddenlayer'):
+        super(HiddenLayer, self).__init__(inp=inp, name=name, rng_state=rng_state)
 
-        if W is None:
-            W_values = np.asarray(
-                rng.uniform(
-                    low=-np.sqrt(6. / (n_in + n_out)),
-                    high=np.sqrt(6. / (n_in + n_out)),
-                    size=(n_in, n_out)
-                ),
-                dtype=theano.config.floatX
-            )
-            if activation == theano.tensor.nnet.sigmoid:
-                W_values *= 4
-
-            W = theano.shared(value=W_values, name=self.subname('W'), borrow=True)
-
-        if b is None:
-            b_values = np.zeros((n_out,), dtype=theano.config.floatX)
-            b = theano.shared(value=b_values, name=self.subname('b'), borrow=True)
-
-        self.W = W
-        self.b = b
+        ########
+        # STEP 0: load initializing values
 
         self.activation = activation
-        self.params = [self.W, self.b]
 
-        self.L1 = abs(self.W).sum()
-        self.L2_sqr = (self.W ** 2).sum()
+        self.srng = theano.tensor.shared_randomstreams.RandomStreams(
+            self.rng.randint(999999))
 
-    def instance(self, x, **kwargs):
+        if W is None:
+            sigma2 = 2.0 / n_in if activation == 'rectifier' else 2.0 / (n_in + n_out)
+            W = np.asarray(sigma2 * self.rng.randn(n_in, n_out), dtype=theano.config.floatX)
+        self.t_W = theano.shared(value=W, name=self.subname('W'), borrow=True)
+
+        if n_out is None:
+            n_out = W.shape[1]
+
+        if b is None:
+            b = np.zeros((n_out,), dtype=theano.config.floatX)
+        self.t_b = theano.shared(value=b, name=self.subname('b'), borrow=True)
+
+        self.activation = activation
+        self.params = [self.t_W, self.t_b]
+
+        if self.input is None:
+            self.input = T.dmatrix(self.subname('input'))
+
+    @property
+    def W(self):
+        return self.t_W.get_value(borrow=True)
+
+    @property
+    def b(self):
+        return self.t_b.get_value(borrow=True)
+
+    def instance(self, x, dropout=None, **kwargs):
         # dropouts
-        mask = self.srng.binomial(n=1, p=1 - self.dropout, size=x.shape)
+        dropout = dropout or 0.
+        mask = self.srng.binomial(n=1, p=1 - dropout, size=x.shape)
         # cast because int * float32 = float64 which does not run on GPU
         x = x * T.cast(mask, theano.config.floatX)
-        lin_output = (T.dot(x, self.W) + self.b) * (1 / (1 - self.dropout))
-        return self.activation(lin_output)
+        lin_output = (T.dot(x, self.t_W) + self.t_b) * (1 / (1 - dropout))
+        return self.activation_fn(lin_output)
+
+    @property
+    def activation_fn(self):
+        if self.activation == 'rectifier':
+            return rectifier
+        elif self.activation == 'sigmoid':
+            return sigmoid
+        else:
+            raise ValueError
+
+    def __pickle__(self):
+        from learntools.libs.utils import combine_dict
+        super_pickle = super(HiddenLayer, self).__pickle__()
+        my_pickle = {
+            'W': self.W,
+            'b': self.b,
+            'activation': self.activation,
+        }
+        return combine_dict(super_pickle, my_pickle)
 
 
 class HiddenNetwork(NetworkComponent):
-    def __init__(self, rng, n_in, size, input=None, name='hiddennetwork', **kwargs):
-        super(HiddenNetwork, self).__init__(name=name)
-        self.name = name
+    def __init__(self, size=None, weights=None, rng_state=None, inp=None, name='hiddennetwork',
+                 activation='rectifier', **kwargs):
+        super(HiddenNetwork, self).__init__(inp=inp, name=name, rng_state=rng_state)
+
+        ########
+        # STEP 0: load initializing values
+
+        self.activation = activation
+
+        min_layers = 1
+        # derive size from weights
+        if size is None and weights is None:
+            raise ValueError
+        elif size is None and weights is not None:
+            # derive size from weights
+            Ws, bs = transpose(weights)
+            if len(Ws) < min_layers:
+                raise ValueError
+            size = [Ws[0].shape[0]] + [W.shape[1] for W in Ws]
+        elif size is not None and weights is None:
+            if len(size) < min_layers:
+                raise ValueError
+            Ws, bs = [None for i in size[1:]], [None for i in size[1:]]
+        else:
+            Ws, bs = transpose(weights)
+
+        ########
+        # STEP 1: initialize network
+
         self.layers = []
-        for i, (n_in_, n_out_) in enumerate(zip([n_in] + size, size)):
-            self.layers.append(HiddenLayer(rng,
+        for i, (n_in_, n_out_, W, b) in enumerate(zip(size, size[1:], Ws, bs)):
+            self.layers.append(HiddenLayer(rng_state=rng_state,
                                            n_in=n_in_,
                                            n_out=n_out_,
+                                           W=W,
+                                           b=b,
                                            name=self.subname('layer{i}'.format(i=i)),
+                                           activation=activation,
                                            **kwargs))
-        self.n_out = n_out_ if self.layers else n_in
         self.components = self.layers
 
-    def instance(self, x, **kwargs):
+        if self.input is None:
+            self.input = T.dmatrix(self.subname('input'))
+
+    def instance(self, x, dropout=None, **kwargs):
         inp = x
         for layer in self.layers:
-            inp = layer.instance(inp)
+            inp = layer.instance(inp, dropout)
         return inp
+
+    @property
+    def weights(self):
+        return [(layer.W, layer.b) for layer in self.layers]
+
+    def __pickle__(self):
+        from learntools.libs.utils import combine_dict
+        super_pickle = super(HiddenNetwork, self).__pickle__()
+        my_pickle = {
+            'weights': self.weights,
+            'activation': self.activation,
+        }
+        return combine_dict(super_pickle, my_pickle)

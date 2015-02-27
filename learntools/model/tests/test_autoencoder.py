@@ -1,6 +1,6 @@
 import numpy as np
 
-from learntools.model.autoencoder import Autoencoder, Classifier
+from learntools.model.autoencoder import Autoencoder, MLP
 from learntools.libs.common_test_utils import use_logger_in_test
 
 
@@ -60,6 +60,10 @@ def test_autoencoder_serialize():
     autoencoder.fit(xs, train_idx, valid_idx, n_epochs=10)
     autoencoder_params = autoencoder.serialize()
     autoencoder2 = Autoencoder.deserialize(parameters=autoencoder_params)
+    np.testing.assert_array_equal(autoencoder.encoder.layers[0].t_W.get_value(borrow=True),
+                                  autoencoder2.encoder.layers[0].t_W.get_value(borrow=True))
+    np.testing.assert_array_equal(autoencoder.decoder.t_W.owner.inputs[0].get_value(borrow=True),
+                                  autoencoder2.decoder.t_W.owner.inputs[0].get_value(borrow=True))
     ey = autoencoder.reconstruct(xs)
     ey2 = autoencoder2.reconstruct(xs)
     np.testing.assert_array_equal(ey, ey2)
@@ -70,7 +74,7 @@ def test_classifier_fit():
     n_in = 100
     xs, ys, train_idx, valid_idx = gen_data(n_in=n_in, n_x1=300, n_x2=500)
     size = [n_in, n_in / 4, 2]
-    classifier = Classifier(size=size, weights=None, learning_rate=0.2)
+    classifier = MLP(size=size, weights=None, learning_rate=0.2)
     classifier_score = classifier.fit(xs, ys, train_idx, valid_idx, n_epochs=100)
     assert classifier_score > 0.99
 
@@ -80,7 +84,7 @@ def test_classifier_infer():
     n_in = 100
     xs, ys, train_idx, valid_idx = gen_data(n_in=n_in, n_x1=300, n_x2=500)
     size = [n_in, n_in / 4, 2]
-    classifier = Classifier(size=size, weights=None)
+    classifier = MLP(size=size, weights=None)
     ey = classifier.infer(xs)
     np.testing.assert_array_equal(ey.shape, (len(ys), len(np.unique(ys))))
     assert 0 < np.sum(ey) < ey.shape[0] * ey.shape[1]

@@ -1,109 +1,53 @@
-import abc
-from copy import deepcopy
-from itertools import izip
-
 import theano
 import theano.tensor as T
 import numpy as np
 
-from learntools.model.math import rectifier, sigmoid
-from learntools.libs.logger import log
-from learntools.libs.auc import auc
-from learntools.model.net import NetworkComponent
+from learntools.model.net import TrainableNetwork, Codec, HiddenLayer
 
 
-class Codec(object):
-    """Interface for encode-decode pairs."""
-    __metaclass__ = abc.ABCMeta
+class DecoderLayer(HiddenLayer):
+    def __init__(self, t_W, inp=None, rng_state=None, b=None,
+                 activation='rectifier', name='decoderlayer'):
+        super(HiddenLayer, self).__init__(inp=inp, name=name, rng_state=rng_state)
 
-    @abc.abstractmethod
-    def fit(self, *args, **kwargs):
-        """Set the parameters to best fit the data."""
-        return self
+        ########
+        # STEP 0: load initializing values
 
-    @abc.abstractmethod
-    def encode(self, values, *args, **kwargs):
-        """Encodes the value table."""
-        return values
+        self.activation = activation
 
-    @abc.abstractmethod
-    def decode(self, values, *args, **kwargs):
-        """Decodes an encoding."""
-        return values
+        self.t_W = t_W.T
+        self.t_W.name = self.subname('W')
 
-    def reconstruct(self, values, *args, **kwargs):
-        """Applies the encoder, then the decoder."""
-        return self.decode(self.encode(values, *args, **kwargs), *args, **kwargs)
+        if b is None:
+            b = np.zeros((self.W.shape[1],), dtype=theano.config.floatX)
+        self.t_b = theano.shared(value=b, name=self.subname('b'), borrow=True)
 
-    @abc.abstractproperty
-    def parameters(self):
-        """The parameter dictionary that can be used to instantiate the codec."""
-        return {}
+        self.activation = activation
+        self.params = [self.t_b]
 
-    def __repr__(self):
-        """Serializable, unambiguous representation."""
-        return "{}({})".format(self.__class__.__name__, ', '.join(k + '=' + repr(v) for k, v in self.parameters.items()))
-
-    def __str__(self):
-        return self.__repr__()
-
-
-class Identity(Codec):
-    def __init__(self):
-        pass
-
-    def fit(self):
-        pass
-
-    def encode(self, values):
-        return values
-
-    def decode(self, values):
-        return values
+        if self.input is None:
+            self.input = T.dmatrix(self.subname('input'))
 
     @property
-    def parameters(self):
-        return {}
-
-
-class FeatureScaler(Codec):
-    def __init__(self, min=0.0, max=1.0, epsilon=0.0, **kwargs):
-        """Builds a scaler."""
-        self.min = min
-        self.max = max
-        self.epsilon = epsilon
-
-    def fit(self, data, **kwargs):
-        self.min = data.min(axis=0)
-        self.max = data.max(axis=0)
-        self.epsilon = 1e-8
-        return self
-
-    def encode(self, values):
-        return (values - self.min) / (self.max - self.min + self.epsilon)
-
-    def decode(self, values):
-        return values * (self.max - self.min + self.epsilon) + self.min
+    def W(self):
+        return self.t_W.owner.inputs[0].get_value(borrow=True).T
 
     @property
-    def parameters(self):
-        return {
-            'min': self.min,
-            'max': self.max,
-            'epsilon': self.epsilon,
-        }
+    def b(self):
+        return self.t_b.get_value(borrow=True)
+
+    @property
+    def weights(self):
+        return [(self.W, self.b)]
+
+    def instance(self, x, **kwargs):
+        lin_output = T.dot(x, self.t_W) + self.t_b
+        return self.activation_fn(lin_output)
 
 
-def generate_batches(rng, train_idx, batch_size):
-    shuffled_idx = rng.permutation(train_idx)
-
-    for begin in xrange(0, len(shuffled_idx), batch_size):
-        yield shuffled_idx[begin : begin + batch_size]
-
-
-class Autoencoder(Codec):
-    def __init__(self, size=None, weights=None, wrapper=None, L1_reg=0.0, L2_reg=0.0, learning_rate=1.0, rng_state=None,
-                 batch_size=30, activation='rectifier', encoding_L1=0.0, **kwargs):
+class Autoencoder(Codec, TrainableNetwork):
+    def __init__(self, name="autoencoder", inp=None, size=None, weights=None, rng_state=None,
+                 activation='rectifier', **kwargs):
         """Builds an autoencoder.
         size: a list [input_dim (, layer_widths...), encoding_dim];
             input_dim: width of the input.
@@ -122,167 +66,79 @@ class Autoencoder(Codec):
         activation: type of activation (as a string).
         encoding_L1: L1 regularization on the encoding layer.
         """
-        rng = np.random.RandomState()
-        if rng_state is not None:
-            rng.set_state(rng_state)
+        super(Autoencoder, self).__init__(name=name, rng_state=rng_state, inp=inp)
 
-        if activation == 'rectifier':  # string for serializability
-            activation_fn = rectifier
-        elif activation == 'sigmoid':
-            activation_fn = sigmoid
-        else:
-            raise ValueError
-
-        if size is None or len(size) < 2:
-            raise ValueError
+        self.input = T.dmatrix(self.subname("input"))
 
         if weights is None:
-            Ws, b_e, b_d = [None for i in size[1:]], [None for i in size[1:]], [None for i in size[1:]]
-        else:
-            Ws, b_e, b_d = weights
+            weights = [(None, None) for i in xrange(len(size))]
+        if size is None:
+            size = [w.shape[0] for w, b in weights]
 
-        for i, dim_in, dim_out in zip(xrange(len(Ws)), size, size[1:]):
-            if Ws[i] is None:
-                # Xavier initialization
-                sigma2 = 2.0 / dim_in if activation == 'rectifier' else 2.0 / (dim_in + dim_out)
-                Ws[i] = np.asarray(sigma2 * rng.randn(dim_in, dim_out), dtype=theano.config.floatX)
-            if b_e[i] is None:
-                b_e[i] = np.asarray(np.zeros((1, dim_out)), dtype=theano.config.floatX)
-            if b_d[-(i+1)] is None:
-                b_d[-(i+1)] = np.asarray(np.zeros((1, dim_in)), dtype=theano.config.floatX)
+        # build encoder network
+        self.encoder = HiddenNetwork(name=self.subname("encoder"), inp=inp, size=size, weights=weights[:-1],
+                                     rng_state=rng_state, activation=activation)
 
-        if wrapper is None:
-            wrapper = Identity()
+        # build decoder network
+        t_decoder_W = self.encoder.layers[-1].t_W
+        decoder_b = weights[-1][1]
+        self.decoder = DecoderLayer(name=self.subname("decoder"), t_W=t_decoder_W, rng_state=rng_state,
+                                    b=decoder_b, activation=activation)
+        self.components = [self.encoder, self.decoder]
+        self.true_output = T.dmatrix('reconstruction_target')
+        self.compile()
 
-        # construct the net
-        transformed_input_vec = T.dmatrix('transformed_input_vec')
-        layer = transformed_input_vec
+    @property
+    def loss(self):
+        if not hasattr(self, '_loss'):
+            self._loss = T.mean(T.sqr(self.true_output - self.output))
+        return self._loss
 
-        tf_Ws = []
-        tf_bs = []
+    def instance(self, x, dropout=None):
+        self.encoding = self.encoder.instance(x, dropout=dropout)
+        output = self.decoder.instance(self.encoding)
+        return output
 
-        # encoding layers
-        for i, weight, bias in zip(xrange(1, len(Ws) + 1), Ws, b_e):
-            tf_W = theano.shared(value=weight, name='W' + str(i), borrow=True)
-            tf_b = theano.shared(value=bias, name='b' + str(i), borrow=True, broadcastable=(True, False))
-            tf_Ws.append(tf_W)
-            tf_bs.append(tf_b)
-            layer = activation_fn(T.dot(layer, tf_W) + tf_b)
-
-        encoding = layer
-
-        # decoding layers
-        for i, tf_W, bias in zip(xrange(len(Ws) + 1, 2 * len(Ws) + 1), reversed(tf_Ws), b_d):
-            tf_b = theano.shared(value=bias, name='b' + str(i), borrow=True, broadcastable=(True, False))
-            tf_bs.append(tf_b)
-            layer = activation_fn(T.dot(layer, tf_W.T) + tf_b)
-
-        transformed_reconstruction = layer
-
-        # construct theano functions
-        loss = T.mean(T.sqr(transformed_input_vec - transformed_reconstruction))
-        L1 = sum(abs(tf_W).sum() for tf_W in tf_Ws)
-        L2_sqr = sum((tf_W ** 2).sum() for tf_W in tf_Ws)
-        encoding_reg = abs(encoding).sum()  # (T.jacobian(T.flatten(encoding), transformed_input_vec) ** 2).sum()
-
-        cost = loss + L1_reg * L1 + L2_reg * L2_sqr + encoding_L1 * encoding_reg
-
-        params = tf_Ws + tf_bs
-        updates = [(param, param - learning_rate * T.grad(cost, param)) for param in params]
-
-        self._tf_reconstruct = theano.function(inputs=[transformed_input_vec], outputs=[transformed_reconstruction], allow_input_downcast=True)
-        self._tf_encode = theano.function(inputs=[transformed_input_vec], outputs=[encoding], allow_input_downcast=True)
-        self._tf_decode = theano.function(inputs=[encoding], outputs=[transformed_reconstruction], allow_input_downcast=True)
-        self._tf_train = theano.function(inputs=[transformed_input_vec], outputs=[loss], allow_input_downcast=True, updates=updates)
-        self._tf_evaluate = theano.function(inputs=[transformed_input_vec], outputs=[loss], allow_input_downcast=True)
-        self._rng = rng
-
-        # includes newly initialized values
-        self.size = size
-        self.weights = (Ws, b_e, b_d)
-        self.wrapper = wrapper
-        self.L1_reg = L1_reg
-        self.L2_reg = L2_reg
-        self.learning_rate = learning_rate
-        self.batch_size = batch_size
-        self.activation = activation
-        self.encoding_L1 = encoding_L1
-
-    def fit(self, dataset, train_idx, valid_idx, valid_frequency=0.2,n_epochs=1000, **kwargs):
-        """Performs training and sets the parameters of the model to those that minimize validation cost,
-        and returns the best score achieved."""
-        log("...fitting Autoencoder with size {}".format(self.size), True)
-
-        valid_epoch = 0.0
-
-        best_parameters = None
-        best_cost = float('inf')
-
-        for epoch_i in xrange(n_epochs):
-            try:
-                # stochastic gradient descent training
-                cost = 0.0
-                for batch in generate_batches(self._rng, train_idx, self.batch_size):
-                    batch_cost = self.train(dataset[batch])
-                    cost += len(batch) * batch_cost
-
-                log("epoch {}, train cost {}".format(epoch_i, cost / len(train_idx)), True)
-
-                # validation
-                if int(valid_epoch + valid_frequency) != int(valid_epoch):
-                    valid_epoch -= 1.0
-                    valid_cost = self.evaluate(dataset[valid_idx])
-                    log("epoch {}, validation cost {}".format(epoch_i, valid_cost), True)
-
-                    if valid_cost < best_cost:
-                        best_cost = valid_cost
-                        best_parameters = deepcopy(self.parameters)
-
-                valid_epoch += valid_frequency
-            except KeyboardInterrupt:
-                break
-
-        # import pdb; pdb.set_trace()
-
-        # roll back
-        self.__init__(**best_parameters)
-        return best_cost
-
-    def train(self, input_vec):
-        """Performs one round of updates on input vectors within dataset."""
-        return self._tf_train(self.wrapper.encode(input_vec))[0]
+    def compile(self):
+        super(Autoencoder, self).compile()
+        self._tf_encode = theano.function(inputs=[self.input], outputs=[self.encoding], allow_input_downcast=True)
+        self._tf_decode = theano.function(inputs=[self.encoding], outputs=[self.output], allow_input_downcast=True)
 
     def reconstruct(self, input_vec):
         """Returns predicted values on input vectors within dataset."""
-        return self.wrapper.decode(self._tf_reconstruct(self.wrapper.encode(input_vec))[0])
+        return self.infer(input_vec)
 
-    def evaluate(self, input_vec):
+    def evaluate(self, input_vec, y, **kwargs):
         """Returns reconstruction cost without L1/L2 normalization."""
-        return self._tf_evaluate(self.wrapper.encode(input_vec))[0]
+        return self._tf_evaluate(input_vec, y)[0]
 
     def encode(self, input_vec):
-        return self._tf_encode(self.wrapper.encode(input_vec))[0]
+        return self._tf_encode(input_vec)[0]
 
     def decode(self, encoded_vec):
-        return self.wrapper.decode(self._tf_decode(encoded_vec)[0])
+        return self._tf_decode(encoded_vec)[0]
+
+    def fit(self, Xs, train_idx, valid_idx, binary=False, **kwargs):
+        return super(Autoencoder, self).fit(Xs=Xs, ys=Xs, train_idx=train_idx, valid_idx=valid_idx, binary=False, **kwargs)
+
+    def __pickle__(self):
+        from learntools.libs.utils import combine_dict
+        super_pickle = super(Autoencoder, self).__pickle__()
+        my_pickle = {
+            'weights': self.encoder.weights + self.decoder.weights,
+            'activation': self.encoder.activation
+        }
+        return combine_dict(super_pickle, my_pickle)
 
     @property
-    def parameters(self):
-        return {
-            'size': self.size,
-            'weights': self.weights,
-            'wrapper': self.wrapper,
-            'L1_reg': self.L1_reg,
-            'L2_reg': self.L2_reg,
-            'learning_rate': self.learning_rate,
-            'rng_state': self._rng.get_state(),
-            'batch_size': self.batch_size,
-            'activation': self.activation,
-            'encoding_L1': self.encoding_L1,
-        }
+    def weights(self):
+        return self.encoder.weights + self.decoder.weights
+
+from learntools.model.net import HiddenNetwork
+from learntools.model.logistic import LogisticRegression
 
 
-class Classifier(NetworkComponent):
+class MLP(TrainableNetwork):
     def __init__(self, name='classifier', inp=None, size=None, weights=None, rng_state=None,
                  activation='rectifier', **kwargs):
         """Multilayer perceptron with softmax.
@@ -296,154 +152,41 @@ class Classifier(NetworkComponent):
         rng_state: numpy state tuple for rng.
         activation: type of activation (as a string).
         """
-        super(Classifier, self).__init__(inp=inp, name=name, rng_state=rng_state)
+        super(MLP, self).__init__(inp=inp, name=name, rng_state=rng_state)
 
-        ########
-        # STEP 0: load initializing values
-
-        self.activation = activation
-
-        min_layers = 2
-        # derive size from weights
-        if size is None and weights is None:
-            raise ValueError
-        elif size is None and weights is not None:
-            # derive size from weights
-            Ws, bs = weights
-            if len(Ws) < min_layers:
-                raise ValueError
-            size = [Ws[0].shape[0]] + [W.shape[1] for W in Ws]
-        elif size is not None and weights is None:
-            if len(size) < 2:
-                raise ValueError
-            Ws, bs = [None for i in size[1:]], [None for i in size[1:]]
-        else:
-            Ws, bs = weights
-        self.weights = (Ws, bs)
-
-        ########
-        # STEP 1: initialize network
+        if weights is None:
+            weights = [(None, None) for i in xrange(len(size) - 1)]
 
         if self.input is None:
-            self.input = T.dmatrix('transformed_input_vec')
-
-        for i, dim_in, dim_out in zip(xrange(len(Ws)), size, size[1:]):
-            if Ws[i] is None:
-                # Xavier initialization
-                sigma2 = 2.0 / dim_in if activation == 'rectifier' else 2.0 / (dim_in + dim_out)
-                Ws[i] = np.asarray(sigma2 * self.rng.randn(dim_in, dim_out), dtype=theano.config.floatX)
-            if bs[i] is None:
-                bs[i] = np.asarray(np.zeros((1, dim_out)), dtype=theano.config.floatX)
-
-        self.tf_Ws, self.tf_bs = [], []
-
-        for i, weight, bias in zip(xrange(len(Ws)), Ws, bs):
-            tf_W = theano.shared(value=weight, name='W' + str(i), borrow=True)
-            tf_b = theano.shared(value=bias, name='b' + str(i), borrow=True, broadcastable=(True, False))
-            self.tf_Ws.append(tf_W)
-            self.tf_bs.append(tf_b)
-        self.params = self.tf_Ws + self.tf_bs
-
-        ########
-        # STEP 2: initialize objective function and other training parameters
-
+            self.input = T.dmatrix(self.subname('input'))
         self.true_output = T.ivector('true_y')
-        # negative log likelihood
-        self.loss = -T.mean(T.log(self.output)[T.arange(self.true_output.shape[0]), self.true_output])
-        self.L1 = sum([abs(tf_W).sum() for tf_W in self.tf_Ws])
-        self.L2_sqr = sum([(tf_W ** 2).sum() for tf_W in self.tf_Ws])
+
+        # setup hidden network
+        hidden_size = None if size is None else size[:-1]
+        self.hidden = HiddenNetwork(size=hidden_size, inp=inp, weights=weights[:-1], activation=activation,
+                                    rng_state=rng_state)
+        # setup top layer logistic unit
+        logistic_W, logistic_b = weights[-1]
+        if size is None:
+            logistic_n_in = logistic_n_out = None
+        else:
+            logistic_n_in, logistic_n_out = size[-2:]
+        self.logistic = LogisticRegression(n_in=logistic_n_in, n_out=logistic_n_out, W=logistic_W, b=logistic_b,
+                                           rng_state=rng_state)
+        self.components = [self.hidden, self.logistic]
 
         # compile theano functions
         self.compile()
 
-    def compile(self):
-        """ compile theano functions
-        """
-        self.t_L1_reg = T.fscalar('L1_reg')
-        self.t_L2_reg = T.fscalar('L2_reg')
-        self.t_learning_rate = T.fscalar('learning_rate')
-        cost = self.loss + self.t_L1_reg * self.L1 + self.t_L2_reg * self.L2_sqr
-
-        updates = [(param, param - self.t_learning_rate * T.grad(cost, param)) for param in self.params]
-
-        self._tf_train = theano.function(inputs=[self.input, self.true_output, self.t_L1_reg, self.t_L2_reg, self.t_learning_rate],
-                                         outputs=[self.loss], allow_input_downcast=True, updates=updates)
-        self._tf_infer = theano.function(inputs=[self.input], outputs=[self.output], allow_input_downcast=True)
-        self._tf_evaluate = theano.function(inputs=[self.input, self.true_output], outputs=[self.loss],
-                                            allow_input_downcast=True)
-
-    @property
-    def activation_fn(self):
-        if self.activation == 'rectifier':
-            return rectifier
-        elif self.activation == 'sigmoid':
-            return sigmoid
-        else:
-            raise ValueError
-
     def instance(self, x):
-        layer = x
-        for i, (tf_W, tf_b) in enumerate(izip(self.tf_Ws, self.tf_bs)):
-            if i < len(self.tf_Ws) - 1:
-                layer = self.activation_fn(T.dot(layer, tf_W) + tf_b)
-            else:
-                est_probs = T.nnet.softmax(T.dot(layer, tf_W) + tf_b)
+        hidden_out = self.hidden.instance(x)
+        est_probs = self.logistic.instance(hidden_out)
         return est_probs
-
-    def fit(self, Xs, ys, train_idx, valid_idx, valid_frequency=0.2, n_epochs=1000, binary=True,
-            L1_reg=0.0, L2_reg=0.0, learning_rate=0.5, batch_size=30, **kwargs):
-        """Performs training and sets the parameters of the model to those that minimize validation cost,
-        and returns the best score achieved.
-        binary: whether or not the classes are binary classes. If so, show auc score instead of confusion matrix score.
-        L1_reg: L1 regularization constant.
-        L2_reg: L2 regularization constant.
-        learning_rate: learning rate.
-        batch_size: batch size.
-        """
-        log("...fitting Classifier", True)
-
-        valid_epoch = 0.0
-
-        best_parameters = None
-        best_score = 0.0
-
-        for epoch_i in xrange(n_epochs):
-            try:
-                # stochastic gradient descent training
-                for batch in generate_batches(self._rng, train_idx, batch_size):
-                    self.train(Xs[batch], ys[batch], L1_reg, L2_reg, learning_rate)
-
-                score = self.evaluate(Xs[train_idx], ys[train_idx], binary=binary)
-
-                log("epoch {}, train score {}".format(epoch_i, score), True)
-
-                # validation
-                if int(valid_epoch + valid_frequency) != int(valid_epoch):
-                    valid_epoch -= 1.0
-                    valid_score = self.evaluate(Xs[valid_idx], ys[valid_idx], binary=binary)
-                    log("epoch {}, validation score {}".format(epoch_i, valid_score), True)
-
-                    if valid_score > best_score:
-                        best_score = valid_score
-                        best_parameters = deepcopy(self.__pickle__())
-
-                valid_epoch += valid_frequency
-            except KeyboardInterrupt:
-                break
-
-        # import pdb; pdb.set_trace()
-        self.__init__(**best_parameters)
-
-        # roll back
-        return best_score
 
     @property
     def n_outputs(self):
         Ws, _ = self.weights
         return Ws[-1].shape[1]
-
-    def train(self, input_vec, true_y, L1_reg=0.0, L2_reg=0.0, learning_rate=0.5):
-        return self._tf_train(input_vec, true_y, L1_reg, L2_reg, learning_rate)[0]
 
     def evaluate(self, input_vec, true_y, binary=True):
         if binary:
@@ -460,19 +203,11 @@ class Classifier(NetworkComponent):
             cm[true_y[row], :] += est_probs[row] / len(input_vec)
         return (cm, sum(cm.diagonal()))
 
-    def auc(self, input_vec, true_y, pos_label=1):
-        """Returns auc score for binary classification."""
-        return auc(true_y, self.infer(input_vec)[:, pos_label], pos_label=pos_label)
-
-    def predict(self, input_vec):
-        """Returns the class values with the highest probability."""
-        return np.argmax(self.infer(input_vec), axis=1)
-
     def __pickle__(self):
         from learntools.libs.utils import combine_dict
-        super_pickle = super(Classifier, self).__pickle__()
+        super_pickle = super(MLP, self).__pickle__()
         my_pickle = {
-            'weights': self.weights,
-            'activation': self.activation,
+            'weights': self.hidden.weights + [(self.logistic.W, self.logistic.b)],
+            'activation': self.hidden.activation,
         }
         return combine_dict(super_pickle, my_pickle)

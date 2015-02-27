@@ -35,6 +35,7 @@ from docopt import docopt
 
 from learntools.libs.logger import gen_log_name, log_me, set_log_file
 from learntools.emotiv.data import prepare_data, convert_raw_data, segment_raw_data, load_siegle_data
+from learntools.emotiv.filter import filter_data
 from learntools.data import cv_split
 from learntools.data.crossvalidation import cv_split_within_column
 import learntools.deploy.config as config
@@ -75,6 +76,7 @@ def run(task_num=0, model_type=ModelType.BASE, **kwargs):
         from learntools.emotiv.batchnorm import BatchNorm as SelectedModel
         # dataset = load_siegle_data(**kwargs)
         dataset = segment_raw_data(**kwargs)
+        filter_data(dataset)
         train_idx, valid_idx = cv_split(dataset, percent=0.1, fold_index=task_num)
     else:
         raise Exception("model type is not valid")

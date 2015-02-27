@@ -13,6 +13,8 @@ from learntools.data.dataset import LISTEN_TIME_FORMAT
 from learntools.libs.utils import normalize_table, loadmat
 from learntools.libs.eeg import signal_to_freq_bins
 
+DEFAULT_CALIBRATION_FILE_LOCATION = 'raw_data/allcalibqualityreport.csv'
+
 # headers used in the raw data taken directly from matlab
 RAW_HEADERS = [
     ('subject', Dataset.STR),
@@ -124,8 +126,6 @@ def load_siegle_data(dataset_name, conds=None, **kwargs):
 
 def convert_raw_data(directory, output):
     raw_files = glob.glob(os.path.join(directory, '*.mat'))
-
-    subjects = {}
 
     n_rows = len(raw_files)
     ds = Dataset(RAW_HEADERS, n_rows)
@@ -257,7 +257,7 @@ def segment_raw_data(dataset_name, conds=None, duration=10, sample_rate=128, **k
                 # Flatten into a vector
                 eeg_freqs_flattened = np.ravel(eeg_freqs)
 
-                segments.append((subject_id, source, eeg_freqs_flattened, label))
+                segments.append((subject, source, eeg_freqs_flattened, label))
 
     # add all segments to the new dataset
     new_ds = Dataset(SEGMENTED_HEADERS, len(segments))
@@ -276,3 +276,4 @@ def filter_indices_by_condition(dataset, idx, conds):
     # convert from cond string to cond enum, to internal cond enum, to mask
     want = [dataset.get_data('condition')[idx] == mapping[ACTIVITY_CONDITIONS[cond]] for cond in conds]
     return idx[reduce(np.logical_or, want)]
+    return new_ds

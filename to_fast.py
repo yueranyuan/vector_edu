@@ -21,7 +21,7 @@ def _to_fast_with_idxs(fname, headers, skills, data, idxs, single_skill=False):
 def to_fast(data, train_fname=None, valid_fname=None, fold=0, vector_length=150, single_skill=False):
     train_fname = train_fname or 'FAST+deepkt_train{}.txt'.format(fold)
     valid_fname = valid_fname or 'FAST+deepkt_test{}.txt'.format(fold)
-    valid_idx, train_idx = cv_split(data, cv_fold=fold, no_new_skill=True)
+    valid_idx, train_idx = cv_split(data, fold_index=fold, no_new_skill=True)
     skills = gen_word_matrix(data.get_data('skill'), data['skill'].enum_pairs, vector_length=vector_length)
 
     # create fast header

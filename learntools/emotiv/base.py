@@ -2,20 +2,21 @@ import theano
 import theano.tensor as T
 import numpy as np
 
-from itertools import chain
+from itertools import chain, izip
 
 from learntools.libs.logger import log_me
 from learntools.libs.auc import auc
 from learntools.model.mlp import MLP
-from learntools.model.theano_utils import make_shared
+from learntools.model.theano_utils import make_shared, shared_zeros_like
 from learntools.model import Model, gen_batches_by_size
+from learntools.model.math import sigmoid
 
 
 class BaseEmotiv(Model):
     @log_me('...building BaseEmotiv')
     def __init__(self, prepared_data, batch_size=30, L1_reg=0., L2_reg=0.,
                  classifier_width=500, classifier_depth=1, rng_seed=42, dropout_p=0.5,
-                 learning_rate=0.02, **kwargs):
+                 learning_rate=0.02, momentum=0.7, **kwargs):
         """
         Args:
             prepared_data : (Dataset, [int], [int])
@@ -62,27 +63,40 @@ class BaseEmotiv(Model):
         )
         cost.name = 'overall_cost'
 
-        func_args = {
+        # compute parameter updates
+        training_updates = []
+        params = list(chain.from_iterable(net.params for net in subnets))
+        raw_deltas = [T.grad(cost, param) for param in params]
+        if momentum > 0:
+            old_deltas = [shared_zeros_like(p) for p in params]
+            deltas = [momentum * old_delta + raw_delta for old_delta, raw_delta in izip(old_deltas, raw_deltas)]
+            update_momentum = [(old_delta, delta) for old_delta, delta in izip(old_deltas, deltas)]
+            training_updates += update_momentum
+        else:
+            deltas = raw_deltas
+        update_parameters = [(param, param - learning_rate * delta)
+                             for param, delta in izip(params, deltas)]
+        training_updates += update_parameters
+
+        common_args = {
             'inputs': [input_idxs],
             'outputs': [loss, pY[:, 1] - pY[:, 0], input_idxs],
             'allow_input_downcast': True,
         }
-        params = chain.from_iterable(net.params for net in subnets)
-        update_parameters = [(param, param - learning_rate * T.grad(cost, param))
-                             for param in params]
-
-        self._tf_valid = theano.function(givens={t_dropout: 0.}, **func_args)
+        self._tf_valid = theano.function(givens={t_dropout: 0.}, **common_args)
         self._tf_train = theano.function(
-            updates=update_parameters,
+            updates=training_updates,
             givens={t_dropout: dropout_p},
-            **func_args)
+            **common_args)
 
     def evaluate(self, idxs, pred):
         y = self._ys.owner.inputs[0].get_value(borrow=True)[idxs]
         return auc(y[:len(pred)], pred, pos_label=1)
 
     def validate(self, idxs, **kwargs):
-        return self._tf_valid(idxs)
+        res = self._tf_valid(idxs)
+        return res[:3]
 
     def train(self, idxs, **kwargs):
-        return self._tf_train(idxs)
+        res = self._tf_train(idxs)
+        return res[:3]

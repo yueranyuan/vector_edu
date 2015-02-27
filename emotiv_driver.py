@@ -14,15 +14,15 @@ Usage:
 
 Options:
     -p <param_set>, --param_set=<param_set>
-        The name of the parameter set to use [default: emotiv_wide_search].
+        The name of the parameter set to use [default: emotiv_wide_search2].
     -f <file>, --file=<file>
         The data file to use [default: raw_data/all_siegle.txt].
     -o <file>, --out=<file>
         The name for the log file to be generated.
     -q, --quiet
         Do not output to a log file.
-    -t, --task_number=<task_num>
-        A counter representing the queue position of the current job.
+    -t, --task_number=<int>
+        A counter representing the queue position of the current job. [default: 0].
 """
 
 from __future__ import print_function, division
@@ -111,21 +111,23 @@ if __name__ == '__main__':
         params['dataset_name'] = args['--file']
 
     params['conds'] = ['EyesClosed', 'EyesOpen']
+    
+    task_num = int(args['--task_number'])
 
     if args['run']:
-        run(task_num=0, model_type=ModelType.BASE, **params)
+        run(task_num=task_num, model_type=ModelType.BASE, **params)
     elif args['run_raw']:
-        run(task_num=0, model_type=ModelType.RAW_BASE, **params)
+        run(task_num=task_num, model_type=ModelType.RAW_BASE, **params)
     elif args['convert_raw']:
         convert_raw_data(args['<directory>'], args['<output>'])
     elif args['run_subject']:
-        run(task_num=0, model_type=ModelType.SUBJECT, **params)
+        run(task_num=task_num, model_type=ModelType.SUBJECT, **params)
     elif args['run_autoencoder']:
-        run(task_num=0, model_type=ModelType.AUTOENCODER, **params)
+        run(task_num=task_num, model_type=ModelType.AUTOENCODER, **params)
     elif args['run_batchnorm']:
-        run(task_num=0, model_type=ModelType.BATCH_NORM, **params)
+        run(task_num=task_num, model_type=ModelType.BATCH_NORM, **params)
     elif args['run_multistage']:
         from learntools.emotiv.multistage import run_multistage
-        run_multistage(task_num=0, **params)
+        run_multistage(task_num=task_num, **params)
     
     print("Finished")

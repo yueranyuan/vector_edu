@@ -5,8 +5,11 @@ import numpy as np
 
 from learntools.libs.common_test_utils import use_logger_in_test
 from learntools.data import cv_split
-from learntools.emotiv.base import BaseEmotiv
+from learntools.emotiv import BaseEmotiv, prepare_data
+from learntools.emotiv.tests.emotiv_simple import SimpleEmotiv
 from learntools.data import Dataset
+import pytest
+slow = pytest.mark.slow
 
 
 def gen_small_emotiv_data():
@@ -52,6 +55,7 @@ def test_emotive_base():
 
 
 @use_logger_in_test
+@slow
 def test_emotive_base_random():
     dataset = gen_random_emotiv_data()
     train_idx, valid_idx = cv_split(dataset, percent=0.2, fold_index=0)
@@ -60,3 +64,13 @@ def test_emotive_base_random():
     model = BaseEmotiv(prepared_data, batch_size=50)
     best_loss, best_epoch = model.train_full(n_epochs=100, patience=100)
     assert best_loss > 0.8
+
+
+@use_logger_in_test
+def test_emotiv_simple():
+    """ tests that we can train a simple logistic regression model on the emotiv data """
+    dataset = prepare_data('raw_data/all_siegle.txt', conds=['EyesOpen', 'EyesClosed'])
+    train_idx, valid_idx = cv_split(dataset, percent=0.3, fold_index=0)
+    model = SimpleEmotiv((dataset, train_idx, valid_idx), batch_size=1)
+    best_loss, best_epoch = model.train_full(n_epochs=100, patience=100)
+    assert best_loss > .67

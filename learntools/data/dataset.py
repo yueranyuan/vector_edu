@@ -1,10 +1,11 @@
 from __future__ import division
-from math import ceil
+from math import ceil, floor
 import csv
 from time import mktime
 from datetime import datetime
 from itertools import imap, izip, compress
 from operator import or_
+from functools import wraps
 
 import numpy as np
 
@@ -143,6 +144,22 @@ class MatColumn(Column):
         self.dtype = dtype
         self._data = None
 
+    def has_data(self):
+        return self._data is not None
+
+    def _requires_data(func):
+        @wraps(func)
+        def wrapper(_self, *args, **kwargs):
+            if not _self.has_data():
+                raise Exception("Matrix column '{}' not initialized".format(_self.name))
+            return func(_self, *args, **kwargs)
+        return wrapper
+
+    @property
+    @_requires_data
+    def width(self):
+        return self._data.shape[1]
+
     def __setitem__(self, key, value):
         if not isinstance(value, (np.ndarray)):
             value = np.array(value)
@@ -152,9 +169,8 @@ class MatColumn(Column):
             self._data = np.zeros((self.n_rows, n_cols), dtype=self.dtype)
         return super(MatColumn, self).__setitem__(key, value)
 
+    @_requires_data
     def __getitem__(self, key):
-        if self._data is None:
-            raise Exception("Matrix column '{}' not initialized".format(self.name))
         return super(MatColumn, self).__getitem__(key)
 
 
@@ -532,3 +548,38 @@ def format_time(time_int, form=LISTEN_TIME_FORMAT):
 
 def load(*args, **kwargs):
     return Dataset.from_csv(*args, **kwargs)
+
+
+def _cv_split_helper(splits, fold_index=0, percent=None):
+    if percent is not None:
+        n_heldout = int(ceil(len(splits) * percent))
+        _fold_index = int(fold_index % floor(1. / percent))
+        heldout = splits[(_fold_index * n_heldout):((_fold_index + 1) * n_heldout)]
+    else:
+        heldout = [splits[fold_index % len(splits)]]
+    return heldout
+
+
+def cv_split(ds, fold_index=0, split_on=None, percent=None, **kwargs):
+    # cross-validation split
+    if split_on:
+        splits = np.unique(ds[split_on])
+        heldout = _cv_split_helper(splits, fold_index=fold_index, percent=percent)
+        mask = reduce(or_, imap(lambda s: np.equal(ds[split_on], s), heldout))
+        train_idx = np.nonzero(np.logical_not(mask))[0]
+        valid_idx = np.nonzero(mask)[0]
+    else:
+        heldout = _cv_split_helper(range(ds.n_rows), fold_index=fold_index, percent=percent)
+        valid_idx = heldout
+        train_mask = np.logical_not(idx_to_mask(valid_idx, mask_len=ds.n_rows))
+        train_idx = mask_to_idx(train_mask)
+
+    # print/log what we held out
+    split_on_str = split_on if split_on else 'index'
+    info = '{split_on} {heldout} are held out'.format(split_on=split_on_str, heldout=heldout)
+    try:
+        log(info, True)
+    except:
+        print '[was not logged] {}'.format(info)
+
+    return train_idx, valid_idx

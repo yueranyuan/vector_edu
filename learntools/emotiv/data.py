@@ -158,7 +158,7 @@ def _segment_gen(segment_idx, segment_cond):
         i = j
 
 
-def segment_raw_data(dataset_name, conds=None, duration=10, sample_rate=128, **kwargs):
+def segment_raw_data(dataset_name, conds=None, duration=10, sample_rate=128, use_entropy=False, **kwargs):
     """Loads raw siegle data from a pickled Dataset and extracts sequences of
     eeg vectors which have a single known label.
 
@@ -233,22 +233,25 @@ def segment_raw_data(dataset_name, conds=None, duration=10, sample_rate=128, **k
                     window = eeg_segment[int(i * sample_rate/2) : int((i + 1) * sample_rate/2)]
                     # there are len(cutoffs)-1 bins, window_freq is a list of will have a frequency vector of num channels
                     window_freq = signal_to_freq_bins(window, cutoffs=[0.5, 4.0, 7.0, 12.0, 30.0], sampling_rate=128.0)
-                    # one entropy per channel over all freqs
-                    entropies = [calc_entropy(vals) for vals in window_freq]
-                    eeg_entropies.append(entropies)
+
+                    if use_entropy:
+                        # one entropy per channel over all freqs
+                        entropies = [calc_entropy(vals) for vals in window_freq]
+                        eeg_entropies.append(entropies)
 
                     eeg_freqs.append(np.concatenate(window_freq))
 
                 # (num windows * num bins) * num channels
                 eeg_freqs = np.concatenate(eeg_freqs)
-                # TODO
                 eeg_entropies = np.concatenate(eeg_entropies)
 
                 # Flatten into a vector
                 eeg_freqs_flattened = np.ravel(eeg_freqs)
-                eeg_entropies_flattened = np.ravel(eeg_entropies)
-                #FIXME
-                eeg_freqs_flattened = np.append(eeg_freqs_flattened, eeg_entropies_flattened)
+
+                if use_entropy:
+                    eeg_entropies_flattened = np.ravel(eeg_entropies)
+                    # Add the entropy features as if they were more eeg frequencies
+                    eeg_freqs_flattened = np.append(eeg_freqs_flattened, eeg_entropies_flattened)
 
                 segments.append((subject_id, source, eeg_freqs_flattened, label))
 

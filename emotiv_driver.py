@@ -80,6 +80,6 @@ if __name__ == '__main__':
     elif args['run_raw']:
         run(task_num=0, model_type=ModelType.RAW_BASE, **params)
     elif args['convert_raw']:
-        convert_raw_data(args['<directory>'], args['<output>'])
+        convert_raw_data(args['<directory>'], args['<output>'], **params)
     
     print("Finished")

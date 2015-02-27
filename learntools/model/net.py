@@ -63,7 +63,13 @@ class NetworkComponent(object):
     def output(self):
         if not hasattr(self, '_output'):
             self._output = self.instance(self.input)
+            self._output.name = self.subname('output')
         return self._output
+
+    @output.setter
+    def output(self, value):
+        self._output = value
+        self._output.name = self.subname('output')
 
     def subname(self, suffix):
         '''generate a name for a theano variable. Make sure all theano variables that are a
@@ -201,22 +207,18 @@ class TrainableNetwork(NetworkComponent):
         self._loss = loss
         self._loss.name = self.subname('loss')
 
-    def compile(self, additional_updates=None):
+    def compile(self):
         """ compile theano functions
         """
-        if additional_updates is None:
-            additional_updates = []
-
         self.t_L1_reg = T.fscalar('L1_reg')
         self.t_L2_reg = T.fscalar('L2_reg')
         self.t_learning_rate = T.fscalar('learning_rate')
         cost = self.loss + self.t_L1_reg * self.L1 + self.t_L2_reg * self.L2_sqr
 
-        parameter_updates = [(param, param - self.t_learning_rate * T.grad(cost, param)) for param in self.params]
-        updates = parameter_updates + additional_updates
+        self.parameter_updates = [(param, param - self.t_learning_rate * T.grad(cost, param)) for param in self.params]
 
         self._tf_train = theano.function(inputs=[self.input, self.true_output, self.t_L1_reg, self.t_L2_reg, self.t_learning_rate],
-                                         outputs=[self.loss], allow_input_downcast=True, updates=updates)
+                                         outputs=[self.loss], allow_input_downcast=True, updates=self.parameter_updates)
         self._tf_infer = theano.function(inputs=[self.input], outputs=[self.output], allow_input_downcast=True)
         self._tf_evaluate = theano.function(inputs=[self.input, self.true_output], outputs=[self.loss],
                                             allow_input_downcast=True)
@@ -235,7 +237,6 @@ class TrainableNetwork(NetworkComponent):
 
         valid_epoch = 0.0
 
-        best_parameters = None
         best_score = 0.0
 
         for epoch_i in xrange(n_epochs):
@@ -256,7 +257,7 @@ class TrainableNetwork(NetworkComponent):
 
                     if valid_score > best_score:
                         best_score = valid_score
-                        best_parameters = deepcopy(self.__pickle__())
+                        self.best_parameters = deepcopy(self.__pickle__())
 
                 valid_epoch += valid_frequency
             except KeyboardInterrupt:
@@ -271,11 +272,12 @@ class TrainableNetwork(NetworkComponent):
     def train(self, input_vec, true_y, L1_reg=0.0, L2_reg=0.0, learning_rate=0.5):
         return self._tf_train(input_vec, true_y, L1_reg, L2_reg, learning_rate)[0]
 
-    def evaluate(self, input_vec, true_y):
+    def evaluate(self, input_vec, true_y, **kwargs):
         return self.auc(input_vec, true_y)
 
     def auc(self, input_vec, true_y, pos_label=1):
         """Returns auc score for binary classification."""
+        res = self.infer(input_vec)[:, pos_label]
         return auc(true_y, self.infer(input_vec)[:, pos_label], pos_label=pos_label)
 
     def predict(self, input_vec):
@@ -367,6 +369,8 @@ class HiddenLayer(NetworkComponent):
             return rectifier
         elif self.activation == 'sigmoid':
             return sigmoid
+        elif self.activation == 'softmax':
+            return T.nnet.softmax
         else:
             raise ValueError
 
@@ -447,9 +451,9 @@ class HiddenNetwork(NetworkComponent):
 
 
 class BatchNormLayer(HiddenLayer):
-    def __init__(self, rng, n_in, n_out, W=None, b=None, beta=None, gamma=None, alpha=0.999, mean=None, variance=None, activation=rectifier, name='batchnormlayer'):
+    def __init__(self, n_in=None, n_out=None, W=None, b=None, beta=None, gamma=None, alpha=0.999, mean=None, variance=None, rng_state=None, activation='rectifier', name='batchnormlayer'):
         """alpha is the exponential moving average falloff multiplier"""
-        super(BatchNormLayer, self).__init__(rng, n_in, n_out, W=W, b=b, activation=activation, name=name)
+        super(BatchNormLayer, self).__init__(rng_state=rng_state, n_in=n_in, n_out=n_out, W=W, b=b, activation=activation, name=name)
         if beta is None:
             beta_values = np.zeros((n_out,), dtype=theano.config.floatX)
             beta = theano.shared(value=beta_values, name=self.subname('beta'), borrow=True)
@@ -481,15 +485,15 @@ class BatchNormLayer(HiddenLayer):
         batch_mean = T.mean(train_lin_output)
         offset_output = train_lin_output - batch_mean
         batch_var = T.var(offset_output)
-        normalized_lin_output =  offset_output / T.sqrt(batch_var + epsilon)
-        train_output = self.activation(self.gamma * normalized_lin_output + self.beta)
+        normalized_lin_output = offset_output / T.sqrt(batch_var + epsilon)
+        train_output = self.activation_fn(self.gamma * normalized_lin_output + self.beta)
 
         infer_lin_output = T.dot(infer_x, self.W) + self.b
         sd = T.sqrt(self.variance + epsilon)
-        inference_output = self.activation(self.gamma / sd * infer_lin_output + (self.beta - (self.gamma * self.mean) / sd))
+        inference_output = self.activation_fn(self.gamma / sd * infer_lin_output + (self.beta - (self.gamma * self.mean) / sd))
         # exponential moving average for batch mean/variance
         statistics_updates = [
             (self.mean, self.alpha * self.mean + (1.0 - self.alpha) * batch_mean),
             (self.variance, self.alpha * self.variance + (1.0 - self.alpha) * batch_var)
         ]
-        return (train_output, inference_output, statistics_updates)
+        return train_output, inference_output, statistics_updates

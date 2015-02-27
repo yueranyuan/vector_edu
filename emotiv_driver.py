@@ -73,7 +73,8 @@ def run(task_num=0, model_type=ModelType.BASE, **kwargs):
         train_idx, valid_idx = cv_split(dataset, percent=0.50, fold_index=task_num)
     elif model_type == ModelType.BATCH_NORM:
         from learntools.emotiv.batchnorm import BatchNorm as SelectedModel
-        dataset = load_siegle_data(**kwargs)
+        # dataset = load_siegle_data(**kwargs)
+        dataset = segment_raw_data(**kwargs)
         train_idx, valid_idx = cv_split(dataset, percent=0.1, fold_index=task_num)
     else:
         raise Exception("model type is not valid")
@@ -81,6 +82,17 @@ def run(task_num=0, model_type=ModelType.BASE, **kwargs):
 
     model = SelectedModel(prepared_data, **kwargs)
     model.train_full(**kwargs)
+
+
+def build_batch_norm(task_num, **kwargs):
+    import numpy as np
+    from learntools.emotiv.batchnorm import BatchNormClassifier
+    dataset = load_siegle_data(**kwargs)
+    train_idx, valid_idx = cv_split(dataset, percent=0.1, fold_index=task_num)
+    xs = dataset.get_data('eeg')
+    ys = dataset.get_data('condition')
+    classifier = BatchNormClassifier(n_in=xs.shape[1], n_out=len(np.unique(ys)), **kwargs)
+    classifier.fit(xs, ys, train_idx, valid_idx)
 
 
 if __name__ == '__main__':

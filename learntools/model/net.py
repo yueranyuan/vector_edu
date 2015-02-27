@@ -37,6 +37,9 @@ class NetworkComponent(object):
         else:
             self.input = None
 
+    def compile(self):
+        self._tf_infer = theano.function(inputs=[self.input], outputs=[self.output], allow_input_downcast=True)
+
     @abc.abstractmethod
     def instance(self, x, **kwargs):
         """generate the theano variable for the output of this network given the input x
@@ -197,15 +200,19 @@ class TrainableNetwork(NetworkComponent):
         self._loss = loss
         self._loss.name = self.subname('loss')
 
-    def compile(self):
+    def compile(self, additional_updates=None):
         """ compile theano functions
         """
+        if additional_updates is None:
+            additional_updates = []
+
         self.t_L1_reg = T.fscalar('L1_reg')
         self.t_L2_reg = T.fscalar('L2_reg')
         self.t_learning_rate = T.fscalar('learning_rate')
         cost = self.loss + self.t_L1_reg * self.L1 + self.t_L2_reg * self.L2_sqr
 
-        updates = [(param, param - self.t_learning_rate * T.grad(cost, param)) for param in self.params]
+        parameter_updates = [(param, param - self.t_learning_rate * T.grad(cost, param)) for param in self.params]
+        updates = parameter_updates + additional_updates
 
         self._tf_train = theano.function(inputs=[self.input, self.true_output, self.t_L1_reg, self.t_L2_reg, self.t_learning_rate],
                                          outputs=[self.loss], allow_input_downcast=True, updates=updates)

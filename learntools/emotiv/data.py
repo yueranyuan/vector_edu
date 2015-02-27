@@ -196,7 +196,6 @@ def segment_raw_data(dataset_name, conds=None, duration=10, sample_rate=128, **k
     with open(dataset_name, 'rb') as f:
         ds = Dataset.from_pickle(pickle.load(f))
 
-    subjects = []
     segments = []
 
     conds_values = [ACTIVITY_CONDITIONS[k] for k in conds] if conds is not None else ACTIVITY_CONDITIONS.values()
@@ -246,7 +245,8 @@ def segment_raw_data(dataset_name, conds=None, duration=10, sample_rate=128, **k
     for i, seg_data in enumerate(segments):
         new_ds[i] = seg_data
 
-    new_ds = gen_wavelet_features(new_ds, duration=duration, sample_rate=sample_rate)
+    new_ds = gen_fft_features(new_ds, duration=duration, sample_rate=sample_rate)
+    #new_ds = gen_wavelet_features(new_ds, duration=duration, sample_rate=sample_rate)
 
     return new_ds
 

@@ -32,7 +32,7 @@ def train_model(model, n_epochs=500, patience=50,
         if (epoch + 1) % validation_frequency == 0:
             results = list(model.gen_valid(shuffle=False))
             idxs, preds = aggregate_epoch_results(results)
-            valid_accuracy = model.train_evaluate(idxs, preds)
+            valid_accuracy = model.valid_evaluate(idxs, preds)
             log('epoch {epoch}, validation accuracy {acc:.2%}'.format(
                 epoch=epoch, acc=valid_accuracy), True)
 

@@ -1,3 +1,5 @@
+from __future__ import division
+
 import theano
 import theano.tensor as T
 import numpy as np
@@ -9,6 +11,7 @@ from learntools.libs.auc import auc
 from learntools.model.theano_utils import make_shared
 from learntools.model import Model, gen_batches_by_size
 from learntools.model.net import BatchNormLayer, TrainableNetwork
+from learntools.libs.utils import max_idx
 
 
 class BatchNorm(Model):
@@ -93,8 +96,92 @@ class BatchNorm(Model):
     @property
     def train_batches(self, **kwargs):
         shuffled_idx = self.rng.permutation(self.train_idx)
-
         return [shuffled_idx[begin: begin + self.batch_size] for begin in xrange(0, len(shuffled_idx), self.batch_size)]
+
+    def train_evaluate(self, idxs, preds, *args, **kwargs):
+        y = self._ys.owner.inputs[0].get_value(borrow=True)[idxs]
+        best_pred_cutoff = find_best_cutoff(y, preds)
+
+        # gradually change the prediction cutoff to avoid instability
+        PRED_CUTOFF_ALPHA = 0.2
+        if hasattr(self, 'pred_cutoff'):
+            self.pred_cutoff = (1.0 - PRED_CUTOFF_ALPHA) * self.pred_cutoff + PRED_CUTOFF_ALPHA * best_pred_cutoff
+        else:
+            self.pred_cutoff = best_pred_cutoff
+
+        return acc_by_cutoff(y, preds, self.pred_cutoff)
+
+    def valid_evaluate(self, idxs, preds, *args, **kwargs):
+        y = self._ys.owner.inputs[0].get_value(borrow=True)[idxs]
+        best_acc = acc_by_cutoff(y, preds, find_best_cutoff(y, preds))
+        _auc = auc(y[:len(preds)], preds, pos_label=1)
+        print("validation auc: {auc}, best cutoff accuracy: {best_acc}".format(auc=_auc, best_acc=best_acc))
+        return acc_by_cutoff(y, preds, self.pred_cutoff)
+
+
+def acc_by_cutoff(y, preds, cutoff):
+    """Compute accuracy given a certain prediction cutoff
+
+    Examples:
+    >>> acc_by_cutoff([0, 0, 1, 1], [0.2, 0.4, 0.7, 0.9], cutoff=0.3)
+    0.75
+    >>> acc_by_cutoff([0, 0, 1, 1], [0.2, 0.4, 0.7, 0.9], cutoff=0.5)
+    1.0
+    >>> acc_by_cutoff([0, 0, 1, 1], [0.2, 0.4, 0.7, 0.9], cutoff=0.1)
+    0.5
+    """
+    ey = np.greater_equal(preds, cutoff)
+    correct = sum(np.equal(y[:len(ey)], ey))
+    return correct / len(ey)
+
+
+def find_best_cutoff(y, preds):
+    """ Find the prediction score cutoff that results in the highest prediction accuracy
+
+    Examples:
+    >>> find_best_cutoff([0, 0, 0, 1, 1, 1], [0.3, 0.5, 0.8, 0.7, 0.9, 0.9])
+    0.7
+    >>> find_best_cutoff([0, 1, 0, 1, 0, 1], [0.5, 0.9, 0.8, 0.7, 0.3, 0.9])
+    0.7
+    >>> ys = np.asarray([0] * 5000 + [1] * 5000, dtype='int32')
+    >>> preds = np.random.rand(10000)
+    >>> slow_best_cutoff = preds[max_idx[[acc_by_cutoff(ys, preds, cutoff) for cutoff in preds]][0]]
+    >>> acc_by_cutoff(slow_best_cutoff) == acc_by_cutoff(find_best_cutoff(ys, preds))
+    True
+    """
+    N = len(preds)
+    if N == 0:
+        raise Exception("trying to find best cutoff for an empty predictions array")
+    sorted_pred_idxs = sorted(range(N), key=lambda (i): preds[i])
+
+    # use Dynamic Programming to fill up the correctness table.
+    # table for sum of correctness to the left of the current idx
+    correct_left_table = [0] * N
+    for i in xrange(1, N):
+        correct = 1 if y[sorted_pred_idxs[i - 1]] == 0 else 0
+        if i != 1:
+            correct += correct_left_table[i - 1]
+        correct_left_table[i] = correct
+    # table for correctness to the right of the current idx
+    correct_right_table = [0] * N
+    for i in xrange(N - 1, -1, -1):
+        correct = 1 if y[sorted_pred_idxs[i]] == 1 else 0
+        if i != N - 1:
+            correct += correct_right_table[i + 1]
+        correct_right_table[i] = correct
+
+    # find the best sum of left and right
+    best_cutoff = None
+    best_cutoff_correct = 0
+    for i in xrange(N):
+        correct = correct_left_table[i] + correct_right_table[i]
+        if correct > best_cutoff_correct:
+            best_cutoff = preds[sorted_pred_idxs[i]]
+            best_cutoff_correct = correct
+
+    if best_cutoff is None:
+        raise Exception("not best cutoff found.")
+    return best_cutoff
 
 
 class BatchNormClassifier(TrainableNetwork):

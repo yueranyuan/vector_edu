@@ -21,8 +21,8 @@ Options:
         The name for the log file to be generated.
     -q, --quiet
         Do not output to a log file.
-    -t, --task_number=<int>
-        A counter representing the queue position of the current job. [default: 0].
+    -t, --task_number=<ints>
+        A counter representing the queue position of the current job [default: 0].
 """
 
 from __future__ import print_function, division
@@ -46,12 +46,25 @@ release_lock.release()  # TODO: use theano config instead. We have to figure out
 # what we need
 
 
+def smart_load_data(dataset_name=None, **kwargs):
+    _, ext = os.path.splitext(dataset_name)
+    if ext == '.mat':
+        dataset = load_siegle_data(dataset_name=dataset_name, **kwargs)
+    elif ext == '.gz':
+        dataset = segment_raw_data(dataset_name=dataset_name, **kwargs)
+        filter_data(dataset)
+    else:
+        raise ValueError
+    return dataset
+
+
 class ModelType(object):
     BASE = 0
     RAW_BASE = 1
     SUBJECT = 2
     AUTOENCODER = 3
     BATCH_NORM = 4
+
 
 @log_me()
 def run(task_num=0, model_type=ModelType.BASE, **kwargs):
@@ -70,13 +83,12 @@ def run(task_num=0, model_type=ModelType.BASE, **kwargs):
                                                       key='subject')
     elif model_type == ModelType.AUTOENCODER:
         from learntools.emotiv.emotiv_autoencode import AutoencodeEmotiv as SelectedModel
-        dataset = segment_raw_data(**kwargs)
-        train_idx, valid_idx = cv_split(dataset, percent=0.50, fold_index=task_num)
+        dataset = smart_load_data(**kwargs)
+        train_idx, valid_idx = cv_split(dataset, percent=0.10, fold_index=task_num)
     elif model_type == ModelType.BATCH_NORM:
         from learntools.emotiv.batchnorm import BatchNorm as SelectedModel
         # dataset = load_siegle_data(**kwargs)
-        dataset = segment_raw_data(**kwargs)
-        filter_data(dataset)
+        dataset = smart_load_data(**kwargs)
         train_idx, valid_idx = cv_split(dataset, percent=0.1, fold_index=task_num)
     else:
         raise Exception("model type is not valid")
@@ -111,7 +123,7 @@ if __name__ == '__main__':
         params['dataset_name'] = args['--file']
 
     params['conds'] = ['EyesClosed', 'EyesOpen']
-    
+
     task_num = int(args['--task_number'])
 
     if args['run']:

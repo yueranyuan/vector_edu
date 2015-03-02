@@ -5,6 +5,7 @@ import random
 from learntools.libs.logger import log_me, log
 from learntools.libs.utils import transpose, flatten
 
+ACCURACY_WINDOW = 7
 
 @log_me('... training')
 def train_model(model, n_epochs=500, patience=50,
@@ -22,6 +23,7 @@ def train_model(model, n_epochs=500, patience=50,
         idxs, preds = transpose(results)
         return flatten(idxs), flatten(preds)
 
+    valid_accuracy_window = []
     for epoch in range(n_epochs):
         results = list(model.gen_train(shuffle=True, learning_rate=learning_rate))
         idxs, preds = aggregate_epoch_results(results)
@@ -35,11 +37,15 @@ def train_model(model, n_epochs=500, patience=50,
             valid_accuracy = model.valid_evaluate(idxs, preds)
             log('epoch {epoch}, validation accuracy {acc:.2%}'.format(
                 epoch=epoch, acc=valid_accuracy), True)
+            valid_accuracy_window.append(valid_accuracy)
+            if len(valid_accuracy_window) > ACCURACY_WINDOW:
+                valid_accuracy_window = valid_accuracy_window[-ACCURACY_WINDOW:]
+            rolling_valid_accuracy = sum(valid_accuracy_window) / len(valid_accuracy_window)
 
-            if valid_accuracy > best_valid_accuracy:
-                if (valid_accuracy > best_valid_accuracy * improvement_threshold):
+            if rolling_valid_accuracy > best_valid_accuracy:
+                if rolling_valid_accuracy > best_valid_accuracy * improvement_threshold:
                     patience = max(patience, epoch + patience_increase)
-                best_valid_accuracy = valid_accuracy
+                best_valid_accuracy = rolling_valid_accuracy
                 best_epoch = epoch
 
             if patience <= epoch:

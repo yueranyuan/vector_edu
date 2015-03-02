@@ -4,6 +4,7 @@ convert_raw accepts raw data from a directory of .mat files and pickles them
 into a Dataset object stored in the output file.
 
 Usage:
+    emotiv_driver.py [options]
     emotiv_driver.py run [options]
     emotiv_driver.py run_raw [options]
     emotiv_driver.py convert_raw <directory> <output>
@@ -16,13 +17,15 @@ Options:
     -p <param_set>, --param_set=<param_set>
         The name of the parameter set to use [default: emotiv_wide_search2].
     -f <file>, --file=<file>
-        The data file to use [default: raw_data/all_siegle.txt].
+        The data file to use [default: raw_data/emotiv_processed.mat].
     -o <file>, --out=<file>
         The name for the log file to be generated.
     -q, --quiet
         Do not output to a log file.
     -t, --task_number=<ints>
         A counter representing the queue position of the current job [default: 0].
+    -m <model>, --model=<model>
+        The name of the model family that we are using [default: batchnorm].
 """
 
 from __future__ import print_function, division
@@ -87,7 +90,6 @@ def run(task_num=0, model_type=ModelType.BASE, **kwargs):
         train_idx, valid_idx = cv_split(dataset, percent=0.10, fold_index=task_num)
     elif model_type == ModelType.BATCH_NORM:
         from learntools.emotiv.batchnorm import BatchNorm as SelectedModel
-        # dataset = load_siegle_data(**kwargs)
         dataset = smart_load_data(**kwargs)
         train_idx, valid_idx = cv_split(dataset, percent=0.1, fold_index=task_num)
     else:
@@ -141,5 +143,12 @@ if __name__ == '__main__':
     elif args['run_multistage']:
         from learntools.emotiv.multistage import run_multistage
         run_multistage(task_num=task_num, **params)
+    else:
+        # allowing us to select models with a flag without deprecating the original format
+        model = args['--model']
+        if model == 'batchnorm':
+            run(task_num=task_num, model_type=ModelType.BATCH_NORM, **params)
+        else:
+            raise Exception("invalid model family")
     
     print("Finished")

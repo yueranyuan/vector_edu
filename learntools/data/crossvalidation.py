@@ -11,7 +11,8 @@ from learntools.libs.logger import log
 def _cv_split_helper(splits, fold_index=0, percent=None):
     if percent is not None:
         n_heldout = int(ceil(len(splits) * percent))
-        heldout = splits[(fold_index * n_heldout):((fold_index + 1) * n_heldout)]
+        idxs = [i % len(splits) for i in xrange(fold_index * n_heldout, (fold_index + 1) * n_heldout)]
+        heldout = splits[idxs]
     else:
         heldout = [splits[fold_index % len(splits)]]
     return heldout
@@ -27,7 +28,7 @@ def cv_split(ds, fold_index=0, split_on=None, percent=None, **kwargs):
         train_idx = np.nonzero(np.logical_not(mask))[0]
         valid_idx = np.nonzero(mask)[0]
     else:
-        heldout = _cv_split_helper(range(ds.n_rows), fold_index=fold_index, percent=percent)
+        heldout = _cv_split_helper(np.asarray(range(ds.n_rows)), fold_index=fold_index, percent=percent)
         valid_idx = heldout
         train_mask = np.logical_not(idx_to_mask(valid_idx, mask_len=ds.n_rows))
         train_idx = mask_to_idx(train_mask)

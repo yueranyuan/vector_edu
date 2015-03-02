@@ -1,10 +1,10 @@
 from __future__ import division
 
+from itertools import chain, izip
+
 import theano
 import theano.tensor as T
 import numpy as np
-
-from itertools import chain
 
 from learntools.libs.logger import log_me
 from learntools.libs.auc import auc
@@ -171,16 +171,10 @@ def find_best_cutoff(y, preds):
         correct_right_table[i] = correct
 
     # find the best sum of left and right
-    best_cutoff = None
-    best_cutoff_correct = 0
-    for i in xrange(N):
-        correct = correct_left_table[i] + correct_right_table[i]
-        if correct > best_cutoff_correct:
-            best_cutoff = preds[sorted_pred_idxs[i]]
-            best_cutoff_correct = correct
+    correct = [left + right for left, right in izip(correct_left_table, correct_right_table)]
+    best_cutoff_i, best_correct = max_idx(correct)
+    best_cutoff = preds[sorted_pred_idxs[best_cutoff_i]]
 
-    if best_cutoff is None:
-        raise Exception("not best cutoff found.")
     return best_cutoff
 
 

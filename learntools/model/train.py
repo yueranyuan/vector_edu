@@ -1,5 +1,5 @@
 from __future__ import division
-from itertools import imap, chain
+from itertools import izip
 import random
 
 from learntools.libs.logger import log_me, log
@@ -11,7 +11,7 @@ ACCURACY_WINDOW = 7
 def train_model(model, n_epochs=500, patience=50,
                 patience_increase=40, improvement_threshold=1,
                 validation_frequency=5, learning_rate=0.02,
-                rng_seed=1023, **kwargs):
+                rng_seed=1023, train_with_loss=False, **kwargs):
     best_valid_accuracy = 0
     best_epoch = 0
 
@@ -19,22 +19,25 @@ def train_model(model, n_epochs=500, patience=50,
     prev_rng_state = random.getstate()
     random.seed(rng_seed)
 
-    def aggregate_epoch_results(results):
-        idxs, preds = transpose(results)
-        return flatten(idxs), flatten(preds)
+    def accuracy_from_results(results, eval_func):
+        idxs, outs = transpose(results)
+        if train_with_loss:
+            accuracy = sum([len(_idxs) * loss for _idxs, loss in izip(idxs, outs)])
+        else:
+            idxs, preds = flatten(idxs), flatten(outs)
+            accuracy = eval_func(idxs, preds)
+        return accuracy
 
     valid_accuracy_window = []
     for epoch in range(n_epochs):
-        results = list(model.gen_train(shuffle=True, learning_rate=learning_rate))
-        idxs, preds = aggregate_epoch_results(results)
-        train_accuracy = model.train_evaluate(idxs, preds)
+        results = list(model.gen_train(shuffle=True, loss=train_with_loss, learning_rate=learning_rate))
+        train_accuracy = accuracy_from_results(results, eval_func=model.train_evaluate)
         log('epoch {epoch}, train accuracy {err:.2%}'.format(
             epoch=epoch, err=train_accuracy), True)
 
         if (epoch + 1) % validation_frequency == 0:
-            results = list(model.gen_valid(shuffle=False))
-            idxs, preds = aggregate_epoch_results(results)
-            valid_accuracy = model.valid_evaluate(idxs, preds)
+            results = list(model.gen_valid(shuffle=False, loss=train_with_loss))
+            valid_accuracy = accuracy_from_results(results, eval_func=model.valid_evaluate)
             log('epoch {epoch}, validation accuracy {acc:.2%}'.format(
                 epoch=epoch, acc=valid_accuracy), True)
             valid_accuracy_window.append(valid_accuracy)

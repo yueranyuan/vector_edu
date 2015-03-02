@@ -10,7 +10,7 @@ from learntools.libs.logger import log_me
 from learntools.libs.auc import auc
 from learntools.model.theano_utils import make_shared
 from learntools.model import Model, gen_batches_by_size
-from learntools.model.net import BatchNormLayer, TrainableNetwork
+from learntools.model.net import BatchNormLayer, AutoencodingBatchNormLayer, TrainableNetwork
 from learntools.libs.utils import max_idx
 
 
@@ -18,7 +18,7 @@ class BatchNorm(Model):
     @log_me('...building BatchNorm')
     def __init__(self, prepared_data, batch_size=30, L1_reg=0., L2_reg=0.,
                  classifier_width=500, classifier_depth=2, rng_seed=42,
-                 learning_rate=0.0002, **kwargs):
+                 learning_rate=0.0002, dropout_p=0.0, recon_loss_alpha=0.0, **kwargs):
         """
         Args:
             prepared_data : (Dataset, [int], [int])
@@ -43,18 +43,22 @@ class BatchNorm(Model):
         rng = np.random.RandomState(rng_seed)
         self.rng = rng
 
+        t_dropout = T.dscalar('dropout')
         input_idxs = T.ivector('input_idxs')
         input_layer = self._xs[input_idxs]
         bn_updates, subnets = [], []
         train_layer, infer_layer, updates_layer = input_layer, input_layer, []
 
         n_in, n_out = input_size, classifier_width
+        recon_losses = []
         for i in xrange(classifier_depth):
-          bn_layer = BatchNormLayer(n_in=n_in, n_out=n_out)
-          train_layer, infer_layer, updates_layer = bn_layer.instance(train_layer, infer_layer)
-          bn_updates.extend(updates_layer)
-          subnets.append(bn_layer)
-          n_in, n_out = classifier_width, classifier_width
+            bn_layer = AutoencodingBatchNormLayer(n_in=n_in, n_out=n_out)
+            train_layer, infer_layer, updates_layer, train_recon, infer_recon = bn_layer.instance(train_layer, infer_layer, dropout=t_dropout)
+            bn_updates.extend(updates_layer)
+            subnets.append(bn_layer)
+            recon_loss = T.mean(T.sqr(train_layer - train_recon))
+            recon_losses.append(recon_loss)
+            n_in, n_out = classifier_width, classifier_width
 
         # softmax
         bn_layer = BatchNormLayer(n_in=classifier_width, n_out=output_size, activation='softmax')
@@ -72,6 +76,7 @@ class BatchNorm(Model):
             loss
             + L1_reg * sum([net.L1 for net in subnets])
             + L2_reg * sum([net.L2_sqr for net in subnets])
+            # + recon_loss_alpha * T.sum(recon_losses)
         )
         cost.name = 'overall_cost'
 
@@ -79,19 +84,22 @@ class BatchNorm(Model):
         update_parameters = [(param, param - learning_rate * T.grad(cost, param))
                              for param in params] + bn_updates
 
-        self._tf_infer = theano.function(inputs=[input_idxs], outputs=[loss, infer_pY[:, 1] - infer_pY[:, 0], input_idxs], allow_input_downcast=True)
-        self._tf_train = theano.function(inputs=[input_idxs], outputs=[loss, train_pY[:, 1] - train_pY[:, 0], input_idxs], allow_input_downcast=True, updates=update_parameters)
+        self._tf_infer = theano.function(inputs=[input_idxs],
+                                         outputs=[loss, infer_pY[:, 1] - infer_pY[:, 0], input_idxs],
+                                         givens=[(t_dropout, 0.0)],
+                                         allow_input_downcast=True)
+        self._tf_train = theano.function(inputs=[input_idxs],
+                                         outputs=[loss, train_pY[:, 1] - train_pY[:, 0], input_idxs],
+                                         givens=[(t_dropout, dropout_p)],
+                                         allow_input_downcast=True, updates=update_parameters)
         self.subnets = subnets
-
-    def evaluate(self, idxs, pred):
-        y = self._ys.owner.inputs[0].get_value(borrow=True)[idxs]
-        return auc(y[:len(pred)], pred, pos_label=1)
 
     def validate(self, idxs, **kwargs):
         return self._tf_infer(idxs)
 
     def train(self, idxs, **kwargs):
-        return self._tf_train(idxs)
+        res = self._tf_train(idxs)
+        return res[:3]
 
     @property
     def train_batches(self, **kwargs):
@@ -177,7 +185,7 @@ def find_best_cutoff(y, preds):
 
     return best_cutoff
 
-
+'''
 class BatchNormClassifier(TrainableNetwork):
     """ This is working but somehow isn't generating the same performance. I'll have to come back to this and figure it out.
     """
@@ -232,3 +240,4 @@ class BatchNormClassifier(TrainableNetwork):
         self._tf_infer = theano.function(inputs=[self.input], outputs=[self.output_inferred], allow_input_downcast=True)
         self._tf_train = theano.function(inputs=[self.input, self.true_output, self.t_L1_reg, self.t_L2_reg, self.t_learning_rate],
                                          outputs=[self.loss], allow_input_downcast=True, updates=self.parameter_updates + self.bn_updates)
+'''

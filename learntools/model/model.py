@@ -74,13 +74,16 @@ class Model(object):
     def train_batches(self, train_batches):
         self._train_batches = train_batches
 
-    def gen_train(self, shuffle=False, **kwargs):
+    def gen_train(self, shuffle=False, loss=False, **kwargs):
         batch_order = range(len(self.train_batches))
         if shuffle:
             random.shuffle(batch_order)
         for i in batch_order:
             losses, preds, idxs = self.train(self.train_batches[i], **kwargs)
-            yield idxs, preds
+            if loss:
+                yield idxs, losses
+            else:
+                yield idxs, preds
 
     @property
     def valid_batches(self):
@@ -93,13 +96,16 @@ class Model(object):
     def valid_batches(self, valid_batches):
         self._valid_batches = valid_batches
 
-    def gen_valid(self, shuffle=False, **kwargs):
+    def gen_valid(self, shuffle=False, loss=False, **kwargs):
         batch_order = range(len(self.valid_batches))
         if shuffle:
             random.shuffle(batch_order)
         for i in batch_order:
             losses, preds, idxs = self.validate(self.valid_batches[i], **kwargs)
-            yield idxs, preds
+            if loss:
+                yield idxs, losses
+            else:
+                yield idxs, preds
 
     def train_full(self, strategy=None, **kwargs):
         import time

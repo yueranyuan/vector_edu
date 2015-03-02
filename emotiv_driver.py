@@ -25,7 +25,7 @@ Options:
     -t, --task_number=<ints>
         A counter representing the queue position of the current job [default: 0].
     -m <model>, --model=<model>
-        The name of the model family that we are using [default: batchnorm].
+        The name of the model family that we are using [default: multistage_batchnorm].
 """
 
 from __future__ import print_function, division
@@ -36,6 +36,7 @@ warnings.filterwarnings("ignore", category=DeprecationWarning)
 
 from docopt import docopt
 
+from learntools.libs.utils import combine_dict
 from learntools.libs.logger import gen_log_name, log_me, set_log_file
 from learntools.emotiv.data import prepare_data, convert_raw_data, segment_raw_data, load_siegle_data
 from learntools.emotiv.filter import filter_data
@@ -67,6 +68,8 @@ class ModelType(object):
     SUBJECT = 2
     AUTOENCODER = 3
     BATCH_NORM = 4
+    SVM = 5
+    MULTISTAGE_BATCH_NORM = 6
 
 
 @log_me()
@@ -92,6 +95,10 @@ def run(task_num=0, model_type=ModelType.BASE, **kwargs):
         from learntools.emotiv.batchnorm import BatchNorm as SelectedModel
         dataset = smart_load_data(**kwargs)
         train_idx, valid_idx = cv_split(dataset, percent=0.1, fold_index=task_num)
+    elif model_type == ModelType.SVM:
+        from learntools.emotiv.svm import SVM as SelectedModel
+        dataset = smart_load_data()
+        train_idx, valid_idx = cv_split(dataset, percent=0.1, fold_index=task_num)
     else:
         raise Exception("model type is not valid")
     prepared_data = (dataset, train_idx, valid_idx)
@@ -99,7 +106,7 @@ def run(task_num=0, model_type=ModelType.BASE, **kwargs):
     model = SelectedModel(prepared_data, **kwargs)
     model.train_full(**kwargs)
 
-
+'''
 def build_batch_norm(task_num, **kwargs):
     import numpy as np
     from learntools.emotiv.batchnorm import BatchNormClassifier
@@ -109,7 +116,7 @@ def build_batch_norm(task_num, **kwargs):
     ys = dataset.get_data('condition')
     classifier = BatchNormClassifier(n_in=xs.shape[1], n_out=len(np.unique(ys)), **kwargs)
     classifier.fit(xs, ys, train_idx, valid_idx)
-
+'''
 
 if __name__ == '__main__':
     args = docopt(__doc__)
@@ -124,9 +131,15 @@ if __name__ == '__main__':
     if args['--file']:
         params['dataset_name'] = args['--file']
 
-    params['conds'] = ['EyesClosed', 'EyesOpen']
-
     task_num = int(args['--task_number'])
+
+    cond_types = [
+        ['EyesClosed', 'EyesOpen'],
+        ["PositiveLowArousalPictures", "NegativeLowArousalPictures"],
+        ["PositiveHighArousalPictures", "NegativeHighArousalPictures"],
+        ["PositiveHighArousalPictures", "PositiveLowArousalPictures"],
+        ["NegativeHighArousalPictures", "NegativeLowArousalPictures"]]
+    params['conds'] = cond_types[task_num % len(cond_types)]
 
     if args['run']:
         run(task_num=task_num, model_type=ModelType.BASE, **params)
@@ -148,6 +161,15 @@ if __name__ == '__main__':
         model = args['--model']
         if model == 'batchnorm':
             run(task_num=task_num, model_type=ModelType.BATCH_NORM, **params)
+        elif model == 'svm':
+            run(task_num=task_num, model_type=ModelType.SVM, **params)
+        elif model == 'multistage_batchnorm':
+            from learntools.emotiv.multistage_batchnorm import run as multistage_batchnorm_run
+            no_conds_params = combine_dict(params, {'conds': None})
+            dataset = smart_load_data(**no_conds_params)
+            train_idx, valid_idx = cv_split(dataset, percent=0.1, fold_index=task_num)
+            prepared_data = (dataset, train_idx, valid_idx)
+            multistage_batchnorm_run(prepared_data=prepared_data, **params)
         else:
             raise Exception("invalid model family")
     

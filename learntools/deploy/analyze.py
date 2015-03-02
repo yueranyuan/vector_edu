@@ -70,6 +70,7 @@ def json_arg_parser(text):
     arg_dict = json.loads(match.group(2))
     # filter out everything that aren't numbers because we don't know how to deal with those yet
     # TODO: figure out how to deal with non-number arg values
+    return arg_dict.iteritems()
     return filter(lambda(k, v): isinstance(v, (int, long, float)), arg_dict.iteritems())
 
 
@@ -194,7 +195,9 @@ def analyze(local_dir=None, bucket=None, subfolder=None, start_time=None,
     parsed_content = exception_safe_map(lambda (k, v): (k, parse_log(v)),
                                         chronological,
                                         exception=BadLogFileException)
-
+    conds = ['EyesClosed', 'EyesOpen']
+    parsed_content = filter(lambda (key_name, (args, history, run_time)): args["conds"] == conds,
+                            parsed_content)
     # parse content of each individual log file and fill a data store of
     # the arguments and best_errors of all runs
     num_logs = len(parsed_content)
@@ -226,7 +229,6 @@ def analyze(local_dir=None, bucket=None, subfolder=None, start_time=None,
                                                           best_epoch=best_epoch,
                                                           run_time=run_time)
 
-
     # analyze each parameter/argument
     outcomes = [None] * len(arg_all)
     for i, (k, v) in enumerate(sorted(arg_all.iteritems())):
@@ -255,7 +257,6 @@ def analyze(local_dir=None, bucket=None, subfolder=None, start_time=None,
     print "# Descriptive #"
     print 'n: {n} mean: {mean} variance: {variance}'.format(
         n=len(error_all), mean=np.mean(error_all), variance=np.var(error_all))
-    print np.mean(error_all[np.equal(arg_all['model_type'], 0)])
     print "# Parameter Analysis #"
     for o in sorted(outcomes):
         print o

@@ -1,4 +1,5 @@
 from time import sleep
+import argparse
 
 from fabric.api import run as fabrun
 from fabric.api import hide, execute, env, cd, local
@@ -9,6 +10,7 @@ from learntools.libs.ec2 import (terminate_all, add_instances,
                                  get_active_instance, get_available_instances)
 from learntools.libs.ec2 import connect as ec2_connect
 from learntools.deploy.config import all_param_set_keys
+from learntools.deploy.analyze import analyze
 
 
 env.key_filename = "cmu-east-key1.pem"
@@ -126,7 +128,7 @@ def run_experiment_aws(*args, **kwargs):
 
 
 def run_experiment(driver, param_set, task_num=0, **kwargs):
-    '''use the commandline to run an experiment
+    """use the commandline to run an experiment
 
     Args:
         driver (string): name of the driver file. File location relative to the repo root.
@@ -139,7 +141,7 @@ def run_experiment(driver, param_set, task_num=0, **kwargs):
     Returns:
         (string): the name of the log file produced by this experiment. File location relative
             to the repo root.
-    '''
+    """
     log_name = gen_log_name()
     run('python {driver} -p {param_set} -o {log_name} -t {task_num}'.format(
         **locals()))
@@ -168,14 +170,20 @@ def run_batch(param_set, n_workers, driver, existing_instances=False, no_install
         do_jobs(ids, jobs=jobs, func=run_experiment,
                 consumer_factory=JobConsumer)
 
-if __name__ == "__main__":
+
+def _analyze(local_dir, start_time, **kwargs):
+    analyze(local_dir=local_dir, start_time=start_time)
+
+
+def main():
+    # TODO: port this to docopt and clean up all the flags
     handlers = {
         'start': add_instances,
         'batch': run_batch,
-        'terminate': terminate_all
+        'terminate': terminate_all,
+        'analyze': _analyze
     }
 
-    import argparse
     parser = argparse.ArgumentParser(description='Deploy some workers to do some ML')
     parser.add_argument('mode', metavar="mode", type=str, default='exp',
                         choices=handlers.keys(),
@@ -187,19 +195,23 @@ if __name__ == "__main__":
                         help='how long to wait for a connection')
     parser.add_argument('-i', dest='n_workers', metavar="i", default=1,
                         type=int, help='how many workers/instances to use')
-    parser.add_argument('-it', dest='instance_type', default='c3.2xlarge',
+    parser.add_argument('--instance_type', dest='instance_type', default='c3.2xlarge',
                         help='what type of ec2 instance to use')
-    parser.add_argument('-ni', '--no_install', dest='no_install', action='store_true',
+    parser.add_argument('--no_install', dest='no_install', action='store_true',
                         help='when running, do not do install phase')
     parser.add_argument('-x', dest='num_jobs', type=int, default=1,
                         help='how many experiments to run')
-    parser.add_argument('-aws', dest='aws', action='store_true',
+    parser.add_argument('--aws', dest='aws', action='store_true',
                         help='run on aws vs local computer')
-    parser.add_argument('-d', '--driver', dest='driver', type=str, default='kt_driver.py',
+    parser.add_argument('-d', '--driver', dest='driver', type=str, default='emotiv_driver.py',
                         help='the file location of the driver relative to the repo root')
-    parser.add_argument('-ei', '--existing_instances', dest='existing_instances',
+    parser.add_argument('-e', '--existing_instances', dest='existing_instances',
                         action='store_true',
                         help='set to use existing instances')
+    parser.add_argument('-l', dest='local_dir', type=str, default='.',
+                        help='the directory of the log files to be analyzed')
+    parser.add_argument('--start_time', dest='start_time', type=str, default=None,
+                        help='ignore log files before this time')
 
     cmd_args = vars(parser.parse_args())
     # if we're running an experiment, we need the parameter set
@@ -208,5 +220,11 @@ if __name__ == "__main__":
     if cmd_args['num_jobs'] < cmd_args['n_workers']:
         raise Exception("don't launch more instances/workers than jobs to run")
     if cmd_args['aws']:
+        global ONLINE
         ONLINE = True
     handlers[cmd_args['mode']](**cmd_args)
+
+
+
+if __name__ == "__main__":
+    main()

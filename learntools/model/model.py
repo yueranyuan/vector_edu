@@ -1,3 +1,5 @@
+import random
+
 from itertools import groupby
 
 
@@ -14,7 +16,7 @@ class Model(object):
     def __init__(self, *args, **kwargs):
         raise Exception("build model not implemented for this model")
 
-    def evaluate(self, idx, pred):
+    def evaluate(self, idx, preds):
         '''scores the predictions of a given set of rows
 
         Args:
@@ -25,19 +27,19 @@ class Model(object):
         '''
         raise Exception("evaluate not implemented for this model")
 
-    def train_evaluate(self, *args, **kwargs):
+    def train_evaluate(self, idxs, preds, *args, **kwargs):
         '''scores the predictions of a given set of rows under training
 
         (see evaluate())
         '''
-        return self.evaluate(*args, **kwargs)
+        return self.evaluate(idxs, preds, *args, **kwargs)
 
-    def valid_evaluate(self, *args, **kwargs):
+    def valid_evaluate(self, idxs, preds, *args, **kwargs):
         '''scores the predictions of a given set of rows under validation
 
         (see evaluate())
         '''
-        return self.evaluate(*args, **kwargs)
+        return self.evaluate(idxs, preds, *args, **kwargs)
 
     def validate(self, idx, **kwargs):
         '''perform one iteration of validation
@@ -72,6 +74,17 @@ class Model(object):
     def train_batches(self, train_batches):
         self._train_batches = train_batches
 
+    def gen_train(self, shuffle=False, loss=False, **kwargs):
+        batch_order = range(len(self.train_batches))
+        if shuffle:
+            random.shuffle(batch_order)
+        for i in batch_order:
+            losses, preds, idxs = self.train(self.train_batches[i], **kwargs)
+            if loss:
+                yield idxs, losses
+            else:
+                yield idxs, preds
+
     @property
     def valid_batches(self):
         try:
@@ -82,6 +95,17 @@ class Model(object):
     @valid_batches.setter
     def valid_batches(self, valid_batches):
         self._valid_batches = valid_batches
+
+    def gen_valid(self, shuffle=False, loss=False, **kwargs):
+        batch_order = range(len(self.valid_batches))
+        if shuffle:
+            random.shuffle(batch_order)
+        for i in batch_order:
+            losses, preds, idxs = self.validate(self.valid_batches[i], **kwargs)
+            if loss:
+                yield idxs, losses
+            else:
+                yield idxs, preds
 
     def train_full(self, strategy=None, **kwargs):
         import time
@@ -96,7 +120,7 @@ class Model(object):
                 strategy = train_model
 
         start_time = time.clock()
-        best_validation_loss, best_epoch = train_model(self, **kwargs)
+        best_validation_loss, best_epoch = strategy(self, **kwargs)
         end_time = time.clock()
         training_time = (end_time - start_time) / 60.
 

@@ -47,8 +47,5 @@ if __name__ == '__main__':
         params['dataset_name'] = args.file
     elif 'dataset_name' not in params:
         params['dataset_name'] = default_dataset
-    run(0, **params)
+    run(args.task_num, **params)
     print "finished"
-    if sys.platform.startswith('win'):
-        from win_utils import winalert
-        winalert()

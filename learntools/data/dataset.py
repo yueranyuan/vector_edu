@@ -174,6 +174,44 @@ class MatColumn(Column):
         return super(MatColumn, self).__getitem__(key)
 
 
+class SeqColumn(Column):
+    def initialize_data(self, data, dtype='i4', size=10, **kwargs):
+        self.n_rows = size
+        self.dtype = dtype
+        self._data = None
+
+    def __setitem__(self, key, value):
+        # lazily initialize data so that we don't have to pre-specify the dimensions
+        if self._data is None:
+            self._data = np.empty(self.n_rows, dtype=object)
+
+        if isinstance(key, int):
+            self._data[key] = np.array(value, dtype=self.dtype)
+        else:
+            row, col = key
+            if not isinstance(value, (np.ndarray)):
+                value = np.array(value)
+
+            # TODO this will be really slow; there's almost certainly a better way
+            if self._data[row] is None:
+                self._data[row] = np.zeros(col + 1, dtype=self.dtype)
+            elif len(self._data[row]) < col + 1:
+                self._data[row].resize(col + 1)
+
+            self._data[row][col] = value
+
+    def __getitem__(self, key):
+        if isinstance(key, int):
+            return self._data[key]
+        else:
+            row, col = key
+            if self._data is None:
+                raise Exception("Sequence column '{}' not initialized".format(self.name))
+            if self._data[row] is None:
+                raise Exception("Sequence row %d not initialized" % row)
+            return self._data[row][col]
+
+
 class EnumColumn(Column):
     def __init__(self, name, enum_dict=None, *args, **kwargs):
         super(EnumColumn, self).__init__(name, dtype='i4', *args, **kwargs)
@@ -272,6 +310,8 @@ class Dataset(object):
     OBJ = 6
     MATINT = 7
     MATFLOAT = 8
+    SEQINT = 9
+    SEQFLOAT = 10
 
     def __init__(self, headers, n_rows, form=LISTEN_TIME_FORMAT):
         '''
@@ -319,6 +359,12 @@ class Dataset(object):
             elif t == Dataset.MATFLOAT:
                 col_type = 'f4'
             return MatColumn(name=h, dtype=col_type, size=self.n_rows)
+        elif t in (Dataset.SEQINT, Dataset.SEQFLOAT):
+            if t == Dataset.SEQINT:
+                col_type = 'i4'
+            elif t == Dataset.SEQFLOAT:
+                col_type = 'f4'
+            return SeqColumn(name=h, dtype=col_type, size=self.n_rows)
         else:
             raise Exception('unknown dataset type for column')
 

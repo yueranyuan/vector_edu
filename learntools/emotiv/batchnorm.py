@@ -11,7 +11,7 @@ from learntools.libs.auc import auc
 from learntools.model.theano_utils import make_shared
 from learntools.model import Model, gen_batches_by_size
 from learntools.model.net import BatchNormLayer, AutoencodingBatchNormLayer, TrainableNetwork
-from learntools.libs.utils import max_idx
+from learntools.libs.utils import max_idx, normalize_table
 
 
 class BatchNorm(Model):
@@ -29,10 +29,11 @@ class BatchNorm(Model):
         """
         # 1: Organize data into batches
         ds, train_idx, valid_idx = prepared_data
-        input_size = ds.get_data('eeg').shape[1]
+        xs = ds.get_data('eeg')
+        input_size = xs.shape[1]
         output_size = len(np.unique(ds.get_data('condition')))
 
-        self._xs = make_shared(ds.get_data('eeg'), name='eeg')
+        self._xs = make_shared(xs, name='eeg')
         self._ys = make_shared(ds.get_data('condition'), to_int=True, name='condition')
 
         self.train_idx = train_idx

@@ -464,11 +464,11 @@ class BatchNormLayer(HiddenLayer):
             gamma = theano.shared(value=gamma_values, name=self.subname('gamma'), borrow=True)
 
         if mean is None:
-            mean_values = np.zeros((n_out,), dtype=theano.config.floatX)
+            mean_values = np.zeros((), dtype=theano.config.floatX)
             mean = theano.shared(value=mean_values, name=self.subname('mean'), borrow=True)
 
         if variance is None:
-            variance_values = np.ones((n_out,), dtype=theano.config.floatX)
+            variance_values = np.ones((), dtype=theano.config.floatX)
             variance = theano.shared(value=variance_values, name=self.subname('variance'), borrow=True)
 
         self.beta = beta
@@ -533,11 +533,13 @@ class AutoencodingBatchNormLayer(BatchNormLayer):
 
         if decode_beta is None:
             decode_beta_values = np.zeros((n_in,), dtype=theano.config.floatX)
-            self.decode_beta = theano.shared(value=decode_beta_values, name=self.subname('decodeBeta'), borrow=True)
+            decode_beta = theano.shared(value=decode_beta_values, name=self.subname('decodeBeta'), borrow=True)
+        self.decode_beta = decode_beta
 
         if decode_gamma is None:
             decode_gamma_values = np.ones((n_in,), dtype=theano.config.floatX)
-            self.decode_gamma = theano.shared(value=decode_gamma_values, name=self.subname('decodeGamma'), borrow=True)
+            decode_gamma = theano.shared(value=decode_gamma_values, name=self.subname('decodeGamma'), borrow=True)
+        self.decode_gamma = decode_gamma
 
         self.params.extend([self.t_decode_b, self.decode_beta, self.decode_gamma])
 
@@ -562,10 +564,12 @@ class AutoencodingBatchNormLayer(BatchNormLayer):
         train_output.name = self.subname("trainOutput")
 
         # reconstruct batch-specific output
-        recon_lin_output = T.dot(train_output, self.t_W.T) + self.t_decode_b
+        W_T = self.t_W.T
+        W_T.name = self.subname("W_T")
+        recon_lin_output = T.dot(train_output, W_T) + self.t_decode_b
         recon_lin_output.name = self.subname("reconOutput")
         reconstructed_output = self.activation_fn(self.decode_gamma * recon_lin_output + self.decode_beta)
-        reconstructed_output = reconstructed_output * batch_sd + batch_mean
+        reconstructed_output = reconstructed_output * batch_sd# + batch_mean
 
         # outputs with rolling-average normalization
         infer_lin_output = T.dot(infer_x, self.t_W) + self.t_b
@@ -576,10 +580,10 @@ class AutoencodingBatchNormLayer(BatchNormLayer):
         infer_lin_output.name = self.subname("inference_output")
 
         # reconstruct batch-specific output
-        recon_infer_lin_output = T.dot(inference_output, self.t_W.T) + self.t_decode_b
+        recon_infer_lin_output = T.dot(inference_output, W_T) + self.t_decode_b
         recon_infer_lin_output.name = self.subname("reconInferOutput")
-        reconstructed_infer_output = self.activation_fn(self.decode_gamma * recon_infer_lin_output + self.decode_beta)
-        reconstructed_infer_output = reconstructed_infer_output * sd + self.mean
+        norm_recon_infer_output = self.activation_fn(self.decode_gamma * recon_infer_lin_output + self.decode_beta)
+        recon_infer_output = norm_recon_infer_output * sd + self.mean
 
         # save exponential moving average for batch mean/variance
         statistics_updates = [
@@ -587,7 +591,7 @@ class AutoencodingBatchNormLayer(BatchNormLayer):
             (self.variance, self.alpha * self.variance + (1.0 - self.alpha) * batch_var)
         ]
 
-        return train_output, inference_output, statistics_updates, reconstructed_output, infer_x
+        return train_output, inference_output, statistics_updates, reconstructed_output, recon_infer_output
 
     def __pickle__(self):
         super_pickle = super(AutoencodingBatchNormLayer, self).__pickle__()

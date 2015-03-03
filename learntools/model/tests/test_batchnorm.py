@@ -21,6 +21,18 @@ def gen_data(n_in, n_x1, n_x2):
 
 
 @use_logger_in_test
+def test_batchnorm():
+    n_in = 100
+    xs, _, train_idx, valid_idx = gen_data(n_in=n_in, n_x1=300, n_x2=500)
+    layer = AutoencodingBatchNormLayer(n_in=n_in, n_out=2)
+    inp = T.dmatrix('xs')
+    out = layer.instance(inp, inp)
+    f = theano.function([inp], out[:2])
+    ys = f(xs)
+    assert [y.shape for y in ys] == [(800, 2), (800, 2)]
+
+
+@use_logger_in_test
 def test_batchnorm_serialize():
     n_in = 100
     xs, _, train_idx, valid_idx = gen_data(n_in=n_in, n_x1=300, n_x2=500)
@@ -37,6 +49,19 @@ def test_batchnorm_serialize():
     ey = f1(xs)
     ey2 = f2(xs)
     np.testing.assert_array_equal(ey, ey2)
+
+
+@use_logger_in_test
+def test_autoencodingbatchnorm():
+    n_in = 100
+    xs, _, train_idx, valid_idx = gen_data(n_in=n_in, n_x1=300, n_x2=500)
+    layer = AutoencodingBatchNormLayer(n_in=n_in, n_out=2)
+    inp = T.dmatrix('xs')
+    out = layer.instance(inp, inp)
+    f = theano.function([inp], out[:2] + out[3:])
+    ys = f(xs)
+    print ys[-1]
+    assert [y.shape for y in ys] == [(800, 2), (800, 2), (800, 100), (800, 100)]
 
 
 @use_logger_in_test

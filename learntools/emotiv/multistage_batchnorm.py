@@ -11,6 +11,7 @@ from learntools.model.theano_utils import make_shared
 from learntools.model import gen_batches_by_size
 from learntools.model.net import AutoencodingBatchNormLayer
 from learntools.emotiv.batchnorm import BatchNorm
+from learntools.libs.utils import normalize_table
 
 
 def run(**kwargs):
@@ -38,9 +39,11 @@ class AutoencodingBatchNorm(BatchNorm):
 
         # 1: Organize data into batches
         ds, train_idx, valid_idx = prepared_data
-        input_size = ds.get_data('eeg').shape[1]
+        xs = ds.get_data('eeg')
+        xs = normalize_table(xs)
+        input_size = xs.shape[1]
 
-        self._xs = make_shared(ds.get_data('eeg'), name='eeg')
+        self._xs = make_shared(xs, name='eeg')
         self._ys = make_shared(ds.get_data('condition'), to_int=True, name='condition')
 
         self.train_idx = train_idx

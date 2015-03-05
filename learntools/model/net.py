@@ -600,6 +600,98 @@ class AutoencodingBatchNormLayer(BatchNormLayer):
         }
         return combine_dict(super_pickle, my_pickle)
 
+
+class ConvolutionalBatchNormLayer(HiddenLayer):
+    def __init__(self, inp=None, n_in=None, n_out=None, W=None, b=None, beta=None, gamma=None, alpha=0.999, mean=None, variance=None, rng_state=None, field_width=3, activation='rectifier', name='convbatchnormlayer'):
+        """alpha is the exponential moving average falloff multiplier"""
+        super(ConvolutionalBatchNormLayer, self).__init__(inp=inp, rng_state=rng_state, n_in=n_in, n_out=n_out, W=W, b=b, activation=activation, name=name)
+
+        self.srng = theano.tensor.shared_randomstreams.RandomStreams(
+            self.rng.randint(999999))
+
+        sigma2 = 2.0 / n_in if activation == 'rectifier' else 2.0 / (n_in + n_out)
+        W = np.asarray(sigma2 * self.rng.randn(1, 1, field_width, 1), dtype=theano.config.floatX)
+        self.t_W = theano.shared(value=W, name=self.subname('W'), borrow=True)
+
+        n_out = n_in - field_width + 1
+
+        b = np.zeros((1,), dtype=theano.config.floatX)
+        self.t_b = theano.shared(value=b, name=self.subname('b'), borrow=True)
+
+
+        if beta is None:
+            beta_values = np.zeros((n_out,), dtype=theano.config.floatX)
+            beta = theano.shared(value=beta_values, name=self.subname('beta'), borrow=True)
+
+        if gamma is None:
+            gamma_values = np.ones((n_out,), dtype=theano.config.floatX)
+            gamma = theano.shared(value=gamma_values, name=self.subname('gamma'), borrow=True)
+
+        if mean is None:
+            mean_values = np.zeros((n_out,), dtype=theano.config.floatX)
+            mean = theano.shared(value=mean_values, name=self.subname('mean'), borrow=True)
+
+        if variance is None:
+            variance_values = np.ones((n_out,), dtype=theano.config.floatX)
+            variance = theano.shared(value=variance_values, name=self.subname('variance'), borrow=True)
+
+        self.beta = beta
+        self.gamma = gamma
+        self.alpha = alpha
+        self.mean = mean
+        self.variance = variance
+
+        self.params = [self.t_W, self.t_b, self.beta, self.gamma]
+
+    def instance(self, train_x, infer_x, dropout=None, epsilon=1e-8, **kwargs):
+        """Returns (train_output, inference_output, statistics_updates)"""
+
+        # dropout
+        dropout = dropout or 0.
+        mask = self.srng.binomial(n=1, p=1 - dropout, size=train_x.shape)
+        # cast because int * float32 = float64 which does not run on GPU
+        train_x = train_x * T.cast(mask, theano.config.floatX)
+
+        # outputs with batch-specific normalization
+        train_x_reshaped = T.reshape(train_x, (train_x.shape[0], 1, train_x.shape[1], 1))
+        train_conv_output = conv.conv2d(train_x_reshaped, self.t_W)
+        #train_pooled_output = downsample.max_pool_2d(conv_output, (self.ds_factor, 1))
+        train_lin_output = (train_conv_output + self.t_b.dimshuffle('x', 0, 'x', 'x'))
+        train_lin_output = train_lin_output.reshape((train_lin_output.shape[0], train_lin_output.shape[2]))
+        batch_mean = T.mean(train_lin_output)
+        offset_output = train_lin_output - batch_mean
+        batch_var = T.var(offset_output)
+        normalized_lin_output = offset_output / T.sqrt(batch_var + epsilon)
+        train_output = self.activation_fn(self.gamma * normalized_lin_output + self.beta)
+
+        # outputs with rolling-average normalization
+        infer_lin_output = T.dot(infer_x, self.t_W) + self.t_b
+        infer_x_reshaped = T.reshape(infer_x, (infer_x.shape[0], 1, infer_x.shape[1], 1))
+        infer_conv_output = conv.conv2d(infer_x_reshaped, self.t_W)
+        infer_lin_output = (infer_conv_output + self.t_b.dimshuffle('x', 0, 'x', 'x'))
+        infer_lin_output = infer_lin_output.reshape((infer_lin_output.shape[0], infer_lin_output.shape[2]))
+        sd = T.sqrt(self.variance + epsilon)
+        inference_output = self.activation_fn(self.gamma / sd * infer_lin_output + (self.beta - (self.gamma * self.mean) / sd))
+
+        # save exponential moving average for batch mean/variance
+        statistics_updates = [
+            (self.mean, self.alpha * self.mean + (1.0 - self.alpha) * batch_mean),
+            (self.variance, self.alpha * self.variance + (1.0 - self.alpha) * batch_var)
+        ]
+
+        return train_output, inference_output, statistics_updates
+
+    def __pickle__(self):
+        super_pickle = super(BatchNormLayer, self).__pickle__()
+        my_pickle = {
+            'beta': self.beta.get_value(borrow=True),
+            'gamma': self.gamma.get_value(borrow=True),
+            'mean': self.mean.get_value(borrow=True),
+            'variance': self.variance.get_value(borrow=True),
+        }
+        return combine_dict(super_pickle, my_pickle)
+
+
 # inspired by http://deeplearning.net/tutorial/lenet.html
 class ConvolutionalLayer(NetworkComponent):
     def __init__(self, rng, n_in, n_out=None, W=None, b=None, field_width=3, ds_factor=2,

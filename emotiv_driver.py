@@ -11,6 +11,7 @@ Usage:
     emotiv_driver.py run_subject [options]
     emotiv_driver.py run_autoencoder [options]
     emotiv_driver.py run_batchnorm [options]
+    emotiv_driver.py run_convbatchnorm [options]
     emotiv_driver.py run_multistage [options]
 
 Options:
@@ -70,6 +71,7 @@ class ModelType(object):
     BATCH_NORM = 4
     SVM = 5
     MULTISTAGE_BATCH_NORM = 6
+    CONV_BATCH_NORM = 7
 
 
 @log_me()
@@ -93,6 +95,10 @@ def run(task_num=0, model_type=ModelType.BASE, **kwargs):
         train_idx, valid_idx = cv_split(dataset, percent=0.10, fold_index=task_num)
     elif model_type == ModelType.BATCH_NORM:
         from learntools.emotiv.batchnorm import BatchNorm as SelectedModel
+        dataset = smart_load_data(**kwargs)
+        train_idx, valid_idx = cv_split(dataset, percent=0.1, fold_index=task_num)
+    elif model_type == ModelType.CONV_BATCH_NORM:
+        from learntools.emotiv.batchnorm import ConvBatchNorm as SelectedModel
         dataset = smart_load_data(**kwargs)
         train_idx, valid_idx = cv_split(dataset, percent=0.1, fold_index=task_num)
     elif model_type == ModelType.SVM:
@@ -153,6 +159,8 @@ if __name__ == '__main__':
         run(task_num=task_num, model_type=ModelType.AUTOENCODER, **params)
     elif args['run_batchnorm']:
         run(task_num=task_num, model_type=ModelType.BATCH_NORM, **params)
+    elif args['run_convbatchnorm']:
+        run(task_num=task_num, model_type=ModelType.CONV_BATCH_NORM, **params)
     elif args['run_multistage']:
         from learntools.emotiv.multistage import run_multistage
         run_multistage(task_num=task_num, **params)

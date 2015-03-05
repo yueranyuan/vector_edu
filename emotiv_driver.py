@@ -57,6 +57,9 @@ def smart_load_data(dataset_name=None, **kwargs):
     elif ext == '.gz':
         dataset = segment_raw_data(dataset_name=dataset_name, **kwargs)
         filter_data(dataset)
+    elif ext == '.pickle':
+        dataset = segment_raw_data(dataset_name=dataset_name, **kwargs)
+        filter_data(dataset)
     else:
         raise ValueError
     return dataset

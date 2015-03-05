@@ -1,6 +1,8 @@
 import numpy as np
 import pywt
 
+import matplotlib.pyplot as plt
+
 
 def _downsample(arr, n):
     """Downsample a signal by averaging neighboring points.
@@ -10,8 +12,35 @@ def _downsample(arr, n):
     end = n * int(len(arr) / n)
     return np.mean(arr[:end].reshape(n, -1), 1)
 
+# Make a scalogram given an MRA tree.
+def scalogram(data):
+    bottom = 0
+
+    vmin = min(map(lambda x: min(abs(x)), data))
+    vmax = max(map(lambda x: max(abs(x)), data))
+
+    plt.gca().set_autoscale_on(False)
+
+    for row in range(0, len(data)):
+        scale = 2.0 ** (row - len(data))
+
+        plt.imshow(
+            np.array([abs(data[row])]),
+            interpolation = 'nearest',
+            vmin = vmin,
+            vmax = vmax,
+            extent = [0, 1, bottom, bottom + scale])
+
+        bottom += scale
+
 
 def signal_to_wavelet(y, family='db2', double=False, min_length=10, max_length=None, depth=1):
+    coeffs = pywt.wavedec(y, 'db1')
+
+    scalogram(coeffs)
+    plt.show()
+
+    return coeffs
     c_a, c_d = pywt.dwt(y, family)
 
     # determine whether we want to split the approximation and/or the detail any further

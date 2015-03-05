@@ -245,8 +245,8 @@ def segment_raw_data(dataset_name, conds=None, duration=10, sample_rate=128, **k
     for i, seg_data in enumerate(segments):
         new_ds[i] = seg_data
 
-    new_ds = gen_fft_features(new_ds, duration=duration, sample_rate=sample_rate)
-    #new_ds = gen_wavelet_features(new_ds, duration=duration, sample_rate=sample_rate)
+    #new_ds = gen_fft_features(new_ds, duration=duration, sample_rate=sample_rate)
+    new_ds = gen_wavelet_features(new_ds, duration=duration, sample_rate=sample_rate)
 
     return new_ds
 
@@ -271,6 +271,7 @@ def _gen_featured_dataset(ds, func, *args, **kwargs):
     for i in xrange(len(ds)):
         _, source, eeg_segment, _ = ds[i]
         subject, _, _, label = ds.orig[i]
+        print(label)
         try:
             eeg_features = func(eeg_segment, *args, **kwargs)
         except FeatureGenerationException:
@@ -320,7 +321,7 @@ def gen_fft_features(ds, duration=10, sample_rate=128, cutoffs=None):
     return _gen_featured_dataset(ds, _fft_eeg_segment, duration=duration, sample_rate=sample_rate, cutoffs=cutoffs)
 
 
-def gen_wavelet_features(ds, duration=10, sample_rate=128, depth=5, min_length=3, max_length=5, family='db6'):
+def gen_wavelet_features(ds, duration=10, sample_rate=128, depth=5, min_length=3, max_length=14, family='db6'):
     def _wavelet_eeg_segment(eeg_segment, duration, sample_rate, depth, min_length, max_length, family):
         # cut eeg to desired length (so that all wavelets are the same length)
         desired_length = duration * sample_rate
@@ -334,6 +335,8 @@ def gen_wavelet_features(ds, duration=10, sample_rate=128, depth=5, min_length=3
             eeg_wavelet = signal_to_wavelet(eeg_segment[:, i], min_length=min_length, max_length=max_length,
                                             depth=depth, family=family)
             eeg_wavelets += eeg_wavelet
+
+        import pdb; pdb.set_trace()
 
         return np.concatenate(eeg_wavelets)
 

@@ -6,5 +6,5 @@ scikit-learn==0.15.2
 Theano==0.6.0
 pytest==2.6.4
 docopt==0.6.1
-PyWavelets=0.2.2
-matplotlib=1.4.0
+PyWavelets==0.2.2
+matplotlib==1.4.0

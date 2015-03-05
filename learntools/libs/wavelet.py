@@ -10,7 +10,7 @@ def _downsample(arr, n):
     Code adapted from
     http://stackoverflow.com/questions/10847660/subsampling-averaging-over-a-numpy-array"""
     end = n * int(len(arr) / n)
-    return np.mean(arr[:end].reshape(n, -1), 1)
+    return np.var(arr[:end].reshape(n, -1), 1)
 
 # Make a scalogram given an MRA tree.
 def scalogram(data):
@@ -35,12 +35,6 @@ def scalogram(data):
 
 
 def signal_to_wavelet(y, family='db2', double=False, min_length=10, max_length=None, depth=1):
-    coeffs = pywt.wavedec(y, 'db1')
-
-    scalogram(coeffs)
-    plt.show()
-
-    return coeffs
     c_a, c_d = pywt.dwt(y, family)
 
     # determine whether we want to split the approximation and/or the detail any further

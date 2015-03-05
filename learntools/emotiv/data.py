@@ -238,6 +238,15 @@ def segment_raw_data(dataset_name, conds=None, duration=10, sample_rate=128, **k
                 segment_end = min(segment_end, segment_begin + duration * sample_rate)
                 # shape should be (duration * sample_rate) by eeg vector length
                 eeg_segment = eeg_seq[segment_begin:segment_end, :]
+
+                # clip any outlier segments
+                # take things within 25th-75th percentile
+                sorted_eeg_segment = np.sort(eeg_segment, axis=0)[len(eeg_segment) / 4 : len(eeg_segment) * 3 / 4]
+                mean = np.mean(sorted_eeg_segment, axis=0)
+                std = np.std(sorted_eeg_segment - mean, axis=0)
+                lo_thresh = mean - 4 * std
+                hi_thresh = mean + 4 * std
+                eeg_segment = np.minimum(np.maximum(lo_thresh, eeg_segment), hi_thresh)
                 segments.append((subject, source, eeg_segment, label))
 
     # add all segments to the new dataset
@@ -246,7 +255,7 @@ def segment_raw_data(dataset_name, conds=None, duration=10, sample_rate=128, **k
         new_ds[i] = seg_data
 
     #new_ds = gen_fft_features(new_ds, duration=duration, sample_rate=sample_rate)
-    new_ds = gen_wavelet_features(new_ds, duration=duration, sample_rate=sample_rate)
+    new_ds = gen_wavelet_features(new_ds, duration=duration, sample_rate=sample_rate, max_length=4)
 
     return new_ds
 
@@ -271,7 +280,6 @@ def _gen_featured_dataset(ds, func, *args, **kwargs):
     for i in xrange(len(ds)):
         _, source, eeg_segment, _ = ds[i]
         subject, _, _, label = ds.orig[i]
-        print(label)
         try:
             eeg_features = func(eeg_segment, *args, **kwargs)
         except FeatureGenerationException:
@@ -335,8 +343,6 @@ def gen_wavelet_features(ds, duration=10, sample_rate=128, depth=5, min_length=3
             eeg_wavelet = signal_to_wavelet(eeg_segment[:, i], min_length=min_length, max_length=max_length,
                                             depth=depth, family=family)
             eeg_wavelets += eeg_wavelet
-
-        import pdb; pdb.set_trace()
 
         return np.concatenate(eeg_wavelets)
 

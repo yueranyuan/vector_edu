@@ -204,10 +204,6 @@ def segment_raw_data(dataset_name, conds=None, duration=10, sample_rate=128, **k
     for i in xrange(len(ds)):
         subject, eeg_seq, condition_seq, rec_time = ds[i]
 
-        # fix ranges on eeg data per subject
-        eeg_seq = clip_outliers(eeg_seq)
-        eeg_seq = normalize_standard(eeg_seq)
-
         # find the nonzero elements of condition_seq, which are the actual labels
         segment_idx = np.nonzero(condition_seq)[0]
         segment_cond = condition_seq[segment_idx]
@@ -313,7 +309,6 @@ def gen_fft_features(ds, duration=10, sample_rate=128, cutoffs=None):
             # there are len(cutoffs)-1 bins, window_freq is a list of will have a frequency vector of num channels
             window_freq = signal_to_freq_bins(window, cutoffs=cutoffs, sampling_rate=sample_rate)
 
-            window_freq = normalize_standard(clip_outliers(np.array(window_freq)))
             eeg_freqs.append(np.concatenate(window_freq))
 
         # (num windows * num bins) * num channels
@@ -336,7 +331,6 @@ def gen_wavelet_features(ds, duration=10, sample_rate=128, depth=5, min_length=3
         for i in xrange(eeg_segment.shape[1]):
             eeg_wavelet = signal_to_wavelet(eeg_segment[:, i], min_length=min_length, max_length=max_length,
                                             depth=depth, family=family)
-            eeg_wavelet = normalize_standard(clip_outliers(np.array(eeg_wavelet)))
             eeg_wavelets.append(np.concatenate(eeg_wavelet))
 
         return np.concatenate(eeg_wavelets)

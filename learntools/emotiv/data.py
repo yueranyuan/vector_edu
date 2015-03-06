@@ -239,6 +239,15 @@ def segment_raw_data(dataset_name, conds=None, duration=10, sample_rate=128, wav
                 segment_end = min(segment_end, segment_begin + duration * sample_rate)
                 # shape should be (duration * sample_rate) by eeg vector length
                 eeg_segment = eeg_seq[segment_begin:segment_end, :]
+
+                # clip any outlier segments
+                # take things within 25th-75th percentile
+                sorted_eeg_segment = np.sort(eeg_segment, axis=0)[len(eeg_segment) / 4 : len(eeg_segment) * 3 / 4]
+                mean = np.mean(sorted_eeg_segment, axis=0)
+                std = np.std(sorted_eeg_segment - mean, axis=0)
+                lo_thresh = mean - 4 * std
+                hi_thresh = mean + 4 * std
+                eeg_segment = np.minimum(np.maximum(lo_thresh, eeg_segment), hi_thresh)
                 segments.append((subject, source, eeg_segment, label))
 
     # add all segments to the new dataset
@@ -349,4 +358,3 @@ def filter_indices_by_condition(dataset, idx, conds):
     # convert from cond string to cond enum, to internal cond enum, to mask
     want = [dataset.get_data('condition')[idx] == mapping[ACTIVITY_CONDITIONS[cond]] for cond in conds]
     return idx[reduce(np.logical_or, want)]
-    return new_ds

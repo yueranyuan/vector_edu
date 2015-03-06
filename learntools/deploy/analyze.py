@@ -195,7 +195,7 @@ def analyze(local_dir=None, bucket=None, subfolder=None, start_time=None,
     parsed_content = exception_safe_map(lambda (k, v): (k, parse_log(v)),
                                         chronological,
                                         exception=BadLogFileException)
-    conds = ['EyesClosed', 'EyesOpen']
+    conds = ["NegativeHighArousalPictures", "NegativeLowArousalPictures"]
     parsed_content = filter(lambda (key_name, (args, history, run_time)): args["conds"] == conds,
                             parsed_content)
     # parse content of each individual log file and fill a data store of

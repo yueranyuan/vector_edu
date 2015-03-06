@@ -18,7 +18,7 @@ class BatchNorm(Model):
     @log_me('...building BatchNorm')
     def __init__(self, prepared_data, batch_size=30, L1_reg=0., L2_reg=0.,
                  classifier_width=500, classifier_depth=2, rng_seed=42,
-                 learning_rate=0.0002, dropout_p=0.0, recon_loss_alpha=0.0, **kwargs):
+                 learning_rate=0.0002, dropout_p=0.0, serialized=None, **kwargs):
         """
         Args:
             prepared_data : (Dataset, [int], [int])
@@ -50,19 +50,29 @@ class BatchNorm(Model):
         bn_updates, subnets = [], []
         train_layer, infer_layer, updates_layer = input_layer, input_layer, []
 
+        if serialized is None:
+            serialized = []
+        serialized += [{}] * (classifier_depth + 1 - len(serialized))  # pad serialized subnets
+
         n_in, n_out = input_size, classifier_width
-        recon_losses = []
-        for i in xrange(classifier_depth):
-            bn_layer = AutoencodingBatchNormLayer(n_in=n_in, n_out=n_out)
-            train_layer, infer_layer, updates_layer, train_recon, infer_recon = bn_layer.instance(train_layer, infer_layer, dropout=t_dropout)
+        self.layers = []
+        for i, net_params in izip(xrange(classifier_depth), serialized):
+            bn_layer = BatchNormLayer(n_in=n_in, n_out=n_out, **net_params)
+            train_layer, infer_layer, updates_layer = bn_layer.instance(train_layer, infer_layer, dropout=t_dropout)
+            self.layers.append(bn_layer)
             bn_updates.extend(updates_layer)
             subnets.append(bn_layer)
-            recon_loss = T.mean(T.sqr(train_layer - train_recon))
-            recon_losses.append(recon_loss)
             n_in, n_out = classifier_width, classifier_width
 
         # softmax
-        bn_layer = BatchNormLayer(n_in=classifier_width, n_out=output_size, activation='softmax')
+        if serialized[-1] is None:
+            softmax_params = {}
+        else:
+            softmax_params = serialized[-1]
+            if 'activation' in softmax_params:
+                del softmax_params['activation']  # conflicts with explicit keyword arg
+        bn_layer = BatchNormLayer(n_in=bn_layer.W.shape[1], n_out=output_size, activation='softmax', **softmax_params)
+        self.layers.append(bn_layer)
         train_pY, infer_pY, updates_layer = bn_layer.instance(train_layer, infer_layer)
         bn_updates.extend(updates_layer)
         subnets.append(bn_layer)
@@ -77,7 +87,6 @@ class BatchNorm(Model):
             loss
             + L1_reg * sum([net.L1 for net in subnets])
             + L2_reg * sum([net.L2_sqr for net in subnets])
-            # + recon_loss_alpha * T.sum(recon_losses)
         )
         cost.name = 'overall_cost'
 
@@ -90,7 +99,7 @@ class BatchNorm(Model):
                                          givens=[(t_dropout, 0.0)],
                                          allow_input_downcast=True)
         self._tf_train = theano.function(inputs=[input_idxs],
-                                         outputs=[loss, train_pY[:, 1] - train_pY[:, 0], input_idxs],
+                                         outputs=[loss, infer_pY[:, 1] - infer_pY[:, 0], input_idxs],
                                          givens=[(t_dropout, dropout_p)],
                                          allow_input_downcast=True, updates=update_parameters)
         self.subnets = subnets
@@ -112,12 +121,11 @@ class BatchNorm(Model):
         best_pred_cutoff = find_best_cutoff(y, preds)
 
         # gradually change the prediction cutoff to avoid instability
-        PRED_CUTOFF_ALPHA = 0.2
+        PRED_CUTOFF_ALPHA = 1.0
         if hasattr(self, 'pred_cutoff'):
             self.pred_cutoff = (1.0 - PRED_CUTOFF_ALPHA) * self.pred_cutoff + PRED_CUTOFF_ALPHA * best_pred_cutoff
         else:
             self.pred_cutoff = best_pred_cutoff
-
         return acc_by_cutoff(y, preds, self.pred_cutoff)
 
     def valid_evaluate(self, idxs, preds, *args, **kwargs):
@@ -126,6 +134,9 @@ class BatchNorm(Model):
         _auc = auc(y[:len(preds)], preds, pos_label=1)
         print("validation auc: {auc}, best cutoff accuracy: {best_acc}".format(auc=_auc, best_acc=best_acc))
         return acc_by_cutoff(y, preds, self.pred_cutoff)
+
+    def serialize(self):
+        return [net.serialize() for net in self.layers]
 
 
 def acc_by_cutoff(y, preds, cutoff):

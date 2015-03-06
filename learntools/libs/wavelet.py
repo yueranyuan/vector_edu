@@ -10,7 +10,7 @@ def _downsample(arr, n):
     Code adapted from
     http://stackoverflow.com/questions/10847660/subsampling-averaging-over-a-numpy-array"""
     end = n * int(len(arr) / n)
-    return np.var(arr[:end].reshape(n, -1), 1)
+    return np.std(arr[:end].reshape(n, -1), 1)
 
 # Make a scalogram given an MRA tree.
 def scalogram(data):

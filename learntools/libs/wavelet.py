@@ -35,7 +35,8 @@ def scalogram(data):
 
 def signal_to_wavelet(y, family='db6', min_length=10, max_length=None, depth=1):
     coeffs = pywt.wavedec(y, family, level=depth)
-    coeffs_downsampled = [_downsample(coeff, max_length) for coeff in coeffs if len(coeff) > min_length]
+    coeffs_downsampled = [_downsample(coeff, max_length) if max_length else coeff
+                          for coeff in coeffs if len(coeff) > min_length]
     return coeffs_downsampled
 
 

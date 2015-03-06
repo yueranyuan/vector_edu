@@ -67,25 +67,66 @@ def plot_conditions(eeg, conditions):
     plt.show()
 
 
-def plot_wave(y):
-    plt.plot(y)
+def _shape(ys):
+    """ Get the shape of a non-numpy python array. This assumes the first index of every dimension is
+    indicative of the shape of the whole matrix.
+
+    Examples:
+        >>> _shape([1, 2, 3])
+        [3]
+        >>> _shape([[1, 2, 3], [4, 5]])
+        [2, 3]
+    """
+    if hasattr(ys, '__len__'):
+        return [len(ys)] + _shape(ys[0])
+    else:
+        return []
+
+
+def plot_waves(ys, ylim=None):
+    shape = _shape(ys)
+
+    if len(shape) > 3:
+        from operator import __mul__
+        dim1 = reduce(__mul__, shape[:-2])
+        dim2 = shape[-2]
+    elif len(shape) == 3:
+        dim1, dim2 = shape[:2]
+    elif len(shape) == 2:
+        dim1, dim2 = shape[0], 1
+    elif len(shape) == 1:
+        dim1 = dim2 = 1
+    else:
+        raise Exception("malformed ys")
+
+    def _plot_wave(y, i):
+        if len(_shape(y)) == 1:
+            print i
+            plt.subplot(dim1, dim2, i)
+            if ylim is not None:
+                plt.ylim(ylim)
+            plt.plot(y)
+            return i + 1
+        else:
+            for _y in y:
+                i = _plot_wave(_y, i)
+        return i
+
+    _plot_wave(ys, 1)
     plt.show()
 
 
-if __name__ == "__main__":
-    from itertools import compress
-    dataset_name = 'data/raw_seigle.gz'
-    max_length = 4
-    ds = segment_raw_data(dataset_name=dataset_name, conds=['EyesOpen', 'EyesClosed'])
-
-    eeg_segment = ds['eeg'][0]
-    wavelet = signal_to_wavelet(eeg_segment[:, 0], min_length=0, max_length=None,
-                                depth=5, family='db6')
-    plot_wave(eeg_segment[:, 0])
-    for w in wavelet:
-        plot_wave(w)
+def analyze_waves(ds, n=20, ylim=(-80, 80)):
+    for i in xrange(n):
+        eeg_segment = ds['eeg'][i]
+        wavelet = signal_to_wavelet(eeg_segment[:, 0], min_length=0, max_length=None,
+                                    depth=5, family='db6')
+        plot_waves(eeg_segment.T)
+        plot_waves([(w, _downsample(w, 6)) for w in wavelet], ylim=ylim)
     exit()
 
+
+def analyze_features(ds, max_length=4):
     ds = gen_wavelet_features(ds, duration=10, sample_rate=128, depth=5, min_length=3, max_length=max_length,
                               family='db6')
     filter_data(ds)
@@ -94,3 +135,12 @@ if __name__ == "__main__":
     eeg = eeg.reshape((eeg.shape[0], 14, 6, max_length))
     eeg_no_time = np.mean(eeg, axis=3)
     plot_conditions(eeg=eeg_no_time, conditions=ds['condition'])
+
+
+if __name__ == "__main__":
+    from itertools import compress
+    from learntools.libs.wavelet import _downsample
+    dataset_name = 'data/raw_seigle.gz'
+    ds = segment_raw_data(dataset_name=dataset_name, conds=['EyesOpen', 'EyesClosed'])
+    # analyze_waves(ds, n=2)
+    analyze_features(ds, max_length=4)

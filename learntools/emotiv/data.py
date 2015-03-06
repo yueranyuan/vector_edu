@@ -289,7 +289,7 @@ def _gen_featured_dataset(ds, func, *args, **kwargs):
 
     # TODO normalization should be shared across some columns
     print('feature vector width: {}'.format(new_ds.get_column('eeg').data.shape[1]))  # TODO: replace with 'width' once we merge
-    new_ds.get_column('eeg').data = normalize_table(new_ds['eeg'])
+    new_ds.get_column('eeg').data = normalize_table(new_ds['eeg'], clip=True, within_subject=new_ds['subject'])
 
     return new_ds
 
@@ -337,6 +337,7 @@ def gen_wavelet_features(ds, duration=10, sample_rate=128, depth=5, min_length=3
 
     return _gen_featured_dataset(ds, _wavelet_eeg_segment, duration=duration, sample_rate=sample_rate,
                                  depth=depth, min_length=min_length, max_length=max_length, family=family)
+
 
 def filter_indices_by_condition(dataset, idx, conds):
     mapping = dict(dataset['condition'].ienum_pairs)

@@ -1,5 +1,5 @@
 import operator
-from itertools import chain, imap, ifilterfalse
+from itertools import chain, imap, ifilterfalse, compress
 import math
 
 import numpy as np
@@ -50,20 +50,27 @@ def flatten(arr):
     return list(chain.from_iterable(arr))
 
 
-def clip_outliers(matrix, method='std'):
+def clip_outliers(matrix, method='std', axis=None):
     # take things within 25th-75th percentile, with subsampling for speedup
     size = len(matrix)
-    samples = math.log(size)
+    samples = math.log(size) if size > 100 else size
     subsample = matrix[::int(size / samples)]
-    iqr = np.sort(subsample, axis=0)[int(samples / 4) : int(samples * 3 / 4)]
-    mean = np.mean(iqr, axis=0)
-    if method == 'iqr': # use interquartile range
+    sorted_subsample = np.sort(subsample, axis=axis)
+    if axis is None:
+        N = len(sorted_subsample)
+    else:
+        N = sorted_subsample.shape[axis]
+    iqr = np.take(sorted_subsample, range(int(N * 0.25), int(N * 0.75)), axis=axis)
+    if iqr.shape[0] == 1:
+        raise Exception("insufficient rows in matrix to get reliable interquartial range")
+    mean = np.mean(iqr, axis=axis)
+    if method == 'iqr':  # use interquartile range
         lower_bound = iqr[0]
         upper_bound = iqr[-1]
         lo_thresh = mean + 1.5 * (lower_bound - mean)
         hi_thresh = mean + 1.5 * (upper_bound - mean)
-    elif method == 'std': # use standard deviation
-        std = np.std(iqr, axis=0)
+    elif method == 'std':  # use standard deviation
+        std = np.std(iqr, axis=axis)
         lo_thresh = mean - 3.0 * std
         hi_thresh = mean + 3.0 * std
     else:
@@ -82,12 +89,24 @@ def normalize_standard(matrix, epsilon=1e-7):
     return (matrix - mean) / (std + epsilon)
 
 
-def normalize_table(table, clip=False):
-    table = np.array(table)
+def normalize_table(table, clip=False, within_subject=None, axis=None):
+    if not isinstance(table, np.ndarray):
+        table = np.asarray(table)
+
+    if within_subject:
+        subjects = np.unique(within_subject)
+        for subject in subjects:
+            selected_idxs = list(compress(range(len(within_subject)), within_subject == subject))
+            table_s = table[selected_idxs]
+            norm_table_s = normalize_table(table_s, clip=clip, axis=axis)
+            table[selected_idxs] = norm_table_s
+        return table
+
     if clip:
-      table = clip_outliers(table)
-    mins = table.min(axis=0)
-    maxs = table.max(axis=0)
+        table = clip_outliers(table)
+
+    mins = table.min(axis=axis)
+    maxs = table.max(axis=axis)
     norm_table = (table - mins) / (maxs - mins)
     if np.any(np.isnan(norm_table)):
         # TODO: issue warning all nan

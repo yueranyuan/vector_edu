@@ -41,7 +41,7 @@ from learntools.libs.logger import gen_log_name, log_me, set_log_file
 from learntools.emotiv.data import (prepare_data, convert_raw_data, segment_raw_data, load_siegle_data, \
     gen_wavelet_features, gen_fft_features)
 from learntools.emotiv.filter import filter_data
-from learntools.data import cv_split
+from learntools.data import cv_split, cv_split_randomized
 from learntools.data.crossvalidation import cv_split_within_column
 import learntools.deploy.config as config
 
@@ -85,11 +85,11 @@ def run(task_num=0, model_type=ModelType.BASE, **kwargs):
     if model_type == ModelType.BASE:
         from learntools.emotiv.base import BaseEmotiv as SelectedModel
         dataset = prepare_data(**kwargs)
-        train_idx, valid_idx = cv_split(dataset, percent=0.1, fold_index=task_num)
+        train_idx, valid_idx = cv_split_randomized(dataset, percent=0.1, fold_index=task_num)
     elif model_type == ModelType.RAW_BASE:
         from learntools.emotiv.base import BaseEmotiv as SelectedModel
         dataset = smart_load_data(**kwargs)
-        train_idx, valid_idx = cv_split(dataset, percent=0.50, fold_index=task_num)
+        train_idx, valid_idx = cv_split_randomized(dataset, percent=0.50, fold_index=task_num)
     elif model_type == ModelType.SUBJECT:
         from learntools.emotiv.persubject import SubjectEmotiv as SelectedModel
         dataset = smart_load_data(**kwargs)
@@ -98,15 +98,15 @@ def run(task_num=0, model_type=ModelType.BASE, **kwargs):
     elif model_type == ModelType.AUTOENCODER:
         from learntools.emotiv.emotiv_autoencode import AutoencodeEmotiv as SelectedModel
         dataset = smart_load_data(**kwargs)
-        train_idx, valid_idx = cv_split(dataset, percent=0.10, fold_index=task_num)
+        train_idx, valid_idx = cv_split_randomized(dataset, percent=0.10, fold_index=task_num)
     elif model_type == ModelType.BATCH_NORM:
         from learntools.emotiv.batchnorm import BatchNorm as SelectedModel
         dataset = smart_load_data(**kwargs)
-        train_idx, valid_idx = cv_split(dataset, percent=0.1, fold_index=task_num)
+        train_idx, valid_idx = cv_split_randomized(dataset, percent=0.1, fold_index=task_num)
     elif model_type == ModelType.SVM:
         from learntools.emotiv.svm import SVM as SelectedModel
         dataset = smart_load_data()
-        train_idx, valid_idx = cv_split(dataset, percent=0.1, fold_index=task_num)
+        train_idx, valid_idx = cv_split_randomized(dataset, percent=0.1, fold_index=task_num)
     else:
         raise Exception("model type is not valid")
     prepared_data = (dataset, train_idx, valid_idx)

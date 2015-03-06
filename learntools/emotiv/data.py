@@ -250,9 +250,6 @@ def segment_raw_data(dataset_name, conds=None, duration=10, sample_rate=128, **k
     for i, seg_data in enumerate(segments):
         new_ds[i] = seg_data
 
-    #new_ds = gen_fft_features(new_ds, duration=duration, sample_rate=sample_rate)
-    new_ds = gen_wavelet_features(new_ds, duration=duration, sample_rate=sample_rate, max_length=14)
-
     return new_ds
 
 
@@ -353,4 +350,3 @@ def filter_indices_by_condition(dataset, idx, conds):
     # convert from cond string to cond enum, to internal cond enum, to mask
     want = [dataset.get_data('condition')[idx] == mapping[ACTIVITY_CONDITIONS[cond]] for cond in conds]
     return idx[reduce(np.logical_or, want)]
-    return new_ds

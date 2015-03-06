@@ -26,15 +26,21 @@ def scalogram(data):
 
         plt.imshow(
             np.array([abs(data[row])]),
-            interpolation = 'nearest',
-            vmin = vmin,
-            vmax = vmax,
-            extent = [0, 1, bottom, bottom + scale])
-
+            interpolation='nearest',
+            vmin=vmin,
+            vmax=vmax,
+            extent=[0, 1, bottom, bottom + scale])
         bottom += scale
 
 
-def signal_to_wavelet(y, family='db2', double=False, min_length=10, max_length=None, depth=1):
+def signal_to_wavelet(y, family='db6', min_length=10, max_length=None, depth=1):
+    coeffs = pywt.wavedec(y, family, level=depth)
+    coeffs_downsampled = [_downsample(coeff, max_length) if max_length else coeff
+                          for coeff in coeffs if len(coeff) > min_length]
+    return coeffs_downsampled
+
+
+def signal_to_wavelet_manual(y, family='db6', double=False, min_length=10, max_length=None, depth=1):
     c_a, c_d = pywt.dwt(y, family)
 
     # determine whether we want to split the approximation and/or the detail any further

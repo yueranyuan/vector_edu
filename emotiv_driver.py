@@ -38,7 +38,7 @@ from docopt import docopt
 
 from learntools.libs.utils import combine_dict
 from learntools.libs.logger import gen_log_name, log_me, set_log_file
-from learntools.emotiv.data import prepare_data, convert_raw_data, segment_raw_data, load_siegle_data
+from learntools.emotiv.data import prepare_data, convert_raw_data, segment_raw_data, load_siegle_data, gen_wavelet_features
 from learntools.emotiv.filter import filter_data
 from learntools.data import cv_split
 from learntools.data.crossvalidation import cv_split_within_column
@@ -54,11 +54,10 @@ def smart_load_data(dataset_name=None, **kwargs):
     _, ext = os.path.splitext(dataset_name)
     if ext == '.mat':
         dataset = load_siegle_data(dataset_name=dataset_name, **kwargs)
-    elif ext == '.gz':
+    elif ext == '.gz' or ext == '.pickle':
         dataset = segment_raw_data(dataset_name=dataset_name, **kwargs)
-        filter_data(dataset)
-    elif ext == '.pickle':
-        dataset = segment_raw_data(dataset_name=dataset_name, **kwargs)
+        dataset = gen_wavelet_features(dataset, duration=10, sample_rate=128, depth=5, min_length=3, max_length=4,
+                                       family='db6')
         filter_data(dataset)
     else:
         raise ValueError
@@ -83,11 +82,11 @@ def run(task_num=0, model_type=ModelType.BASE, **kwargs):
         train_idx, valid_idx = cv_split(dataset, percent=0.1, fold_index=task_num)
     elif model_type == ModelType.RAW_BASE:
         from learntools.emotiv.base import BaseEmotiv as SelectedModel
-        dataset = segment_raw_data(**kwargs)
+        dataset = smart_load_data(**kwargs)
         train_idx, valid_idx = cv_split(dataset, percent=0.50, fold_index=task_num)
     elif model_type == ModelType.SUBJECT:
         from learntools.emotiv.persubject import SubjectEmotiv as SelectedModel
-        dataset = segment_raw_data(**kwargs)
+        dataset = smart_load_data(**kwargs)
         train_idx, valid_idx = cv_split_within_column(dataset, percent=0.25, fold_index=task_num, min_length=4,
                                                       key='subject')
     elif model_type == ModelType.AUTOENCODER:

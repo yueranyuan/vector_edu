@@ -6,9 +6,8 @@ import cPickle as pickle
 from learntools.data import Dataset
 from learntools.emotiv.data import SEGMENTED_HEADERS, ACTIVITY_CONDITIONS, _segment_gen
 from learntools.libs.eeg import signal_to_freq_bins
+from learntools.emotiv.data import segment_raw_data as wavelet_raw_data
 
-
-dataset_name = 'raw_data/partial.pickle'
 
 def segment_raw_data(dataset_name, conds=None, duration=10, sample_rate=128, **kwargs):
     """Loads raw siegle data from a pickled Dataset and extracts sequences of
@@ -78,12 +77,12 @@ def segment_raw_data(dataset_name, conds=None, duration=10, sample_rate=128, **k
 
     return new_ds
 
-ds = segment_raw_data(dataset_name, conds=['EyesOpen', 'EyesClosed'])
-
+'''
 def show_raw_wave(eeg):
     for channel in xrange(14):
         plt.plot(eeg[:, channel])
     plt.show()
+
 
 def show_raw_specgram(eeg, label, block=False):
     fig, axs = plt.subplots(nrows=14, ncols=1)
@@ -101,3 +100,52 @@ def show_raw_specgram(eeg, label, block=False):
 def specgram_slideshow(ds):
     for row in xrange(len(ds)):
         show_raw_specgram(ds['eeg'][row], "cond=" + str(ds['condition'][row]), block=True)
+'''
+
+
+def plot_conditions(eeg, conditions):
+    eeg1_full = np.asarray(list(compress(eeg, conditions == 0)))
+    eeg2_full = np.asarray(list(compress(eeg, conditions == 1)))
+
+    # draw select trials
+    for i in xrange(10):
+        plt.subplot(1, 10, i + 1)
+        plt.pcolor(eeg1_full[i], cmap=plt.cm.Blues)
+    plt.show()
+
+    eeg1 = np.mean(eeg1_full, axis=0)
+    eeg2 = np.mean(eeg2_full, axis=0)
+
+    def _plot_heatmap(data):
+        return plt.pcolor(data, cmap=plt.cm.Blues)
+
+
+    # draw between class difference
+    plt.subplot(1, 3, 1)
+    _plot_heatmap(eeg1)
+    plt.subplot(1, 3, 2)
+    _plot_heatmap(eeg2)
+    plt.subplot(1, 3, 3)
+    _plot_heatmap(eeg1-eeg2)
+    plt.show()
+
+    # draw within class difference
+    plt.subplot(1, 4, 1)
+    _plot_heatmap(np.mean(eeg1_full[:(len(eeg1) / 2)], axis=0))
+    plt.subplot(1, 4, 2)
+    _plot_heatmap(np.mean(eeg1_full[(len(eeg1) / 2):], axis=0))
+    plt.subplot(1, 4, 3)
+    _plot_heatmap(np.mean(eeg2_full[:(len(eeg2) / 2)], axis=0))
+    plt.subplot(1, 4, 4)
+    _plot_heatmap(np.mean(eeg2_full[(len(eeg2) / 2):], axis=0))
+    plt.show()
+
+if __name__ == "__main__":
+    from itertools import compress
+    dataset_name = 'data/raw_seigle.gz'
+    max_length = 4
+    ds = wavelet_raw_data(dataset_name, conds=['EyesOpen', 'EyesClosed'], wavelet=True, wavelet_max_length=max_length)
+    eeg = ds['eeg'][:]
+    eeg = eeg.reshape((eeg.shape[0], 14, 6, max_length))
+    eeg_no_time = np.mean(eeg, axis=3)
+    plot_conditions(eeg=eeg_no_time, conditions=ds['condition'])

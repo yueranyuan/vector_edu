@@ -182,7 +182,8 @@ def _segment_gen(segment_idx, segment_cond):
         i = j
 
 
-def segment_raw_data(dataset_name, conds=None, duration=10, sample_rate=128, **kwargs):
+def segment_raw_data(dataset_name, conds=None, duration=10, sample_rate=128, wavelet=False, wavelet_max_length=4,
+                     **kwargs):
     """Loads raw siegle data from a pickled Dataset and extracts sequences of
     eeg vectors which have a single known label.
 
@@ -245,8 +246,10 @@ def segment_raw_data(dataset_name, conds=None, duration=10, sample_rate=128, **k
     for i, seg_data in enumerate(segments):
         new_ds[i] = seg_data
 
-    #new_ds = gen_fft_features(new_ds, duration=duration, sample_rate=sample_rate)
-    new_ds = gen_wavelet_features(new_ds, duration=duration, sample_rate=sample_rate)
+    if wavelet:
+        new_ds = gen_wavelet_features(new_ds, duration=duration, sample_rate=sample_rate, max_length=wavelet_max_length)
+    else:
+        new_ds = gen_fft_features(new_ds, duration=duration, sample_rate=sample_rate)
 
     return new_ds
 
@@ -271,7 +274,6 @@ def _gen_featured_dataset(ds, func, *args, **kwargs):
     for i in xrange(len(ds)):
         _, source, eeg_segment, _ = ds[i]
         subject, _, _, label = ds.orig[i]
-        print(label)
         try:
             eeg_features = func(eeg_segment, *args, **kwargs)
         except FeatureGenerationException:
@@ -335,8 +337,6 @@ def gen_wavelet_features(ds, duration=10, sample_rate=128, depth=5, min_length=3
             eeg_wavelet = signal_to_wavelet(eeg_segment[:, i], min_length=min_length, max_length=max_length,
                                             depth=depth, family=family)
             eeg_wavelets += eeg_wavelet
-
-        import pdb; pdb.set_trace()
 
         return np.concatenate(eeg_wavelets)
 

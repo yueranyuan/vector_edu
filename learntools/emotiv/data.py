@@ -71,7 +71,7 @@ CONDITIONS = dict(ACTIVITY_CONDITIONS.items() + META_CONDITIONS.items())
 CONDITIONS_STR = dict((v, k) for k, v in CONDITIONS.items())
 
 
-def prepare_data(dataset_name, conds=None, **kwargs):
+def prepare_data(dataset_name, conds=None, duration=10, sample_rate=128, **kwargs):
     """load siegle data into a Dataset
 
     Args:
@@ -90,7 +90,7 @@ def prepare_data(dataset_name, conds=None, **kwargs):
                    itertools.product(bands, channels)]
     headers = [('fname', Dataset.STR), ('Condition', Dataset.ENUM)] + eeg_headers
     data = Dataset.from_csv(dataset_name, headers)
-    data.rename_column('fname', 'group')
+    data.rename_column('fname', 'subject')
     data.rename_column('Condition', 'condition')
     data.set_column('eeg', Dataset.MATFLOAT)
     for i, eeg in enumerate(itertools.izip(*[data[h] for (h, _) in eeg_headers])):
@@ -108,7 +108,17 @@ def prepare_data(dataset_name, conds=None, **kwargs):
         data.set_column('condition', Dataset.ENUM)  # reset the condition column
         for i, c in enumerate(cond_data):
             data.get_column('condition')[i] = c
-    return data
+
+    # now create a new dataset arranged into the proper format (this is a little gross)
+    new_ds = Dataset(FEATURED_HEADERS, len(data))
+    for i in xrange(len(data)):
+        new_ds.get_column('subject')[i] = data['subject'][i]
+        new_ds.get_column('source')[i] = '%s@%d' % (data['subject'][i], i)
+        new_ds.get_column('eeg')[i] = data['eeg'][i]
+        new_ds.get_column('condition')[i] = data['condition'][i]
+
+    #return gen_fft_features(new_ds, duration=duration, sample_rate=sample_rate)
+    return new_ds
 
 
 def load_siegle_data(dataset_name, conds=None, **kwargs):

@@ -38,7 +38,8 @@ from docopt import docopt
 
 from learntools.libs.utils import combine_dict
 from learntools.libs.logger import gen_log_name, log_me, set_log_file
-from learntools.emotiv.data import prepare_data, convert_raw_data, segment_raw_data, load_siegle_data, gen_wavelet_features
+from learntools.emotiv.data import (prepare_data, convert_raw_data, segment_raw_data, load_siegle_data, \
+    gen_wavelet_features, gen_fft_features)
 from learntools.emotiv.filter import filter_data
 from learntools.data import cv_split
 from learntools.data.crossvalidation import cv_split_within_column
@@ -50,14 +51,19 @@ release_lock.release()  # TODO: use theano config instead. We have to figure out
 # what we need
 
 
-def smart_load_data(dataset_name=None, **kwargs):
+def smart_load_data(dataset_name=None, feature_type='fft', **kwargs):
     _, ext = os.path.splitext(dataset_name)
     if ext == '.mat':
         dataset = load_siegle_data(dataset_name=dataset_name, **kwargs)
     elif ext == '.gz' or ext == '.pickle':
         dataset = segment_raw_data(dataset_name=dataset_name, **kwargs)
-        dataset = gen_wavelet_features(dataset, duration=10, sample_rate=128, depth=5, min_length=3, max_length=4,
-                                       family='db6')
+        if feature_type == 'wavelet':
+            dataset = gen_wavelet_features(dataset, duration=10, sample_rate=128, depth=5, min_length=3, max_length=4,
+                                           family='db6')
+        elif feature_type == 'fft':
+            dataset = gen_fft_features(dataset, duration=10, sample_rate=128)
+        else:
+            raise Exception('invalid feature type: {}'.format(feature_type))
         filter_data(dataset)
     else:
         raise ValueError

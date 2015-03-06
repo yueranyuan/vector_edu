@@ -140,7 +140,7 @@ def analyze_features(ds, max_length=4):
 if __name__ == "__main__":
     from itertools import compress
     from learntools.libs.wavelet import _downsample
-    dataset_name = 'data/raw_seigle.gz'
+    dataset_name = 'data/emotiv_all.gz'
     ds = segment_raw_data(dataset_name=dataset_name, conds=['EyesOpen', 'EyesClosed'])
     # analyze_waves(ds, n=2)
     analyze_features(ds, max_length=4)

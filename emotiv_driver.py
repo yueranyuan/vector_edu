@@ -17,7 +17,7 @@ Options:
     -p <param_set>, --param_set=<param_set>
         The name of the parameter set to use [default: emotiv_wide_search2].
     -f <file>, --file=<file>
-        The data file to use [default: raw_data/emotiv_processed.mat].
+        The data file to use [default: data/emotiv_all.gz].
     -o <file>, --out=<file>
         The name for the log file to be generated.
     -q, --quiet
@@ -25,7 +25,7 @@ Options:
     -t, --task_number=<ints>
         A counter representing the queue position of the current job [default: 0].
     -m <model>, --model=<model>
-        The name of the model family that we are using [default: multistage_batchnorm].
+        The name of the model family that we are using [default: batchnorm].
 """
 
 from __future__ import print_function, division
@@ -51,7 +51,7 @@ release_lock.release()  # TODO: use theano config instead. We have to figure out
 # what we need
 
 
-def smart_load_data(dataset_name=None, feature_type='fft', **kwargs):
+def smart_load_data(dataset_name=None, feature_type='wavelet', **kwargs):
     _, ext = os.path.splitext(dataset_name)
     if ext == '.mat':
         dataset = load_siegle_data(dataset_name=dataset_name, **kwargs)
@@ -59,7 +59,7 @@ def smart_load_data(dataset_name=None, feature_type='fft', **kwargs):
         dataset = segment_raw_data(dataset_name=dataset_name, **kwargs)
         if feature_type == 'wavelet':
             dataset = gen_wavelet_features(dataset, duration=10, sample_rate=128, depth=5, min_length=3, max_length=4,
-                                           family='db6')
+                                           family='db6', **kwargs)
         elif feature_type == 'fft':
             dataset = gen_fft_features(dataset, duration=10, sample_rate=128)
         else:
@@ -81,7 +81,7 @@ class ModelType(object):
 
 
 @log_me()
-def run(task_num=0, model_type=ModelType.BASE, **kwargs):
+def run(task_num=0, cv_rand=1, model_type=ModelType.BASE, **kwargs):
     if model_type == ModelType.BASE:
         from learntools.emotiv.base import BaseEmotiv as SelectedModel
         dataset = prepare_data(**kwargs)
@@ -102,7 +102,10 @@ def run(task_num=0, model_type=ModelType.BASE, **kwargs):
     elif model_type == ModelType.BATCH_NORM:
         from learntools.emotiv.batchnorm import BatchNorm as SelectedModel
         dataset = smart_load_data(**kwargs)
-        train_idx, valid_idx = cv_split_randomized(dataset, percent=0.1, fold_index=task_num)
+        if cv_rand:
+            train_idx, valid_idx = cv_split_randomized(dataset, percent=0.1, fold_index=task_num)
+        else:
+            train_idx, valid_idx = cv_split(dataset, percent=0.1, fold_index=task_num)
     elif model_type == ModelType.SVM:
         from learntools.emotiv.svm import SVM as SelectedModel
         dataset = smart_load_data()

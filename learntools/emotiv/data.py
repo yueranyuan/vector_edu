@@ -253,7 +253,7 @@ class FeatureGenerationException(Exception):
     pass
 
 
-def _gen_featured_dataset(ds, func, *args, **kwargs):
+def _gen_featured_dataset(ds, func, subject_norm=1, clip=True, **kwargs):
     """Helper function that applies 'func' to generate features for the eeg segment of each row.
 
     Normalizes eeg features
@@ -270,7 +270,7 @@ def _gen_featured_dataset(ds, func, *args, **kwargs):
         _, source, eeg_segment, _ = ds[i]
         subject, _, _, label = ds.orig[i]
         try:
-            eeg_features = func(eeg_segment, *args, **kwargs)
+            eeg_features = func(eeg_segment, **kwargs)
         except FeatureGenerationException:
             # TODO: convert to a warning
             print('could not generate features for row {i}, (subject: {subject}, source: {source}, label: {label})'.format(
@@ -289,16 +289,17 @@ def _gen_featured_dataset(ds, func, *args, **kwargs):
 
     # TODO normalization should be shared across some columns
     print('feature vector width: {}'.format(new_ds.get_column('eeg').data.shape[1]))  # TODO: replace with 'width' once we merge
-    new_ds.get_column('eeg').data = normalize_table(new_ds['eeg'], clip=True, within_subject=new_ds['subject'])
+    within_subject = new_ds['subject'] if subject_norm else None
+    new_ds.get_column('eeg').data = normalize_table(new_ds['eeg'], clip=clip, within_subject=within_subject)
 
     return new_ds
 
 
-def gen_fft_features(ds, duration=10, sample_rate=128, cutoffs=None):
+def gen_fft_features(ds, duration=10, sample_rate=128, cutoffs=None, **kwargs):
     if cutoffs is None:
         cutoffs = [0.5, 4.0, 7.0, 12.0, 30.0]
 
-    def _fft_eeg_segment(eeg_segment, duration, sample_rate, cutoffs):
+    def _fft_eeg_segment(eeg_segment, duration, sample_rate, cutoffs, **kwargs):
         # Fourier transform on eeg
         # Window size of 1 s, overlap by 0.5 s
         eeg_freqs = []
@@ -315,11 +316,11 @@ def gen_fft_features(ds, duration=10, sample_rate=128, cutoffs=None):
         eeg_freqs = np.concatenate(eeg_freqs)
         return eeg_freqs
 
-    return _gen_featured_dataset(ds, _fft_eeg_segment, duration=duration, sample_rate=sample_rate, cutoffs=cutoffs)
+    return _gen_featured_dataset(ds, _fft_eeg_segment, duration=duration, sample_rate=sample_rate, cutoffs=cutoffs, **kwargs)
 
 
-def gen_wavelet_features(ds, duration=10, sample_rate=128, depth=5, min_length=3, max_length=14, family='db6'):
-    def _wavelet_eeg_segment(eeg_segment, duration, sample_rate, depth, min_length, max_length, family):
+def gen_wavelet_features(ds, duration=10, sample_rate=128, depth=5, min_length=3, max_length=14, family='db6', **kwargs):
+    def _wavelet_eeg_segment(eeg_segment, duration, sample_rate, depth, min_length, max_length, family, **kwargs):
         # cut eeg to desired length (so that all wavelets are the same length)
         desired_length = duration * sample_rate
         if len(eeg_segment) < desired_length:
@@ -336,7 +337,7 @@ def gen_wavelet_features(ds, duration=10, sample_rate=128, depth=5, min_length=3
         return np.concatenate(eeg_wavelets)
 
     return _gen_featured_dataset(ds, _wavelet_eeg_segment, duration=duration, sample_rate=sample_rate,
-                                 depth=depth, min_length=min_length, max_length=max_length, family=family)
+                                 depth=depth, min_length=min_length, max_length=max_length, family=family, **kwargs)
 
 
 def filter_indices_by_condition(dataset, idx, conds):

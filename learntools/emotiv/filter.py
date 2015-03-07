@@ -32,11 +32,14 @@ def _get_acceptable_ids(fname=DEFAULT_CALIBRATION_FILE_LOCATION):
     return acceptable_ids
 
 
-def filter_data(data, calibration_file=DEFAULT_CALIBRATION_FILE_LOCATION):
+def filter_data(data, calibration_file=DEFAULT_CALIBRATION_FILE_LOCATION, no_children=True):
     subjects = data.orig['subject']
     subject_ids = [subject.split('_')[0] for subject in subjects]
     acceptable_ids = _get_acceptable_ids(fname=calibration_file)
     acceptable_ids = [os.path.splitext(x)[0] for x in acceptable_ids]
+    if no_children:
+        acceptable_ids = filter(lambda(_id): 'Child' not in _id, acceptable_ids)
+    print("acceptable subjects: {}".format(acceptable_ids))
     subject_mask = [s in acceptable_ids for s in subject_ids]
     data.mask(subject_mask)
     return data

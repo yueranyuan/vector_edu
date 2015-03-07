@@ -339,6 +339,32 @@ def gen_wavelet_features(ds, duration=10, sample_rate=128, depth=5, min_length=3
                                  depth=depth, min_length=min_length, max_length=max_length, family=family)
 
 
+def gen_hoc_features(ds, duration=10, sample_rate=128, levels=24, **kwargs):
+    """Higher order crossings."""
+    def _hoc_eeg_segment(eeg_segment):
+        window_size = duration * sample_rate
+        if len(eeg_segment) < window_size:
+            raise FeatureGenerationException("signal not long enough")
+        eeg_segment = eeg_segment[:window_size]
+
+        crossing_counts = []
+        for level in xrange(levels):
+            # count crossings
+            sgn = np.sign(eeg_segment)
+            sgn[sgn == 0] = -1
+            crossings = np.diff(sgn, axis=0)
+            level_counts = []
+            for channel in xrange(eeg_segment.shape[1]):
+                level_counts.append(np.count_nonzero(crossings[:, channel]))
+            crossing_counts.append(np.array(level_counts))
+            # compute derivative for next level
+            eeg_segment = np.diff(eeg_segment, axis=0)
+
+        return np.concatenate(crossing_counts)
+
+    return _gen_featured_dataset(ds, _hoc_eeg_segment)
+
+
 def filter_indices_by_condition(dataset, idx, conds):
     mapping = dict(dataset['condition'].ienum_pairs)
     idx = np.array(idx)

@@ -38,7 +38,7 @@ from docopt import docopt
 
 from learntools.libs.utils import combine_dict
 from learntools.libs.logger import gen_log_name, log_me, set_log_file
-from learntools.emotiv.data import prepare_data, convert_raw_data, segment_raw_data, load_siegle_data, gen_wavelet_features
+from learntools.emotiv.data import prepare_data, convert_raw_data, segment_raw_data, load_siegle_data, gen_wavelet_features, gen_hoc_features
 from learntools.emotiv.filter import filter_data
 from learntools.data import cv_split, cv_split_randomized
 from learntools.data.crossvalidation import cv_split_within_column
@@ -56,8 +56,9 @@ def smart_load_data(dataset_name=None, **kwargs):
         dataset = load_siegle_data(dataset_name=dataset_name, **kwargs)
     elif ext == '.gz' or ext == '.pickle':
         dataset = segment_raw_data(dataset_name=dataset_name, **kwargs)
-        dataset = gen_wavelet_features(dataset, duration=10, sample_rate=128, depth=5, min_length=3, max_length=4,
-                                       family='db6')
+        dataset = gen_hoc_features(dataset)
+        #dataset = gen_wavelet_features(dataset, duration=10, sample_rate=128, depth=5, min_length=3, max_length=4,
+        #                               family='db6')
         filter_data(dataset)
     else:
         raise ValueError

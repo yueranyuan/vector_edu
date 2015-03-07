@@ -7,7 +7,12 @@ from numpy.fft import fft
 import numpy as np
 
 
-def signal_to_freq_bins(y, cutoffs, sampling_rate=512.0):
+def signal_to_freq_bins(y, cutoffs, sampling_rate=512.0, window='hanning'):
+    # prevent spectral leakage
+    if window == 'hanning':
+        window = np.hanning(len(y))
+        y = hann[:, np.newaxis] * y
+
     Y = fft(y)
     f = abs(Y)
     cutoffs = [c * sampling_rate / len(y) for c in cutoffs]

@@ -51,7 +51,7 @@ release_lock.release()  # TODO: use theano config instead. We have to figure out
 # what we need
 
 
-def smart_load_data(dataset_name=None, feature_type='wavelet', **kwargs):
+def smart_load_data(dataset_name=None, feature_type='fft', **kwargs):
     _, ext = os.path.splitext(dataset_name)
     if ext == '.mat':
         dataset = load_siegle_data(dataset_name=dataset_name, **kwargs)

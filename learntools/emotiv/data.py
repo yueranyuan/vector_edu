@@ -299,14 +299,14 @@ def gen_fft_features(ds, duration=10, sample_rate=128, cutoffs=None, **kwargs):
     if cutoffs is None:
         cutoffs = [0.5, 4.0, 7.0, 12.0, 30.0]
 
-    def _fft_eeg_segment(eeg_segment, duration, sample_rate, cutoffs, **kwargs):
+    def _fft_eeg_segment(eeg_segment, duration, sample_rate, cutoffs, window_len=0.5, **kwargs):
         # Fourier transform on eeg
         # Window size of 1 s, overlap by 0.5 s
         eeg_freqs = []
 
-        for i in (x * 0.5 for x in xrange(duration * 2)):
+        for i in (x * window_len for x in xrange(int(duration / window_len))):
             # window is half second duration (in samples) by eeg vector length
-            window = eeg_segment[int(i * sample_rate/2) : int((i + 1) * sample_rate/2)]
+            window = eeg_segment[int(i * sample_rate * window_len) : int((i + 1) * sample_rate * window_len)]
             # there are len(cutoffs)-1 bins, window_freq is a list of will have a frequency vector of num channels
             window_freq = signal_to_freq_bins(window, cutoffs=cutoffs, sampling_rate=sample_rate)
 

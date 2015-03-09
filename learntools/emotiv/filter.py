@@ -1,5 +1,7 @@
 import os
 
+import numpy as np
+
 from learntools.data import Dataset
 
 
@@ -39,7 +41,7 @@ def filter_data(data, calibration_file=DEFAULT_CALIBRATION_FILE_LOCATION, no_chi
     acceptable_ids = [os.path.splitext(x)[0] for x in acceptable_ids]
     if no_children:
         acceptable_ids = filter(lambda(_id): 'Child' not in _id, acceptable_ids)
-    print("acceptable subjects: {}".format(acceptable_ids))
     subject_mask = [s in acceptable_ids for s in subject_ids]
     data.mask(subject_mask)
+    print("subjects: {}".format(np.unique(data.orig['subject'])))
     return data

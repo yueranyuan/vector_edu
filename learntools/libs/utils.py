@@ -94,6 +94,9 @@ def normalize_table(table, clip=False, within_subject=None, axis=None):
         table = np.asarray(table)
 
     if within_subject:
+        if not isinstance(within_subject, np.ndarray):
+            within_subject = np.asarray(within_subject)
+
         subjects = np.unique(within_subject)
         for subject in subjects:
             selected_idxs = list(compress(range(len(within_subject)), within_subject == subject))

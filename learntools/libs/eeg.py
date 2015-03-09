@@ -11,7 +11,7 @@ def signal_to_freq_bins(y, cutoffs, sampling_rate=512.0, window='hanning'):
     # prevent spectral leakage
     if window == 'hanning':
         window = np.hanning(len(y))
-        y = hann[:, np.newaxis] * y
+        y = window[:, np.newaxis] * y
 
     Y = fft(y)
     f = abs(Y)

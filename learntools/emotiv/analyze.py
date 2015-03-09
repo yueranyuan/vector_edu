@@ -52,5 +52,5 @@ def analyze_eeg_features(data, plot=True, silent=False):
     return significant_features, marginal_features, remaining_features
 
 if __name__ == '__main__':
-    data = prepare_data(dataset_name='raw_data/all_siegle.txt', conds=['EyesOpen', 'EyesClosed'])
+    data = prepare_data(dataset_name='raw_data/indices_all.txt', conds=['EyesOpen', 'EyesClosed'])
     analyze_eeg_features(data)

@@ -195,9 +195,10 @@ def analyze(local_dir=None, bucket=None, subfolder=None, start_time=None,
     parsed_content = exception_safe_map(lambda (k, v): (k, parse_log(v)),
                                         chronological,
                                         exception=BadLogFileException)
-    conds = ['EyesClosed', 'EyesOpen']
-    parsed_content = filter(lambda (key_name, (args, history, run_time)): args["conds"] == conds,
-                            parsed_content)
+    conds = ["NegativeHighArousalPictures", "NegativeLowArousalPictures"]
+    if conds is not None:
+        parsed_content = filter(lambda (key_name, (args, history, run_time)): args["conds"] == conds,
+                                parsed_content)
     # parse content of each individual log file and fill a data store of
     # the arguments and best_errors of all runs
     num_logs = len(parsed_content)
@@ -277,4 +278,4 @@ if __name__ == '__main__':
     # analyze(bucket='cmu-data', subfolder='vectoredu/results', cache_dir='results', start_time=start_time)
     # analyze(cache_dir='results', start_time=start_time)
     # analyze_recent(days=2, local_dir='.')
-    analyze(start_time=datetime(2015, 1, 31, 19, 00), local_dir='.', most_recent_n=20)
+    analyze(start_time=datetime(2015, 3, 6, 19, 00), local_dir='.', most_recent_n=100)

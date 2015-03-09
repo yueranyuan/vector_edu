@@ -71,7 +71,7 @@ CONDITIONS = dict(ACTIVITY_CONDITIONS.items() + META_CONDITIONS.items())
 CONDITIONS_STR = dict((v, k) for k, v in CONDITIONS.items())
 
 
-def prepare_data(dataset_name, conds=None, **kwargs):
+def prepare_data(dataset_name, conds=None, clip=True, subject_norm=False, **kwargs):
     """load siegle data into a Dataset
 
     Args:
@@ -92,10 +92,15 @@ def prepare_data(dataset_name, conds=None, **kwargs):
     data = Dataset.from_csv(dataset_name, headers)
     data.rename_column('fname', 'group')
     data.rename_column('Condition', 'condition')
+    data.set_column('subject', Dataset.STR)
+    for i, fname in enumerate(data['group']):
+        data.get_column('subject')[i] = os.path.splitext(fname)[0]
     data.set_column('eeg', Dataset.MATFLOAT)
     for i, eeg in enumerate(itertools.izip(*[data[h] for (h, _) in eeg_headers])):
         data.get_column('eeg')[i] = eeg
-    data.get_column('eeg').data = normalize_table(data['eeg'])
+    # data.get_column('eeg').data = normalize_table(data['eeg'])
+    within_subject = data['subject'] if subject_norm else None
+    data.get_column('eeg').data = normalize_table(data['eeg'], clip=clip, within_subject=within_subject)
 
     # only keep selected conditions
     # TODO: turn this these temporary mode switches into a context
@@ -295,18 +300,21 @@ def _gen_featured_dataset(ds, func, subject_norm=1, clip=True, **kwargs):
     return new_ds
 
 
-def gen_fft_features(ds, duration=10, sample_rate=128, cutoffs=None, **kwargs):
+def gen_fft_features(ds, duration=10, sample_rate=128, cutoffs=None, fft_window=1.5, **kwargs):
     if cutoffs is None:
         cutoffs = [0.5, 4.0, 7.0, 12.0, 30.0]
 
-    def _fft_eeg_segment(eeg_segment, duration, sample_rate, cutoffs, window_len=0.5, **kwargs):
+    def _fft_eeg_segment(eeg_segment, sample_rate, cutoffs, fft_window, **kwargs):
         # Fourier transform on eeg
         # Window size of 1 s, overlap by 0.5 s
         eeg_freqs = []
+        overlap = 0.5
+        start_t = 0.0
+        while (start_t + fft_window) * sample_rate < len(eeg_segment):
+            end_t = start_t + fft_window
+            window = eeg_segment[int(start_t * sample_rate):int(end_t * sample_rate)]
+            start_t = end_t - overlap
 
-        for i in (x * window_len for x in xrange(int(duration / window_len))):
-            # window is half second duration (in samples) by eeg vector length
-            window = eeg_segment[int(i * sample_rate * window_len) : int((i + 1) * sample_rate * window_len)]
             # there are len(cutoffs)-1 bins, window_freq is a list of will have a frequency vector of num channels
             window_freq = signal_to_freq_bins(window, cutoffs=cutoffs, sampling_rate=sample_rate)
 
@@ -316,10 +324,11 @@ def gen_fft_features(ds, duration=10, sample_rate=128, cutoffs=None, **kwargs):
         eeg_freqs = np.concatenate(eeg_freqs)
         return eeg_freqs
 
-    return _gen_featured_dataset(ds, _fft_eeg_segment, duration=duration, sample_rate=sample_rate, cutoffs=cutoffs, **kwargs)
+    return _gen_featured_dataset(ds, _fft_eeg_segment, sample_rate=sample_rate, cutoffs=cutoffs,
+                                 fft_window=fft_window, **kwargs)
 
 
-def gen_wavelet_features(ds, duration=10, sample_rate=128, depth=5, min_length=3, max_length=14, family='db6', **kwargs):
+def gen_wavelet_features(ds, duration=10, sample_rate=128, depth=5, min_length=3, max_length=4, family='db6', **kwargs):
     def _wavelet_eeg_segment(eeg_segment, duration, sample_rate, depth, min_length, max_length, family, **kwargs):
         # cut eeg to desired length (so that all wavelets are the same length)
         desired_length = duration * sample_rate

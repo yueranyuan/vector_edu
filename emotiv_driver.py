@@ -15,9 +15,9 @@ Usage:
 
 Options:
     -p <param_set>, --param_set=<param_set>
-        The name of the parameter set to use [default: emotiv_wide_search2].
+        The name of the parameter set to use [default: emotiv_wide_search3].
     -f <file>, --file=<file>
-        The data file to use [default: data/emotiv_all.gz].
+        The data file to use [default: raw_data/indices_all.txt].
     -o <file>, --out=<file>
         The name for the log file to be generated.
     -q, --quiet
@@ -51,17 +51,20 @@ release_lock.release()  # TODO: use theano config instead. We have to figure out
 # what we need
 
 
-def smart_load_data(dataset_name=None, feature_type='fft', **kwargs):
+def smart_load_data(dataset_name=None, feature_type='wavelet', duration=10, wavelet_depth=5, wavelet_family=3, **kwargs):
     _, ext = os.path.splitext(dataset_name)
     if ext == '.mat':
         dataset = load_siegle_data(dataset_name=dataset_name, **kwargs)
+    elif ext == '.txt':
+        dataset = prepare_data(dataset_name=dataset_name, **kwargs)
+        filter_data(dataset)
     elif ext == '.gz' or ext == '.pickle':
         dataset = segment_raw_data(dataset_name=dataset_name, **kwargs)
         if feature_type == 'wavelet':
-            dataset = gen_wavelet_features(dataset, duration=10, sample_rate=128, depth=5, min_length=3, max_length=4,
-                                           family='db6', **kwargs)
+            dataset = gen_wavelet_features(dataset, duration=duration, sample_rate=128, depth=wavelet_depth, min_length=3,
+                                           max_length=4, family='db{}'.format(wavelet_family), **kwargs)
         elif feature_type == 'fft':
-            dataset = gen_fft_features(dataset, duration=10, sample_rate=128)
+            dataset = gen_fft_features(dataset, duration=duration, sample_rate=128, **kwargs)
         else:
             raise Exception('invalid feature type: {}'.format(feature_type))
         filter_data(dataset)

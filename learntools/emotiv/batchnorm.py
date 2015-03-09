@@ -1,10 +1,12 @@
 from __future__ import division
 
+import abc
 from itertools import chain, izip
 
 import theano
 import theano.tensor as T
 import numpy as np
+from sklearn import svm
 
 from learntools.libs.logger import log_me
 from learntools.libs.auc import auc
@@ -85,14 +87,16 @@ class BatchNorm(Model):
                              for param in params] + bn_updates
 
         self._tf_infer = theano.function(inputs=[input_idxs],
-                                         outputs=[loss, infer_pY[:, 1] - infer_pY[:, 0], input_idxs],
+                                         outputs=[loss, infer_pY, input_idxs],
                                          givens=[(t_dropout, 0.0)],
                                          allow_input_downcast=True)
         self._tf_train = theano.function(inputs=[input_idxs],
-                                         outputs=[loss, train_pY[:, 1] - train_pY[:, 0], input_idxs],
+                                         outputs=[loss, train_pY, input_idxs],
                                          givens=[(t_dropout, dropout_p)],
                                          allow_input_downcast=True, updates=update_parameters)
         self.subnets = subnets
+
+        self.binarizer = CutoffBinarizer()
 
     def validate(self, idxs, **kwargs):
         return self._tf_infer(idxs)
@@ -108,23 +112,65 @@ class BatchNorm(Model):
 
     def train_evaluate(self, idxs, preds, *args, **kwargs):
         y = self._ys.owner.inputs[0].get_value(borrow=True)[idxs]
-        best_pred_cutoff = find_best_cutoff(y, preds)
-
-        # gradually change the prediction cutoff to avoid instability
-        PRED_CUTOFF_ALPHA = 0.2
-        if hasattr(self, 'pred_cutoff'):
-            self.pred_cutoff = (1.0 - PRED_CUTOFF_ALPHA) * self.pred_cutoff + PRED_CUTOFF_ALPHA * best_pred_cutoff
-        else:
-            self.pred_cutoff = best_pred_cutoff
-
-        return acc_by_cutoff(y, preds, self.pred_cutoff)
+        self.binarizer.train(y, preds)
+        return compute_accuracy(y, self.binarizer.apply(preds))
 
     def valid_evaluate(self, idxs, preds, *args, **kwargs):
         y = self._ys.owner.inputs[0].get_value(borrow=True)[idxs]
-        best_acc = acc_by_cutoff(y, preds, find_best_cutoff(y, preds))
-        _auc = auc(y[:len(preds)], preds, pos_label=1)
+        ey = self.binarizer.apply(preds)
+
+        # compute best-case accuracies
+        preds = np.asarray(preds)
+        p = preds[:, 1] - preds[:, 0]
+        best_acc = acc_by_cutoff(y, p, find_best_cutoff(y, p))
+        _auc = auc(y[:len(p)], p, pos_label=1)
         print("validation auc: {auc}, best cutoff accuracy: {best_acc}".format(auc=_auc, best_acc=best_acc))
-        return acc_by_cutoff(y, preds, self.pred_cutoff)
+
+        return compute_accuracy(y, ey)
+
+
+class Binarizer():
+    __metaclass__ = abc.ABCMeta
+
+    @abc.abstractmethod
+    def train(self, ys, preds):
+        pass
+
+    @abc.abstractmethod
+    def apply(self, preds):
+        pass
+
+
+class CutoffBinarizer(Binarizer):
+    def __init__(self, alpha=0.2):
+        self.alpha = alpha
+        self.best_cutoff = None
+
+    def train(self, ys, preds):
+        preds = np.asarray(preds)
+        p = preds[:, 1] - preds[:, 0]
+        best_pred_cutoff = find_best_cutoff(ys, p)
+        if self.best_cutoff is None:
+            self.best_cutoff = best_pred_cutoff
+        else:
+            self.best_cutoff = (1.0 - self.alpha) * self.best_cutoff + self.alpha * best_pred_cutoff
+
+    def apply(self, preds):
+        preds = np.asarray(preds)
+        p = preds[:, 1] - preds[:, 0]
+        return np.greater_equal(p, self.best_cutoff)
+
+
+class SVMBinarizer(Binarizer):
+    def __init__(self):
+        self.classifier = None
+
+    def train(self, ys, preds):
+        self.classifier = svm.SVC()
+        self.classifier.fit(preds, ys)
+
+    def apply(self, preds):
+        return self.classifier.predict(preds)
 
 
 def acc_by_cutoff(y, preds, cutoff):
@@ -139,6 +185,11 @@ def acc_by_cutoff(y, preds, cutoff):
     0.5
     """
     ey = np.greater_equal(preds, cutoff)
+    correct = sum(np.equal(y[:len(ey)], ey))
+    return correct / len(ey)
+
+
+def compute_accuracy(y, ey):
     correct = sum(np.equal(y[:len(ey)], ey))
     return correct / len(ey)
 

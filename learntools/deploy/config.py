@@ -162,8 +162,8 @@ ALL_PARAMS['emotiv_wide_search2'] = combine_dict(ALL_PARAMS['emotiv_wide_search'
                                                  ALL_PARAMS['emotiv_update1'])
 ALL_PARAMS['emotiv_update2'] = {'dropout_p': GenVar(0.0, 0.1),
                                 'learning_rate': GenVar(0.001, 0.02, scale=LOG_SCALE),
-                                'patience': 3000,
-                                'patience_increase': 500,
+                                'patience': 400,
+                                'patience_increase': 300,
                                 'subject_norm': GenVar(0, 1, type=int),
                                 'clip': GenVar(0, 1, type=int),
                                 'rand_cv': GenVar(0, 1, type=int)}

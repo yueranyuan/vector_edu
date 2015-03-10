@@ -25,7 +25,7 @@ Options:
     -t, --task_number=<ints>
         A counter representing the queue position of the current job [default: 0].
     -m <model>, --model=<model>
-        The name of the model family that we are using [default: randomforest].
+        The name of the model family that we are using [default: multistage_pretrain].
 """
 
 from __future__ import print_function, division

@@ -13,14 +13,14 @@ from learntools.libs.auc import auc
 from learntools.model.theano_utils import make_shared
 from learntools.model import Model, gen_batches_by_size
 from learntools.model.net import BatchNormLayer, AutoencodingBatchNormLayer, TrainableNetwork
-from learntools.libs.utils import max_idx
+from learntools.libs.utils import max_idx, normalize_table
 
 
 class BatchNorm(Model):
     @log_me('...building BatchNorm')
     def __init__(self, prepared_data, batch_size=30, L1_reg=0., L2_reg=0.,
                  classifier_width=500, classifier_depth=2, rng_seed=42,
-                 learning_rate=0.0002, dropout_p=0.0, recon_loss_alpha=0.0, **kwargs):
+                 learning_rate=0.0002, dropout_p=0.0, serialized=None, **kwargs):
         """
         Args:
             prepared_data : (Dataset, [int], [int])
@@ -31,10 +31,11 @@ class BatchNorm(Model):
         """
         # 1: Organize data into batches
         ds, train_idx, valid_idx = prepared_data
-        input_size = ds.get_data('eeg').shape[1]
+        xs = ds.get_data('eeg')
+        input_size = xs.shape[1]
         output_size = len(np.unique(ds.get_data('condition')))
 
-        self._xs = make_shared(ds.get_data('eeg'), name='eeg')
+        self._xs = make_shared(xs, name='eeg')
         self._ys = make_shared(ds.get_data('condition'), to_int=True, name='condition')
 
         self.train_idx = train_idx
@@ -51,19 +52,29 @@ class BatchNorm(Model):
         bn_updates, subnets = [], []
         train_layer, infer_layer, updates_layer = input_layer, input_layer, []
 
+        if serialized is None:
+            serialized = []
+        serialized += [{}] * (classifier_depth + 1 - len(serialized))  # pad serialized subnets
+
         n_in, n_out = input_size, classifier_width
-        recon_losses = []
-        for i in xrange(classifier_depth):
-            bn_layer = AutoencodingBatchNormLayer(n_in=n_in, n_out=n_out)
-            train_layer, infer_layer, updates_layer, train_recon, infer_recon = bn_layer.instance(train_layer, infer_layer, dropout=t_dropout)
+        self.layers = []
+        for i, net_params in izip(xrange(classifier_depth), serialized):
+            bn_layer = BatchNormLayer(n_in=n_in, n_out=n_out, **net_params)
+            train_layer, infer_layer, updates_layer = bn_layer.instance(train_layer, infer_layer, dropout=t_dropout)
+            self.layers.append(bn_layer)
             bn_updates.extend(updates_layer)
             subnets.append(bn_layer)
-            recon_loss = T.mean(T.sqr(train_layer - train_recon))
-            recon_losses.append(recon_loss)
             n_in, n_out = classifier_width, classifier_width
 
         # softmax
-        bn_layer = BatchNormLayer(n_in=classifier_width, n_out=output_size, activation='softmax')
+        if serialized[-1] is None:
+            softmax_params = {}
+        else:
+            softmax_params = serialized[-1]
+            if 'activation' in softmax_params:
+                del softmax_params['activation']  # conflicts with explicit keyword arg
+        bn_layer = BatchNormLayer(n_in=bn_layer.W.shape[1], n_out=output_size, activation='softmax', **softmax_params)
+        self.layers.append(bn_layer)
         train_pY, infer_pY, updates_layer = bn_layer.instance(train_layer, infer_layer)
         bn_updates.extend(updates_layer)
         subnets.append(bn_layer)
@@ -78,7 +89,6 @@ class BatchNorm(Model):
             loss
             + L1_reg * sum([net.L1 for net in subnets])
             + L2_reg * sum([net.L2_sqr for net in subnets])
-            # + recon_loss_alpha * T.sum(recon_losses)
         )
         cost.name = 'overall_cost'
 
@@ -125,8 +135,10 @@ class BatchNorm(Model):
         best_acc = acc_by_cutoff(y, p, find_best_cutoff(y, p))
         _auc = auc(y[:len(p)], p, pos_label=1)
         print("validation auc: {auc}, best cutoff accuracy: {best_acc}".format(auc=_auc, best_acc=best_acc))
-
         return compute_accuracy(y, ey)
+
+    def serialize(self):
+        return [net.serialize() for net in self.layers]
 
 
 class Binarizer():

@@ -18,7 +18,7 @@ class Log(object):
     def __exit__(self, exc_type, exc_val, exc_tb):
         try:
             os.remove(self.log_name)
-        except WindowsError:
+        except:
             if os.path.exists(self.log_name):
                 raise
         return False

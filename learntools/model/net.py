@@ -315,7 +315,7 @@ def generate_batches(rng, train_idx, batch_size):
 
 # inspired by https://github.com/mdenil/dropout/blob/master/mlp.py
 class HiddenLayer(NetworkComponent):
-    def __init__(self, inp=None, n_in=None, n_out=None, rng_state=None, W=None, b=None,
+    def __init__(self, inp=None, n_in=None, n_out=None, rng_state=None, W=None, t_W=None, b=None,
                  activation='rectifier', name='hiddenlayer'):
         super(HiddenLayer, self).__init__(inp=inp, name=name, rng_state=rng_state)
 
@@ -327,20 +327,27 @@ class HiddenLayer(NetworkComponent):
         self.srng = theano.tensor.shared_randomstreams.RandomStreams(
             self.rng.randint(999999))
 
-        if W is None:
-            sigma2 = 2.0 / n_in if activation == 'rectifier' else 2.0 / (n_in + n_out)
-            W = np.asarray(sigma2 * self.rng.randn(n_in, n_out), dtype=theano.config.floatX)
-        self.t_W = theano.shared(value=W, name=self.subname('W'), borrow=True)
+        if t_W is None:
+            if W is None:
+                sigma2 = 2.0 / n_in if activation == 'rectifier' else 2.0 / (n_in + n_out)
+                W = np.asarray(sigma2 * self.rng.randn(n_in, n_out), dtype=theano.config.floatX)
+            self.t_W = theano.shared(value=W, name=self.subname('W'), borrow=True)
+        else:
+            self.t_W = t_W
 
         if n_out is None:
-            n_out = W.shape[1]
+            n_out = self.W.shape[1]
 
         if b is None:
             b = np.zeros((n_out,), dtype=theano.config.floatX)
         self.t_b = theano.shared(value=b, name=self.subname('b'), borrow=True)
 
         self.activation = activation
-        self.params = [self.t_W, self.t_b]
+        if t_W:
+            self.params = [self.t_b]  # don't duplicate parameters, if we are passing a theano variable it would
+            # already be a param in a different network.
+        else:
+            self.params = [self.t_W, self.t_b]
 
         if self.input is None:
             self.input = T.dmatrix(self.subname('input'))
@@ -448,34 +455,35 @@ class HiddenNetwork(NetworkComponent):
 
 
 class BatchNormLayer(HiddenLayer):
-    def __init__(self, inp=None, n_in=None, n_out=None, W=None, b=None, beta=None, gamma=None, alpha=0.999, mean=None, variance=None, rng_state=None, activation='rectifier', name='batchnormlayer'):
+    def __init__(self, inp=None, n_in=None, n_out=None, W=None, t_W=None, b=None, beta=None, gamma=None, alpha=0.999,
+                 mean=None, variance=None, rng_state=None, activation='rectifier', name='batchnormlayer'):
         """alpha is the exponential moving average falloff multiplier"""
-        super(BatchNormLayer, self).__init__(inp=inp, rng_state=rng_state, n_in=n_in, n_out=n_out, W=W, b=b, activation=activation, name=name)
+        super(BatchNormLayer, self).__init__(inp=inp, rng_state=rng_state, n_in=n_in, n_out=n_out, W=W, t_W=t_W, b=b,
+                                             activation=activation, name=name)
 
         self.srng = theano.tensor.shared_randomstreams.RandomStreams(
             self.rng.randint(999999))
 
+        if n_out is None:
+            n_out = self.W.shape[1]
+
         if beta is None:
-            beta_values = np.zeros((n_out,), dtype=theano.config.floatX)
-            beta = theano.shared(value=beta_values, name=self.subname('beta'), borrow=True)
+            beta = np.zeros((n_out,), dtype=theano.config.floatX)
+        self.beta = theano.shared(value=beta, name=self.subname('beta'), borrow=True)
 
         if gamma is None:
-            gamma_values = np.ones((n_out,), dtype=theano.config.floatX)
-            gamma = theano.shared(value=gamma_values, name=self.subname('gamma'), borrow=True)
+            gamma = np.ones((n_out,), dtype=theano.config.floatX)
+        self.gamma = theano.shared(value=gamma, name=self.subname('gamma'), borrow=True)
 
         if mean is None:
-            mean_values = np.zeros((n_out,), dtype=theano.config.floatX)
-            mean = theano.shared(value=mean_values, name=self.subname('mean'), borrow=True)
+            mean = np.zeros((n_out,), dtype=theano.config.floatX)
+        self.mean = theano.shared(value=mean, name=self.subname('mean'), borrow=True)
 
         if variance is None:
-            variance_values = np.ones((n_out,), dtype=theano.config.floatX)
-            variance = theano.shared(value=variance_values, name=self.subname('variance'), borrow=True)
+            variance = np.ones((n_out,), dtype=theano.config.floatX)
+        self.variance = theano.shared(value=variance, name=self.subname('variance'), borrow=True)
 
-        self.beta = beta
-        self.gamma = gamma
         self.alpha = alpha
-        self.mean = mean
-        self.variance = variance
 
         self.params.extend([self.beta, self.gamma])
 
@@ -490,9 +498,9 @@ class BatchNormLayer(HiddenLayer):
 
         # outputs with batch-specific normalization
         train_lin_output = T.dot(train_x, self.t_W) + self.t_b
-        batch_mean = T.mean(train_lin_output)
+        batch_mean = T.mean(train_lin_output, axis=0)
         offset_output = train_lin_output - batch_mean
-        batch_var = T.var(offset_output)
+        batch_var = T.var(offset_output, axis=0)
         normalized_lin_output = offset_output / T.sqrt(batch_var + epsilon)
         train_output = self.activation_fn(self.gamma * normalized_lin_output + self.beta)
 
@@ -520,10 +528,22 @@ class BatchNormLayer(HiddenLayer):
         return combine_dict(super_pickle, my_pickle)
 
 
+class DecodingBatchNormLayer(BatchNormLayer):
+    def __init__(self, inp=None, encoder_W=None, W=None, b=None, beta=None, gamma=None, alpha=0.999,
+                 mean=None, variance=None, rng_state=None, activation='rectifier', name='decodingbatchnormlayer'):
+        super(DecodingBatchNormLayer, self).__init__(inp=inp, rng_state=rng_state, t_W=encoder_W.T, W=W, b=b, beta=beta,
+                                                     gamma=gamma, alpha=alpha, mean=mean, variance=variance,
+                                                     activation=activation, name=name)
+
+    @property
+    def W(self):
+        return self.t_W.owner.inputs[0].get_value(borrow=True).T
+
+
 class AutoencodingBatchNormLayer(BatchNormLayer):
     def __init__(self, inp=None, n_in=None, n_out=None, W=None, b=None, decode_b=None, beta=None, gamma=None,
-                 decode_beta=None, decode_gamma=None, alpha=0.999,
-                 mean=None, variance=None, rng_state=None, activation='rectifier', name='batchnormlayer'):
+                 mean=None, variance=None, decode_beta=None, decode_gamma=None, alpha=0.999,
+                 decode_mean=None, decode_variance=None, rng_state=None, activation='rectifier', name='batchnormlayer'):
         super(AutoencodingBatchNormLayer, self).__init__(inp=inp, n_in=n_in, n_out=n_out, W=W, b=b, beta=beta, gamma=gamma,
                                                          alpha=alpha, mean=mean, variance=variance, rng_state=rng_state,
                                                          activation=activation, name=name)
@@ -533,11 +553,23 @@ class AutoencodingBatchNormLayer(BatchNormLayer):
 
         if decode_beta is None:
             decode_beta_values = np.zeros((n_in,), dtype=theano.config.floatX)
-            self.decode_beta = theano.shared(value=decode_beta_values, name=self.subname('decodeBeta'), borrow=True)
+            decode_beta = theano.shared(value=decode_beta_values, name=self.subname('decodeBeta'), borrow=True)
+        self.decode_beta = decode_beta
 
         if decode_gamma is None:
             decode_gamma_values = np.ones((n_in,), dtype=theano.config.floatX)
-            self.decode_gamma = theano.shared(value=decode_gamma_values, name=self.subname('decodeGamma'), borrow=True)
+            decode_gamma = theano.shared(value=decode_gamma_values, name=self.subname('decodeGamma'), borrow=True)
+        self.decode_gamma = decode_gamma
+
+        if decode_mean is None:
+            decode_mean_values = np.zeros((n_in,), dtype=theano.config.floatX)
+            decode_mean = theano.shared(value=decode_mean_values, name=self.subname('decodeMean'), borrow=True)
+        self.decode_mean = decode_mean
+
+        if decode_variance is None:
+            decode_variance_values = np.ones((n_in,), dtype=theano.config.floatX)
+            decode_variance = theano.shared(value=decode_variance_values, name=self.subname('decodeVariance'), borrow=True)
+        self.decode_variance = decode_variance
 
         self.params.extend([self.t_decode_b, self.decode_beta, self.decode_gamma])
 
@@ -553,41 +585,50 @@ class AutoencodingBatchNormLayer(BatchNormLayer):
         # outputs with batch-specific normalization
         train_lin_output = T.dot(train_x, self.t_W) + self.t_b
         train_lin_output.name = self.subname("trainLinOutput")
-        batch_mean = T.mean(train_lin_output)
+        batch_mean = T.mean(train_lin_output, axis=0)
         offset_output = train_lin_output - batch_mean
-        batch_var = T.var(offset_output)
+        batch_var = T.var(offset_output, axis=0)
         batch_sd = T.sqrt(batch_var + epsilon)
         normalized_lin_output = offset_output / batch_sd
         train_output = self.activation_fn(self.gamma * normalized_lin_output + self.beta)
         train_output.name = self.subname("trainOutput")
 
         # reconstruct batch-specific output
-        recon_lin_output = T.dot(train_output, self.t_W.T) + self.t_decode_b
-        recon_lin_output.name = self.subname("reconOutput")
-        reconstructed_output = self.activation_fn(self.decode_gamma * recon_lin_output + self.decode_beta)
-        reconstructed_output = reconstructed_output * batch_sd + batch_mean
+        W_T = self.t_W.T
+        W_T.name = self.subname("W_T")
+        recon_lin_output = T.dot(train_output, W_T) + self.t_decode_b
+        recon_lin_output.name = self.subname("reconLinOutput")
+        decode_batch_mean = T.mean(recon_lin_output, axis=0)
+        recon_offset_output = recon_lin_output - decode_batch_mean
+        decode_batch_var = T.var(recon_offset_output, axis=0)
+        decode_batch_sd = T.sqrt(decode_batch_var + epsilon)
+        normalized_recon_lin_output = recon_offset_output / decode_batch_sd
+        reconstructed_output = self.activation_fn(self.decode_gamma * normalized_recon_lin_output + self.decode_beta)
 
         # outputs with rolling-average normalization
         infer_lin_output = T.dot(infer_x, self.t_W) + self.t_b
-        infer_lin_output.name = self.subname("infer_lin_output")
+        infer_lin_output.name = self.subname("inferLinOutput")
         sd = T.sqrt(self.variance + epsilon)
         normalized_infer_lin_output = infer_lin_output - self.mean
         inference_output = self.activation_fn(self.gamma / sd * normalized_infer_lin_output + self.beta)
-        infer_lin_output.name = self.subname("inference_output")
+        infer_lin_output.name = self.subname("inferenceOutput")
 
         # reconstruct batch-specific output
-        recon_infer_lin_output = T.dot(inference_output, self.t_W.T) + self.t_decode_b
-        recon_infer_lin_output.name = self.subname("reconInferOutput")
-        reconstructed_infer_output = self.activation_fn(self.decode_gamma * recon_infer_lin_output + self.decode_beta)
-        reconstructed_infer_output = reconstructed_infer_output * sd + self.mean
+        recon_infer_lin_output = T.dot(inference_output, W_T) + self.t_decode_b
+        recon_infer_lin_output.name = self.subname("reconInferLinOutput")
+        decode_sd = T.sqrt(self.decode_variance + epsilon)
+        normalized_recon_infer_lin_output = recon_infer_lin_output - self.decode_mean
+        recon_infer_output = self.activation_fn(self.decode_gamma / decode_sd * normalized_recon_infer_lin_output + self.decode_beta)
 
         # save exponential moving average for batch mean/variance
         statistics_updates = [
             (self.mean, self.alpha * self.mean + (1.0 - self.alpha) * batch_mean),
-            (self.variance, self.alpha * self.variance + (1.0 - self.alpha) * batch_var)
+            (self.variance, self.alpha * self.variance + (1.0 - self.alpha) * batch_var),
+            (self.decode_mean, self.alpha * self.decode_mean + (1.0 - self.alpha) * decode_batch_mean),
+            (self.decode_variance, self.alpha * self.decode_variance + (1.0 - self.alpha) * decode_batch_var),
         ]
 
-        return train_output, inference_output, statistics_updates, reconstructed_output, infer_x
+        return train_output, inference_output, statistics_updates, reconstructed_output, recon_infer_output
 
     def __pickle__(self):
         super_pickle = super(AutoencodingBatchNormLayer, self).__pickle__()
@@ -595,5 +636,7 @@ class AutoencodingBatchNormLayer(BatchNormLayer):
             'decode_b': self.t_decode_b.get_value(borrow=True),
             'decode_beta': self.decode_beta.get_value(borrow=True),
             'decode_gamma': self.decode_gamma.get_value(borrow=True),
+            'decode_mean': self.decode_mean.get_value(borrow=True),
+            'decode_variance': self.decode_variance.get_value(borrow=True)
         }
         return combine_dict(super_pickle, my_pickle)

@@ -32,6 +32,7 @@ from __future__ import print_function, division
 
 import os
 import warnings
+import random
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 
 from docopt import docopt
@@ -194,6 +195,22 @@ if __name__ == '__main__':
             train_idx, valid_idx = cv_split(dataset, percent=0.1, fold_index=task_num)
             prepared_data = (dataset, train_idx, valid_idx)
             multistage_batchnorm_run(prepared_data=prepared_data, **params)
+        elif model == 'multistage_pretrain':
+            from learntools.emotiv.multistage_batchnorm import pretrain
+            no_conds_params = combine_dict(params, {'conds': None})
+            dataset = smart_load_data(**no_conds_params)
+            train_idx, valid_idx = cv_split(dataset, percent=0.1, fold_index=task_num)
+            full_data = (dataset, train_idx, valid_idx)
+            pretrain(log_name=log_filename, full_data=full_data, **params)
+        elif model == 'multistage_tune':
+            from learntools.emotiv.multistage_batchnorm import tune
+            # find a param-file to load
+            saved_weights = filter(lambda(fn): os.path.splitext(fn)[1] == '.weights', os.listdir('.'))
+            selected_weight_file = saved_weights[random.randint(0, len(saved_weights) - 1)]
+            dataset = smart_load_data(**params)
+            train_idx, valid_idx = cv_split(dataset, percent=0.1, fold_index=task_num)
+            prepared_data = (dataset, train_idx, valid_idx)
+            tune(prepared_data=prepared_data, weight_file=selected_weight_file, **params)
         else:
             raise Exception("invalid model family")
     

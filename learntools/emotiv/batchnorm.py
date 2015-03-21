@@ -7,6 +7,7 @@ import theano
 import theano.tensor as T
 import numpy as np
 from sklearn import svm
+from sklearn.ensemble import RandomForestClassifier
 
 from learntools.libs.logger import log_me
 from learntools.libs.auc import auc
@@ -179,6 +180,18 @@ class SVMBinarizer(Binarizer):
 
     def train(self, ys, preds):
         self.classifier = svm.SVC()
+        self.classifier.fit(preds, ys)
+
+    def apply(self, preds):
+        return self.classifier.predict(preds)
+
+
+class RandomForestBinarizer(Binarizer):
+    def __init__(self):
+        self.classifier = None
+
+    def train(self, ys, preds):
+        self.classifier = RandomForestClassifier()
         self.classifier.fit(preds, ys)
 
     def apply(self, preds):

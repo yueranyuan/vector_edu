@@ -17,15 +17,15 @@ Options:
     -p <param_set>, --param_set=<param_set>
         The name of the parameter set to use [default: emotiv_wide_search3].
     -f <file>, --file=<file>
-        The data file to use [default: raw_data/emotiv_processed.mat].
+        The data file to use [default: raw_data/indices_all.txt].
     -o <file>, --out=<file>
         The name for the log file to be generated.
     -q, --quiet
         Do not output to a log file.
     -t, --task_number=<ints>
-        A counter representing the queue position of the current job [default: 0].
+        A counter representing the queue position of the current job [default: 4].
     -m <model>, --model=<model>
-        The name of the model family that we are using [default: multistage_pretrain].
+        The name of the model family that we are using [default: multistage_randomforest].
 """
 
 from __future__ import print_function, division

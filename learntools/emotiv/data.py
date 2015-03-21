@@ -71,7 +71,7 @@ CONDITIONS = dict(ACTIVITY_CONDITIONS.items() + META_CONDITIONS.items())
 CONDITIONS_STR = dict((v, k) for k, v in CONDITIONS.items())
 
 
-def prepare_data(dataset_name, conds=None, clip=True, subject_norm=False, **kwargs):
+def prepare_data(dataset_name, conds=None, clip=False, subject_norm=False, **kwargs):
     """load siegle data into a Dataset
 
     Args:

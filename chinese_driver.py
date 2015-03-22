@@ -5,6 +5,7 @@ warnings.filterwarnings("ignore", category=DeprecationWarning)
 from learntools.libs.logger import gen_log_name, log_me, set_log_file
 from learntools.kt.data import cv_split
 import learntools.deploy.config as config
+from learntools.kt.skill import gen_skill_matrix
 
 
 @log_me()
@@ -13,10 +14,14 @@ def run(task_num=0, **kwargs):
     from learntools.kt import chinese
 
     prepared_data = chinese.prepare_data(top_n=40, **kwargs)
-    train_idx, valid_idx = cv_split(prepared_data, percent=.1, fold_index=task_num, **kwargs)
+    train_idx, valid_idx = cv_split(prepared_data, percent=.2, fold_index=task_num, **kwargs)
 
-    model = SelectedModel((prepared_data, train_idx, valid_idx), **kwargs)
-    model.train_full()
+    skill_matrix = gen_skill_matrix(prepared_data.get_data('skill'),
+                                    prepared_data['skill'].enum_pairs,
+                                    **kwargs)
+
+    model = SelectedModel((prepared_data, train_idx, valid_idx), skill_matrix, **kwargs)
+    model.train_full(**kwargs)
 
 
 if __name__ == '__main__':
@@ -40,5 +45,5 @@ if __name__ == '__main__':
         params['dataset_name'] = args.file
     elif 'dataset_name' not in params:
         params['dataset_name'] = default_dataset
-    run(0, **params)
+    run(args.task_num, **params)
     print "finished"

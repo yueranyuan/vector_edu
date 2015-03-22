@@ -5,24 +5,38 @@ warnings.filterwarnings("ignore", category=DeprecationWarning)
 
 from learntools.libs.logger import gen_log_name, log_me, set_log_file
 from learntools.kt.data import prepare_data, cv_split
+from learntools.kt.skill import gen_skill_matrix
 import learntools.deploy.config as config
 
 
+class ModelType(object):
+    DEEPKT = 0
+    LOGKT = 1
+    PREVLOGKT = 2
+    SVMKT = 3
+
+
 @log_me()
-def run(task_num, model_type=0, **kwargs):
-    if model_type == 0:
+def run(task_num, model_type=ModelType.SVMKT, top_n=14, **kwargs):
+    if model_type == ModelType.DEEPKT:
         from learntools.kt.deepkt import DeepKT as SelectedModel
-    elif model_type == 1:
-        from learntools.kt.lrkt import build_model  # TODO: UNBREAK
-    elif model_type == 2:
-        from learntools.kt.kt2 import build_model  # TODO: UNBREAK
+    elif model_type == ModelType.LOGKT:
+        from learntools.kt.logkt import LogKT as SelectedModel
+    elif model_type == ModelType.PREVLOGKT:
+        from learntools.kt.prevlogkt import PrevLogKT as SelectedModel
+    elif model_type == ModelType.SVMKT:
+        from learntools.kt.svmkt import SvmKT as SelectedModel
     else:
         raise Exception("model type is not valid")
 
-    prepared_data = prepare_data(**kwargs)
+    prepared_data = prepare_data(top_n=top_n, **kwargs)
     train_idx, valid_idx = cv_split(prepared_data, fold_index=task_num, **kwargs)
 
-    model = SelectedModel((prepared_data, train_idx, valid_idx), **kwargs)
+    skill_matrix = gen_skill_matrix(prepared_data.get_data('skill'),
+                                    prepared_data['skill'].enum_pairs,
+                                    **kwargs)
+
+    model = SelectedModel((prepared_data, train_idx, valid_idx), skill_matrix, **kwargs)
     model.train_full(**kwargs)
 
 

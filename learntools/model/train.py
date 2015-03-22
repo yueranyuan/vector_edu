@@ -8,7 +8,7 @@ from learntools.libs.utils import transpose, flatten
 ACCURACY_WINDOW = 7
 
 @log_me('... training')
-def train_model(model, n_epochs=500, patience=50,
+def train_model(model, n_epochs=500, patience=500,
                 patience_increase=40, improvement_threshold=1,
                 validation_frequency=5, learning_rate=0.02,
                 rng_seed=1023, train_with_loss=False, **kwargs):

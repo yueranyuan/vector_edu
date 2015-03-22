@@ -1,24 +1,23 @@
-from itertools import imap, chain, groupby, islice, ifilter
+from itertools import imap, chain, islice, ifilter
 
 import theano
 import theano.tensor as T
 import numpy as np
 
 from learntools.libs.utils import idx_to_mask, mask_to_idx
-from learntools.data import gen_word_matrix
 from learntools.libs.logger import log_me
-from learntools.libs.auc import auc
 from learntools.model.mlp import HiddenNetwork, MLP
 from learntools.model.math import rectifier
 from learntools.model.theano_utils import make_shared
 from learntools.model import Model, gen_batches_by_keys, gen_batches_by_size
+from learntools.kt.base import BaseKT
 
 from theano import config
 
 config.exception_verbosity = 'high'
 
 
-def _gen_batches(idxs, subjects, batch_size):
+def deep_gen_batches(idxs, subjects, batch_size):
     '''divide row indicies for deepkt.
 
     divide indices into batches by subject ids and indices for each subject are
@@ -35,7 +34,7 @@ def _gen_batches(idxs, subjects, batch_size):
         int[][]: list of batches
 
     Example:
-        >>> _gen_batches(xrange(11), [1] * 6 + [2] * 5, 2)
+        >>> deep_gen_batches(xrange(11), [1] * 6 + [2] * 5, 2)
         [[2, 3], [4, 5], [8, 9]]
     '''
     batches = gen_batches_by_keys(idxs, [subjects])
@@ -47,7 +46,7 @@ def _gen_batches(idxs, subjects, batch_size):
     return batches
 
 
-class DeepKT(Model):
+class DeepKT(BaseKT):
     '''a trainable, applyable model for deep kt
     Attributes:
         train_batches (int[][]): training batches are divided by subject_id and the rows of each subject
@@ -56,8 +55,8 @@ class DeepKT(Model):
         valid_batches (int[][]): validation batches. See train_batches
     '''
     @log_me('...building deepkt')
-    def __init__(self, prepared_data, L1_reg=0., L2_reg=0., dropout_p=0., learning_rate=0.02,
-                 skill_vector_len=100, combiner_depth=1, combiner_width=200,
+    def __init__(self, prepared_data, skill_matrix, L1_reg=0., L2_reg=0., dropout_p=0., learning_rate=0.02,
+                 combiner_depth=1, combiner_width=200,
                  main_net_depth=1, main_net_width=500, previous_eeg_on=1,
                  current_eeg_on=1, combiner_on=1, mutable_skill=1, valid_percentage=0.8,
                  batch_size=30, **kwargs):
@@ -95,9 +94,8 @@ class DeepKT(Model):
         # TODO: make the above mentioned diagram
 
         # make a skill matrix containing skill vectors for each skill
-        skill_matrix = make_shared(gen_word_matrix(ds.get_data('skill'),
-                                                   ds['skill'].enum_pairs,
-                                                   vector_length=skill_vector_len))
+        skill_matrix_width = skill_matrix.shape[1]
+        skill_matrix = make_shared(skill_matrix, name='skill_matrix')
 
         # data preloaded into network
         skill_x = make_shared(skill_x, to_int=True, name='skill')
@@ -109,7 +107,7 @@ class DeepKT(Model):
         skill_accumulator = make_shared(np.zeros((N, combiner_width)), name='skill_accumulator')
 
         # setup combiner component
-        combiner_n_in = combiner_width + skill_vector_len + 1
+        combiner_n_in = combiner_width + skill_matrix_width + 1
         if previous_eeg_on:
             combiner_n_in += eeg_vector_len
         combiner = HiddenNetwork(
@@ -121,7 +119,7 @@ class DeepKT(Model):
         )
 
         # setup main network component
-        classifier_n_in = skill_vector_len
+        classifier_n_in = skill_matrix_width
         if combiner_on:
             classifier_n_in += combiner_width
         if current_eeg_on:
@@ -200,41 +198,6 @@ class DeepKT(Model):
             updates=update_parameters + basic_updates,
             givens={t_dropout: dropout_p},
             **func_args)
-        self.train_batches = _gen_batches(train_idx, subject_x, batch_size)
-        self.valid_batches = _gen_batches(valid_idx, subject_x, batch_size)
+        self.train_batches = deep_gen_batches(train_idx, subject_x, batch_size)
+        self.valid_batches = deep_gen_batches(valid_idx, subject_x, 1)
         self._correct_y = correct_y
-
-    def evaluate(self, idxs, pred):
-        '''scores the predictions of a given set of rows
-        Args:
-            idxs (int[]): the indices of the rows to be evaluated
-            pred (float[]): the prediction for the label of that row
-        Returns:
-            float: an evaluation score (the higher the better)
-        '''
-        # _correct_y is int-casted, go to owner op (int-cast) to get shared variable
-        # as first input and get its value without copying the value out
-        _y = self._correct_y.owner.inputs[0].get_value(borrow=True)[idxs]
-        return auc(_y[:len(pred)], pred, pos_label=1)
-
-    def train(self, idxs, **kwargs):
-        '''perform one iteration of training on some indices
-        Args:
-            idxs (int[]): the indices of the rows to be used in training
-        Returns:
-            (float, float[], int[]): a tuple of the loss, the predictions over the rows,
-                and the row indices
-        '''
-        res = self._tf_train(idxs)
-        return res[:3]
-
-    def validate(self, idxs, **kwargs):
-        '''perform one iteration of validation
-        Args:
-            idxs (int[]): the indices of the rows to be used in validation
-        Returns:
-            (float, float[], int[]): a tuple of the loss, the predictions over the rows,
-                and the row indices
-        '''
-        res = self._tf_valid(idxs)
-        return res[:3]

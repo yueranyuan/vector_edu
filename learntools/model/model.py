@@ -126,7 +126,7 @@ class Model(object):
 
         log(('Optimization complete. Best validation score of %f %%') %
             (best_validation_loss * 100.), True)
-        log('Code ran for ran for %.2fm' % (training_time))
+        log('Code ran for ran for %.2fm' % (training_time), True)
         return best_validation_loss, best_params
 
     def serialize(self):

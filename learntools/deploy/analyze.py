@@ -1,7 +1,7 @@
 from __future__ import division
 import re
 import os
-from itertools import ifilter, imap, chain, compress, tee, dropwhile
+from itertools import ifilter, imap, chain, compress, tee, dropwhile, izip, islice
 from collections import defaultdict
 from datetime import datetime, timedelta
 import json
@@ -92,7 +92,7 @@ def parse_log(content, arg_parser=json_arg_parser):
     lines = content.split('\n')
 
     # Part 1: parse arguments
-    arg_pair_lists = exception_safe_map(arg_parser, lines[:10], exception=NotArgLineException)
+    arg_pair_lists = exception_safe_map(arg_parser, lines[:20], exception=NotArgLineException)
     args = dict(chain.from_iterable(arg_pair_lists))
 
     # parse CV
@@ -147,7 +147,7 @@ def analyze_recent(seconds=0, minutes=0, hours=0, days=0, delta=None, **kwargs):
 
 
 def analyze(local_dir=None, bucket=None, subfolder=None, start_time=None,
-            print_individual_trials=False, create_plot=True, most_recent_n=None):
+            print_individual_trials=False, create_plot=True, most_recent_n=None, earliest_n=None):
     """analyze log files
 
     Args:
@@ -175,11 +175,6 @@ def analyze(local_dir=None, bucket=None, subfolder=None, start_time=None,
     # sort logs in chronological order
     chronological = sorted(contents.iteritems(), key=lambda (name, _): name)
 
-    # only analyze the most recent n
-    if most_recent_n is not None:
-        most_recent_n = min(len(chronological), most_recent_n)
-        chronological = chronological[-most_recent_n:]
-
     # don't analyze any logs before start_time
     if start_time:
         if isinstance(start_time, str):
@@ -189,16 +184,34 @@ def analyze(local_dir=None, bucket=None, subfolder=None, start_time=None,
 
         def _too_early(file_name):
             return file_name[:len(start_time_str)] < start_time_str
-        chronological = dropwhile(lambda(_fn, _): _too_early(_fn), chronological)
+        chronological = list(dropwhile(lambda(_fn, _): _too_early(_fn), chronological))
+
+    # only analyze the most recent n
+    if most_recent_n is not None:
+        most_recent_n = min(len(chronological), most_recent_n)
+        chronological = chronological[-most_recent_n:]
+
+    # only analyze the earliest n
+    if earliest_n is not None:
+        earliest_n = min(len(chronological), earliest_n)
+        chronological = chronological[:earliest_n]
 
     # parse log content
     parsed_content = exception_safe_map(lambda (k, v): (k, parse_log(v)),
                                         chronological,
                                         exception=BadLogFileException)
-    conds = ["NegativeHighArousalPictures", "NegativeLowArousalPictures"]
-    if conds is not None:
-        parsed_content = filter(lambda (key_name, (args, history, run_time)): args["conds"] == conds,
-                                parsed_content)
+
+    # parse cond_types
+    COND_TYPES = [
+        ['EyesClosed', 'EyesOpen'],
+        ["PositiveLowArousalPictures", "NegativeLowArousalPictures"],
+        ["PositiveHighArousalPictures", "NegativeHighArousalPictures"],
+        ["PositiveHighArousalPictures", "PositiveLowArousalPictures"],
+        ["NegativeHighArousalPictures", "NegativeLowArousalPictures"]]
+    for key_name, (args, history, run_time) in parsed_content:
+        args['conds'] = COND_TYPES.index(args['conds'])
+    # parsed_content = filter(lambda (key_name, (args, history, run_time)): args["conds"] == 3, parsed_content)
+
     # parse content of each individual log file and fill a data store of
     # the arguments and best_errors of all runs
     num_logs = len(parsed_content)
@@ -219,7 +232,11 @@ def analyze(local_dir=None, bucket=None, subfolder=None, start_time=None,
 
         # store best error for this log
         times, errors = transpose(history)
-        best_epoch_idx, best_error = max_idx(errors)
+        ERROR_WINDOW = 7
+        effective_error_window = min(len(errors), ERROR_WINDOW)
+        smoothed_errors = [sum(window) / len(window) for window in
+                           izip(*[islice(errors, i, None) for i in xrange(effective_error_window)])]
+        best_epoch_idx, best_error = max_idx(smoothed_errors)
         error_all[log_i] = best_error
 
         if print_individual_trials:
@@ -251,7 +268,7 @@ def analyze(local_dir=None, bucket=None, subfolder=None, start_time=None,
             test_type = 'pearson r'
             r, p = stats.pearsonr(v, error_all)
             better = 'high' if r > 0 else 'low'
-        outcomes[i] = 'p={p} for {test_type} of {key}: {better} is better'.format(
+        outcomes[i] = 'p={p:.5f} for {test_type} of {key}: {better} is better'.format(
             test_type=test_type, key=k, p=p, better=better)
 
     # print analysis
@@ -261,6 +278,12 @@ def analyze(local_dir=None, bucket=None, subfolder=None, start_time=None,
     print "# Parameter Analysis #"
     for o in sorted(outcomes):
         print o
+
+    # print cond breakdown
+    for cond_i, cond in enumerate(COND_TYPES):
+        cond_mask = np.equal(arg_all['conds'], cond_i)
+        average_error = np.average(list(compress(error_all, cond_mask)))
+        print("average error: {err} for {cond}".format(cond=cond, err=average_error))
 
     # plot arguments
     if create_plot:
@@ -278,4 +301,4 @@ if __name__ == '__main__':
     # analyze(bucket='cmu-data', subfolder='vectoredu/results', cache_dir='results', start_time=start_time)
     # analyze(cache_dir='results', start_time=start_time)
     # analyze_recent(days=2, local_dir='.')
-    analyze(start_time=datetime(2015, 3, 6, 19, 00), local_dir='.', most_recent_n=100)
+    analyze(start_time=datetime(2015, 3, 8, 3, 00), local_dir='.', most_recent_n=600)

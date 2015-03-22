@@ -1,6 +1,7 @@
 from math import ceil
 from itertools import imap, groupby
 from operator import or_
+import random
 
 import numpy as np
 
@@ -20,7 +21,7 @@ def _cv_split_helper(splits, fold_index=0, percent=None):
         heldout = [splits[fold_index % len(splits)]]
     return heldout
 
-def cv_split_randomized(ds, fold_index=0, percent=0.1, seed=0xbada55, y_column='condition', **kwargs):
+def cv_split_randomized(ds, fold_index=0, percent=0.1, seed=0xbada55, y_column='condition', balance=True, **kwargs):
     """
     We need to generate cv splits such that the proportion of classes in different folds is the same
     and also have the subjects within each fold be up to randomness. Also, the folds should be disjoint.
@@ -29,9 +30,15 @@ def cv_split_randomized(ds, fold_index=0, percent=0.1, seed=0xbada55, y_column='
 
     # split the data by condition
     condition_idxs = {}
+    n_conditions = len(ds[y_column].enum_pairs)
     for _, condition in ds[y_column].ienum_pairs:
         mask = ds[y_column] == condition
         condition_idxs[condition] = mask_to_idx(mask)
+
+    if balance:
+        min_condition_n = min(len(idxs) for idxs in condition_idxs.values())
+        for key, idxs in condition_idxs.iteritems():
+            condition_idxs[key] = np.asarray(random.sample(idxs, min_condition_n))
 
     # generate the random disjoint folds, keyed by condition
     train_condition_idxs = {}
@@ -50,6 +57,12 @@ def cv_split_randomized(ds, fold_index=0, percent=0.1, seed=0xbada55, y_column='
     valid_idx = np.sort(np.concatenate(valid_condition_idxs.values()))
 
     # log it
+    train_class_n = [sum(ds['condition'][train_idx] == cond) for cond in xrange(n_conditions)]
+    valid_class_n = [sum(ds['condition'][valid_idx] == cond) for cond in xrange(n_conditions)]
+    all_class_n = np.array(train_class_n) + np.array(valid_class_n)
+    log("classes sizes: {}".format(all_class_n), True)
+    log("training classes sizes: {}".format(train_class_n), True)
+    log("validation classes sizes: {}".format(valid_class_n), True)
     log("index {} are held out".format(valid_idx), True)
 
     return train_idx, valid_idx

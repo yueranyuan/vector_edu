@@ -162,18 +162,23 @@ ALL_PARAMS['emotiv_wide_search2'] = combine_dict(ALL_PARAMS['emotiv_wide_search'
                                                  ALL_PARAMS['emotiv_update1'])
 ALL_PARAMS['emotiv_update2'] = {'dropout_p': GenVar(0.0, 0.1),
                                 'learning_rate': GenVar(0.001, 0.02, scale=LOG_SCALE),
-                                'patience': 400,
-                                'patience_increase': 300,
+                                'patience': 1000,
+                                'patience_increase': 500,
                                 'subject_norm': GenVar(0, 1, type=int),
                                 'clip': GenVar(0, 1, type=int),
-                                'rand_cv': GenVar(0, 1, type=int)}
+                                'rand_cv': GenVar(0, 1, type=int),
+                                'data_name': GenVar(0, 1, type=int)}
 ALL_PARAMS['emotiv_wide_search3'] = combine_dict(ALL_PARAMS['emotiv_wide_search2'],
                                                  ALL_PARAMS['emotiv_update2'])
 ALL_PARAMS['fft_search'] = {'duration': GenVar(5, 15, type=int),
                             'fft_window': GenVar(1.0, 3.0)}
 ALL_PARAMS['wavelet_search'] = {'wavelet_depth': GenVar(3, 7, type=int),
                                 'wavelet_family': GenVar(1, 6, type=int),
-                                'duration': GenVar(5, 15, type=int)}
+                                'duration': GenVar(5, 10, type=int)}
 ALL_PARAMS['emotiv_wide_search4'] = combine_dict(ALL_PARAMS['emotiv_wide_search3'],
                                                  ALL_PARAMS['wavelet_search'])
+ALL_PARAMS['short_train'] = {'patience': 400,
+                             'patience_increase': 300}
+ALL_PARAMS['emotiv_wide_search_autoencode'] = combine_dict(ALL_PARAMS['emotiv_wide_search3'],
+                                                           ALL_PARAMS['short_train'])
 all_param_set_keys = ALL_PARAMS.keys()

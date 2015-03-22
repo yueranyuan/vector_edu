@@ -15,17 +15,17 @@ Usage:
 
 Options:
     -p <param_set>, --param_set=<param_set>
-        The name of the parameter set to use [default: emotiv_wide_search3].
+        The name of the parameter set to use [default: emotiv_wide_search4].
     -f <file>, --file=<file>
-        The data file to use [default: raw_data/emotiv_processed.mat].
+        The data file to use [default: data/emotiv_all.gz].
     -o <file>, --out=<file>
         The name for the log file to be generated.
     -q, --quiet
         Do not output to a log file.
     -t, --task_number=<ints>
-        A counter representing the queue position of the current job [default: 0].
+        A counter representing the queue position of the current job [default: 1].
     -m <model>, --model=<model>
-        The name of the model family that we are using [default: multistage_pretrain].
+        The name of the model family that we are using [default: batchnorm].
 """
 
 from __future__ import print_function, division
@@ -39,8 +39,8 @@ from docopt import docopt
 
 from learntools.libs.utils import combine_dict
 from learntools.libs.logger import gen_log_name, log_me, set_log_file
-from learntools.emotiv.data import (prepare_data, convert_raw_data, segment_raw_data, load_siegle_data, \
-    gen_wavelet_features, gen_fft_features)
+from learntools.emotiv.data import (prepare_data, convert_raw_data, segment_raw_data, load_siegle_data,
+                                    gen_wavelet_features, gen_fft_features)
 from learntools.emotiv.filter import filter_data
 from learntools.data import cv_split, cv_split_randomized
 from learntools.data.crossvalidation import cv_split_within_column
@@ -51,8 +51,25 @@ release_lock.release()  # TODO: use theano config instead. We have to figure out
 # what they did with the config.compile.timeout variable because that's actually
 # what we need
 
+'''
+COND_TYPES = [
+        ['EyesClosed', 'EyesOpen'],
+        ["PositiveLowArousalPictures", "NegativeLowArousalPictures"],
+        ["PositiveHighArousalPictures", "NegativeHighArousalPictures"],
+        ["PositiveHighArousalPictures", "PositiveLowArousalPictures"],
+        ["NegativeHighArousalPictures", "NegativeLowArousalPictures"]]
+'''
 
-def smart_load_data(dataset_name=None, feature_type='wavelet', duration=10, wavelet_depth=5, wavelet_family=3, **kwargs):
+COND_TYPES = [
+        ["PositiveLowArousalPictures", "NegativeLowArousalPictures"],
+        ["PositiveHighArousalPictures", "PositiveLowArousalPictures"]]
+
+
+def smart_load_data(dataset_name=None, feature_type='wavelet', duration=10, wavelet_depth=5, wavelet_family=3, data_name=0, **kwargs):
+    #if data_name == 0:
+    #    dataset_name = 'raw_data/sg_matlab.mat'
+    #else:
+    #    dataset_name = dataset_name
     _, ext = os.path.splitext(dataset_name)
     if ext == '.mat':
         dataset = load_siegle_data(dataset_name=dataset_name, **kwargs)
@@ -108,13 +125,13 @@ def run(task_num=0, cv_rand=1, model_type=ModelType.BASE, **kwargs):
         from learntools.emotiv.batchnorm import BatchNorm as SelectedModel
         dataset = smart_load_data(**kwargs)
         if cv_rand:
-            train_idx, valid_idx = cv_split_randomized(dataset, percent=0.1, fold_index=task_num)
+            train_idx, valid_idx = cv_split_randomized(dataset, percent=0.2, fold_index=task_num)
         else:
-            train_idx, valid_idx = cv_split(dataset, percent=0.1, fold_index=task_num)
+            train_idx, valid_idx = cv_split(dataset, percent=0.2, fold_index=task_num)
     elif model_type == ModelType.SVM:
         from learntools.emotiv.svm import SVM as SelectedModel
         dataset = smart_load_data(**kwargs)
-        train_idx, valid_idx = cv_split_randomized(dataset, percent=0.1, fold_index=task_num)
+        train_idx, valid_idx = cv_split_randomized(dataset, percent=0.2, fold_index=task_num)
     elif model_type == ModelType.RANDOMFOREST:
         from learntools.emotiv.randomforest import RandomForest as SelectedModel
         dataset = smart_load_data(**kwargs)
@@ -156,13 +173,7 @@ if __name__ == '__main__':
 
     task_num = int(args['--task_number'])
 
-    cond_types = [
-        ['EyesClosed', 'EyesOpen'],
-        ["PositiveLowArousalPictures", "NegativeLowArousalPictures"],
-        ["PositiveHighArousalPictures", "NegativeHighArousalPictures"],
-        ["PositiveHighArousalPictures", "PositiveLowArousalPictures"],
-        ["NegativeHighArousalPictures", "NegativeLowArousalPictures"]]
-    params['conds'] = cond_types[task_num % len(cond_types)]
+    params['conds'] = COND_TYPES[task_num % len(COND_TYPES)]
 
     if args['run']:
         run(task_num=task_num, model_type=ModelType.BASE, **params)
@@ -199,7 +210,7 @@ if __name__ == '__main__':
             from learntools.emotiv.multistage_batchnorm import pretrain
             no_conds_params = combine_dict(params, {'conds': None})
             dataset = smart_load_data(**no_conds_params)
-            train_idx, valid_idx = cv_split(dataset, percent=0.1, fold_index=task_num)
+            train_idx, valid_idx = cv_split_randomized(dataset, percent=0.1, fold_index=task_num)
             full_data = (dataset, train_idx, valid_idx)
             pretrain(log_name=log_filename, full_data=full_data, **params)
         elif model == 'multistage_tune':
@@ -207,10 +218,21 @@ if __name__ == '__main__':
             # find a param-file to load
             saved_weights = filter(lambda(fn): os.path.splitext(fn)[1] == '.weights', os.listdir('.'))
             selected_weight_file = saved_weights[random.randint(0, len(saved_weights) - 1)]
+            selected_weight_file = "2015_03_09_22_48_46_29694.log.weights"
             dataset = smart_load_data(**params)
-            train_idx, valid_idx = cv_split(dataset, percent=0.1, fold_index=task_num)
+            train_idx, valid_idx = cv_split_randomized(dataset, percent=0.1, fold_index=task_num)
             prepared_data = (dataset, train_idx, valid_idx)
             tune(prepared_data=prepared_data, weight_file=selected_weight_file, **params)
+        elif model == 'multistage_randomforest':
+            from learntools.emotiv.multistage_randomforest import run as mrf_run
+            selected_weight_file = "2015_03_10_16_09_35_33122.log.weights"
+            dataset = smart_load_data(**params)
+            if 1:  # TODO: fix this
+                train_idx, valid_idx = cv_split_randomized(dataset, percent=0.1, fold_index=task_num)
+            else:
+                train_idx, valid_idx = cv_split(dataset, percent=0.1, fold_index=task_num)
+            prepared_data = (dataset, train_idx, valid_idx)
+            mrf_run(prepared_data=prepared_data, weight_file=selected_weight_file, **params)
         else:
             raise Exception("invalid model family")
     

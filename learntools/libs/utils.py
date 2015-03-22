@@ -50,7 +50,7 @@ def flatten(arr):
     return list(chain.from_iterable(arr))
 
 
-def clip_outliers(matrix, method='std', axis=None):
+def clip_outliers(matrix, method='iqr', axis=None):
     # take things within 25th-75th percentile, with subsampling for speedup
     size = len(matrix)
     samples = math.log(size) if size > 100 else size

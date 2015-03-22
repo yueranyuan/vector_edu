@@ -117,18 +117,44 @@ def prepare_data(dataset_name, conds=None, clip=True, subject_norm=False, **kwar
 
 
 def load_siegle_data(dataset_name, conds=None, **kwargs):
+    if os.path.basename(dataset_name) == 'emotiv_processed.mat':
+        return load_processed_siegle_data(dataset_name, conds=conds, **kwargs)
+    return load_processed_siegle_data(dataset_name, conds=conds, **kwargs)
+
+
+def load_unprocessed_siegle_data(dataset_name, conds=None, clip=False, **kwargs):
+    f = loadmat(dataset_name)
+    cond_data_pairs = list(f['dat'].iteritems())
+    if conds is not None:
+        cond_data_pairs = filter(lambda(cond, mat): cond in conds, cond_data_pairs)
+    n_rows = sum(len(mat) for cond, mat in cond_data_pairs)
+    ds = Dataset(SIEGLE_HEADERS, n_rows=n_rows)
+    row_i = 0
+    for cond, mat in cond_data_pairs:
+        for data_row in mat:
+            ds[row_i] = (data_row, cond)
+            row_i += 1
+    # ds.get_column('eeg').data = normalize_table(ds['eeg'], clip=clip, axis=0)
+    return ds
+
+
+def load_processed_siegle_data(dataset_name, conds=None, **kwargs):
     if conds is None:
         conds = ACTIVITY_CONDITIONS.keys()
-    cond_values = [ACTIVITY_CONDITIONS[cond] for cond in conds]
+
     f = loadmat(dataset_name)
     M = f['M']
+    if 'feats' in f:
+        cond_dict = {cond: i + 1 for i, cond in enumerate(f['feats'])}
+    else:
+        cond_dict = ACTIVITY_CONDITIONS
     n_rows = len(M)
     # data is sorted by cond
     np.random.shuffle(M)
-    Xs = M[:, 3:]
-    ys = M[:, 1]
+    Xs = M[:, 4:]
+    ys = M[:, 2]
 
-    idxs = np.arange(n_rows)[reduce(np.logical_or, [ys == ACTIVITY_CONDITIONS[cond] for cond in conds])]
+    idxs = np.arange(n_rows)[reduce(np.logical_or, [ys == cond_dict[cond] for cond in conds])]
 
     ds = Dataset(SIEGLE_HEADERS, len(idxs))
     for i in xrange(len(idxs)):

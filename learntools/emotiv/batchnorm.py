@@ -13,7 +13,7 @@ from learntools.libs.auc import auc
 from learntools.model.theano_utils import make_shared
 from learntools.model import Model, gen_batches_by_size
 from learntools.model.net import BatchNormLayer, AutoencodingBatchNormLayer, TrainableNetwork
-from learntools.libs.utils import max_idx, normalize_table
+from learntools.libs.utils import max_idx
 
 
 class BatchNorm(Model):
@@ -58,7 +58,7 @@ class BatchNorm(Model):
 
         n_in, n_out = input_size, classifier_width
         self.layers = []
-        for i, net_params in izip(xrange(classifier_depth), serialized):
+        for i, net_params in enumerate(serialized[:-1]):
             bn_layer = BatchNormLayer(n_in=n_in, n_out=n_out, **net_params)
             train_layer, infer_layer, updates_layer = bn_layer.instance(train_layer, infer_layer, dropout=t_dropout)
             self.layers.append(bn_layer)

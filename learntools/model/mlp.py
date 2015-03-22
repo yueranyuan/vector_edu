@@ -2,35 +2,31 @@ __docformat__ = 'restructedtext en'
 
 import theano.tensor as T
 
-from learntools.model.logistic import LogisticRegression
-from learntools.model.math import rectifier
-from learntools.model.net import NetworkComponent, HiddenNetwork
+from learntools.model.net import NetworkComponent, HiddenNetwork, HiddenLayer
 
 
 class MLP(NetworkComponent):
-    def __init__(self, rng, n_in, size, n_out, activation=rectifier, output_activation=T.nnet.softmax,
-                 dropout=None, name='MLP'):
+    def __init__(self, n_in, size, n_out, activation='rectifier', output_activation='softmax',
+                 name='MLP', rng_state=None):
         super(MLP, self).__init__(name=name)
-        self.dropout = T.scalar('dropout') if dropout is None else dropout
         self.hidden = HiddenNetwork(
-            rng=rng,
-            n_in=n_in,
-            size=size,
+            rng_state=rng_state,
+            size=[n_in] + size,
             activation=activation,
-            dropout=self.dropout,
-            name=self.subname('hiddenlayer')
+            name=self.subname('hiddenlayers')
         )
 
-        self.logRegressionLayer = LogisticRegression(
-            n_in=self.hidden.n_out,
+        log_layer_n_in = size[-1] if len(size) else n_in
+        self.logRegressionLayer = HiddenLayer(
+            n_in=log_layer_n_in,
             n_out=n_out,
             activation=output_activation,
             name=self.subname('outputlayer')
         )
         self.components = [self.hidden, self.logRegressionLayer]
 
-    def instance(self, x, **kwargs):
-        x1 = self.hidden.instance(x, **kwargs)
+    def instance(self, x, dropout=0, **kwargs):
+        x1 = self.hidden.instance(x, dropout=dropout, **kwargs)
         return self.logRegressionLayer.instance(x1, **kwargs)
 
     def output(self, pY):

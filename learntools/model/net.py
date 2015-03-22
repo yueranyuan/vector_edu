@@ -120,6 +120,7 @@ class NetworkComponent(object):
         '''all differentiable theano variables of this network'''
         if hasattr(self, '_params'):
             return self._params
+        print(self.components, 'components', self.name)
         self.params = sum([c.params for c in self.components], [])
         return self.params
 

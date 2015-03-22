@@ -4,10 +4,8 @@ import numpy as np
 import theano
 import theano.tensor as T
 from theano.tensor.shared_randomstreams import RandomStreams as TRandomStreams
-from sklearn import svm
 
 from learntools.libs.utils import idx_to_mask, mask_to_idx
-from learntools.libs.logger import log_me
 from learntools.libs.auc import auc
 from learntools.model.theano_utils import make_shared
 from learntools.model import gen_batches_by_keys, gen_batches_by_size
@@ -31,12 +29,7 @@ def _gen_batches(idxs, subjects, batch_size):
     return batches
 
 
-class ClassifierTypes:
-    LOGREG = 0
-    MLP = 1
-
-
-class SvmKT(BaseKT):
+class PairKT(BaseKT):
     '''a trainable, applyable model for logistic regression based kt with a previous result as reference
     Attributes:
         train_batches (int[][]): training batches are divided by subject_id and the rows of each subject
@@ -44,7 +37,6 @@ class SvmKT(BaseKT):
             necessity due to the recursive structure of the model
         valid_batches (int[][]): validation batches. See train_batches
     '''
-    @log_me('...building svmkt')
     def __init__(self, prepared_data, skill_matrix,
                  current_eeg_on=1, batch_size=30, previous_on=True, aggregate=0, day_on=True, time_vector_width=5, **kwargs):
         '''
@@ -159,7 +151,6 @@ class SvmKT(BaseKT):
         y = correct_y[base_indices]
         self._correct_y = correct_y
 
-        self.svm = svm.SVR(kernel='poly', degree=2, C=0.001)
         feature_vector = T.concatenate(classifier_inputs, axis=1)
         feature_vector.name = 'feature_vector'
         self.gen_inputs = theano.function(
@@ -200,14 +191,14 @@ class SvmKT(BaseKT):
     def train_full(self, **kwargs):
         train_feats, train_y = self._get_data_from_batches(self.train_batches)
 
-        print("training svm...")
-        self.svm.fit(train_feats, train_y)
-        print("finished training svm")
+        print("training ...")
+        self.classifier.fit(train_feats, train_y)
+        print("finished training")
 
         sum_preds = None
         for i in xrange(20):
             test_feats, test_y = self._get_data_from_batches(self.valid_batches)
-            preds = self.svm.predict(test_feats)
+            preds = self.classifier.predict(test_feats)
             if sum_preds is None:
                 sum_preds = preds
             else:

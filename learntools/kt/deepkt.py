@@ -7,9 +7,8 @@ import numpy as np
 from learntools.libs.utils import idx_to_mask, mask_to_idx
 from learntools.libs.logger import log_me
 from learntools.model.mlp import HiddenNetwork, MLP
-from learntools.model.math import rectifier
 from learntools.model.theano_utils import make_shared
-from learntools.model import Model, gen_batches_by_keys, gen_batches_by_size
+from learntools.model import gen_batches_by_keys, gen_batches_by_size
 from learntools.kt.base import BaseKT
 
 from theano import config
@@ -102,7 +101,6 @@ class DeepKT(BaseKT):
         correct_y = make_shared(correct_y, to_int=True, name='correct')
         eeg_full = make_shared(eeg_full, name='eeg')
 
-        rng = np.random.RandomState(1234)
         t_dropout = T.scalar('dropout')
         skill_accumulator = make_shared(np.zeros((N, combiner_width)), name='skill_accumulator')
 
@@ -111,11 +109,9 @@ class DeepKT(BaseKT):
         if previous_eeg_on:
             combiner_n_in += eeg_vector_len
         combiner = HiddenNetwork(
-            rng=rng,
-            n_in=combiner_n_in,
-            size=[combiner_width] * combiner_depth,
-            activation=rectifier,
-            dropout=t_dropout
+            size=[combiner_n_in] + [combiner_width] * combiner_depth,
+            activation='rectifier',
+            name='combiner'
         )
 
         # setup main network component
@@ -125,11 +121,10 @@ class DeepKT(BaseKT):
         if current_eeg_on:
             classifier_n_in += eeg_vector_len
         # final softmax classifier
-        classifier = MLP(rng=rng,
-                         n_in=classifier_n_in,
+        classifier = MLP(n_in=classifier_n_in,
                          size=[main_net_width] * main_net_depth,
                          n_out=3,
-                         dropout=t_dropout)
+                         name='classifier')
 
         # STEP 3.1 stuff that goes in scan
         current_skill = skill_matrix[skill_x[base_indices]]
@@ -146,14 +141,14 @@ class DeepKT(BaseKT):
             combiner_inputs.append(previous_eeg_vector)
         t_combiner_inputs = T.concatenate(combiner_inputs, axis=1)
         t_combiner_inputs.name = 'combiner_inputs'
-        combiner_out = combiner.instance(t_combiner_inputs)
+        combiner_out = combiner.instance(t_combiner_inputs, dropout=t_dropout)
         classifier_inputs = [current_skill]
         if combiner_on:
             classifier_inputs.append(combiner_out)
         if current_eeg_on:
             classifier_inputs.append(current_eeg_vector)
         # probability of y for each 0, 1, 2
-        pY = classifier.instance(T.concatenate(classifier_inputs, axis=1))
+        pY = classifier.instance(T.concatenate(classifier_inputs, axis=1), dropout=t_dropout)
         # ########
         # STEP3: create the theano functions to run the model
 

@@ -173,7 +173,9 @@ class DeepKT(BaseKT):
         }
 
         # collect all theano updates
-        params = chain.from_iterable(n.params for n in subnets)
+        params = list(chain.from_iterable(n.params for n in subnets))
+        if mutable_skill:
+            params += [skill_matrix]
         update_parameters = [(param, param - learning_rate * T.grad(cost, param))
                              for param in params]
         # propagation of previous skill to next is computed as an update

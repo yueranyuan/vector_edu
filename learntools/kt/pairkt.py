@@ -55,7 +55,7 @@ class PairKT(BaseKT):
         train_mask = idx_to_mask(train_idx, len(ds['subject']))
         valid_mask = idx_to_mask(valid_idx, len(ds['subject']))
 
-        sorted_i = sorted(xrange(N), key=lambda i: (ds['subject'][i]))
+        sorted_i = sorted(xrange(N), key=lambda(i): (ds['subject'][i]))
         ds.reorder(sorted_i)
 
         train_mask = train_mask[sorted_i]

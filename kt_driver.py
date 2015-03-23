@@ -13,10 +13,12 @@ class ModelType(object):
     LOGKT = 1
     PREVLOGKT = 2
     SVMKT = 3
+    NEIGHBORKT = 4
+    MAJORITY = 5
 
 
 @log_me()
-def run(task_num, model_type=ModelType.DEEPKT, top_n=14, **kwargs):
+def run(task_num, model_type=ModelType.NEIGHBORKT, top_n=14, **kwargs):
     if model_type == ModelType.DEEPKT:
         from learntools.kt.deepkt import DeepKT as SelectedModel
     elif model_type == ModelType.LOGKT:
@@ -25,6 +27,10 @@ def run(task_num, model_type=ModelType.DEEPKT, top_n=14, **kwargs):
         from learntools.kt.prevlogkt import PrevLogKT as SelectedModel
     elif model_type == ModelType.SVMKT:
         from learntools.kt.svmkt import SvmKT as SelectedModel
+    elif model_type == ModelType.NEIGHBORKT:
+        from learntools.kt.neighborkt import NeighborKT as SelectedModel
+    elif model_type == ModelType.MAJORITY:
+        from learntools.kt.majoritykt import MajorityKT as SelectedModel
     else:
         raise Exception("model type is not valid")
 

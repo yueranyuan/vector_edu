@@ -176,4 +176,8 @@ ALL_PARAMS['wavelet_search'] = {'wavelet_depth': GenVar(3, 7, type=int),
                                 'duration': GenVar(5, 15, type=int)}
 ALL_PARAMS['emotiv_wide_search4'] = combine_dict(ALL_PARAMS['emotiv_wide_search3'],
                                                  ALL_PARAMS['wavelet_search'])
+
+ALL_PARAMS['neighborkt'] = {'k': GenVar(10, 50, type=int),
+                            'pre': GenVar(30, 100, type=int),
+                            'post': GenVar(30, 100, type=int)}
 all_param_set_keys = ALL_PARAMS.keys()

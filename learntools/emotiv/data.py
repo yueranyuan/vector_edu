@@ -192,7 +192,7 @@ def _segment_gen(segment_idx, segment_cond):
         i = j
 
 
-def segment_raw_data(dataset_name, conds=None, duration=10, sample_rate=128, **kwargs):
+def load_raw_data(dataset_name, conds=None, duration=10, sample_rate=128, **kwargs):
     """Loads raw siegle data from a pickled Dataset and extracts sequences of
     eeg vectors which have a single known label.
 
@@ -255,11 +255,11 @@ def segment_raw_data(dataset_name, conds=None, duration=10, sample_rate=128, **k
     for i, seg_data in enumerate(segments):
         new_ds[i] = seg_data
 
-    new_ds = gen_fft_features(new_ds, duration=duration, sample_rate=sample_rate)
-    #new_ds = gen_wavelet_features(new_ds, duration=duration, sample_rate=sample_rate)
-
     return new_ds
 
+def segment_raw_data(dataset_name, **kwargs):
+    gen_features = gen_fft_features # gen_wavelet_features
+    return gen_features(load_raw_data(dataset_name, **kwargs), **kwargs)
 
 class FeatureGenerationException(Exception):
     pass

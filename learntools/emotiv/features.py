@@ -19,7 +19,7 @@ import scipy.stats
 
 import sys
 
-def eig_corr(data):
+def eig_corr(data, **kwargs):
     """Ported from https://github.com/drewabbot/kaggle-seizure-prediction/blob/master/qms/QT_eig_corr.m
     data: multichannel eeg data
     lambda: eigenvalues
@@ -30,7 +30,7 @@ def eig_corr(data):
     w, v = np.linalg.eig(C)
     return np.sort(w)
 
-def frequency_bands(data, sfreq=128, tfreq=40, ppow=0.5, bands=(0.1, 4.0, 8.0, 12.0, 30.0, 64.0)):
+def frequency_bands(data, sfreq=128, tfreq=40, ppow=0.5, bands=(0.1, 4.0, 8.0, 12.0, 30.0, 64.0), **kwargs):
     """Ported from https://github.com/drewabbot/kaggle-seizure-prediction/blob/master/qms/QT_6_freq_bands.m
     data: multichannel eeg data
     sfreq: sampling frequency
@@ -71,7 +71,7 @@ def frequency_bands(data, sfreq=128, tfreq=40, ppow=0.5, bands=(0.1, 4.0, 8.0, 1
 
     return (dspect, spentropy_channels, spentropy_bands, spedge, lxchannels, lxfreqbands)
 
-def stat_moments(data):
+def stat_moments(data, **kwargs):
     """Ported from https://github.com/drewabbot/kaggle-seizure-prediction/blob/master/qms/QT_statistical_moments.m
     data: multichannel eeg data
     m: mean
@@ -88,7 +88,7 @@ def stat_moments(data):
 
     return (m, v, s, k)
 
-def hjorth(data):
+def hjorth(data, **kwargs):
     """https://notendur.hi.is/steinng/qeegeliability07.pdf section 2.3.2
     data: multichannel eeg data
     activity: a0
@@ -108,6 +108,9 @@ def hjorth(data):
     complexity = np.sqrt(a2 / a1 - a1 / a0)
 
     return (activity, mobility, complexity)
+
+def all_features(*args, **kwargs):
+    return (eig_corr(*args, **kwargs),) + frequency_bands(*args, **kwargs) + stat_moments(*args, **kwargs) + hjorth(*args, **kwargs)
 
 if __name__ == '__main__':
     eeg_dataset = sys.argv[1] # pass in converted raw data path

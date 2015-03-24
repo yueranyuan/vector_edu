@@ -257,9 +257,6 @@ def load_raw_data(dataset_name, conds=None, duration=10, sample_rate=128, **kwar
 
     return new_ds
 
-def segment_raw_data(dataset_name, **kwargs):
-    gen_features = gen_fft_features # gen_wavelet_features
-    return gen_features(load_raw_data(dataset_name, **kwargs), **kwargs)
 
 class FeatureGenerationException(Exception):
     pass
@@ -306,7 +303,7 @@ def _gen_featured_dataset(ds, func, *args, **kwargs):
     return new_ds
 
 
-def gen_fft_features(ds, duration=10, sample_rate=128, cutoffs=None):
+def gen_fft_features(ds, duration=10, sample_rate=128, cutoffs=None, **kwargs):
     if cutoffs is None:
         cutoffs = [0.5, 4.0, 7.0, 12.0, 30.0]
 
@@ -330,7 +327,7 @@ def gen_fft_features(ds, duration=10, sample_rate=128, cutoffs=None):
     return _gen_featured_dataset(ds, _fft_eeg_segment, duration=duration, sample_rate=sample_rate, cutoffs=cutoffs)
 
 
-def gen_wavelet_features(ds, duration=10, sample_rate=128, depth=5, min_length=3, max_length=5, family='db6'):
+def gen_wavelet_features(ds, duration=10, sample_rate=128, depth=5, min_length=3, max_length=5, family='db6', **kwargs):
     def _wavelet_eeg_segment(eeg_segment, duration, sample_rate, depth, min_length, max_length, family):
         # cut eeg to desired length (so that all wavelets are the same length)
         desired_length = duration * sample_rate
@@ -350,6 +347,19 @@ def gen_wavelet_features(ds, duration=10, sample_rate=128, depth=5, min_length=3
     return _gen_featured_dataset(ds, _wavelet_eeg_segment, duration=duration, sample_rate=sample_rate,
                                  depth=depth, min_length=min_length, max_length=max_length, family=family)
 
+
+def gen_features_with(feature_generator, concatenate=True):
+    def gen_features(ds, *args, **kwargs):
+        def _feature_generator(*args, **kwargs):
+            features = feature_generator(*args, **kwargs)
+            if concatenate:
+                return np.concatenate([feature.ravel() for feature in features])
+            return features
+        return _gen_featured_dataset(ds, _feature_generator, *args, **kwargs)
+
+    return gen_features
+
+
 def filter_indices_by_condition(dataset, idx, conds):
     mapping = dict(dataset['condition'].ienum_pairs)
     idx = np.array(idx)
@@ -357,3 +367,8 @@ def filter_indices_by_condition(dataset, idx, conds):
     want = [dataset.get_data('condition')[idx] == mapping[ACTIVITY_CONDITIONS[cond]] for cond in conds]
     return idx[reduce(np.logical_or, want)]
     return new_ds
+
+
+from learntools.emotiv.features import *
+def segment_raw_data(dataset_name, gen_features=gen_features_with(all_features), **kwargs):
+    return gen_features(load_raw_data(dataset_name, **kwargs), **kwargs)

@@ -702,10 +702,10 @@ class ConvolutionalLayer(NetworkComponent):
             rng.randint(999999))
 
         if W is None:
-            W_values = numpy.asarray(
+            W_values = np.asarray(
                 rng.uniform(
-                    low=-numpy.sqrt(6. / (n_in + n_out)),
-                    high=numpy.sqrt(6. / (n_in + n_out)),
+                    low=-np.sqrt(6. / (n_in + n_out)),
+                    high=np.sqrt(6. / (n_in + n_out)),
                     size=(1, 1, field_width, 1)
                 ),
                 dtype=theano.config.floatX
@@ -716,7 +716,7 @@ class ConvolutionalLayer(NetworkComponent):
             W = theano.shared(value=W_values, name=self.subname('W'), borrow=True)
 
         if b is None:
-            b_values = numpy.zeros((1,), dtype=theano.config.floatX)
+            b_values = np.zeros((1,), dtype=theano.config.floatX)
             b = theano.shared(value=b_values, name=self.subname('b'), borrow=True)
 
         self.W = W

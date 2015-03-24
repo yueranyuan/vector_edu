@@ -301,4 +301,4 @@ if __name__ == '__main__':
     # analyze(bucket='cmu-data', subfolder='vectoredu/results', cache_dir='results', start_time=start_time)
     # analyze(cache_dir='results', start_time=start_time)
     # analyze_recent(days=2, local_dir='.')
-    analyze(start_time=datetime(2015, 3, 8, 3, 00), local_dir='.', most_recent_n=600)
+    analyze(start_time=datetime(2015, 3, 8, 3, 00), local_dir='.', most_recent_n=100)

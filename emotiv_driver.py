@@ -17,7 +17,7 @@ Options:
     -p <param_set>, --param_set=<param_set>
         The name of the parameter set to use [default: emotiv_wide_search4].
     -f <file>, --file=<file>
-        The data file to use [default: data/emotiv_all.gz].
+        The data file to use [default: raw_data/kkchang_matlab_fixed.mat].
     -o <file>, --out=<file>
         The name for the log file to be generated.
     -q, --quiet
@@ -25,7 +25,7 @@ Options:
     -t, --task_number=<ints>
         A counter representing the queue position of the current job [default: 1].
     -m <model>, --model=<model>
-        The name of the model family that we are using [default: batchnorm].
+        The name of the model family that we are using [default: randomforest].
 """
 
 from __future__ import print_function, division
@@ -100,6 +100,7 @@ class ModelType(object):
     SVM = 5
     MULTISTAGE_BATCH_NORM = 6
     RANDOMFOREST = 7
+    ENSEMBLE = 8
 
 
 @log_me()
@@ -139,6 +140,10 @@ def run(task_num=0, cv_rand=1, model_type=ModelType.BASE, **kwargs):
             train_idx, valid_idx = cv_split_randomized(dataset, percent=0.1, fold_index=task_num)
         else:
             train_idx, valid_idx = cv_split(dataset, percent=0.1, fold_index=task_num)
+    elif model_type == ModelType.ENSEMBLE:
+        from learntools.emotiv.ensemble import Ensemble as SelectedModel
+        dataset = smart_load_data(**kwargs)
+        train_idx, valid_idx = cv_split_randomized(dataset, percent=0.2, fold_index=task_num)
     else:
         raise Exception("model type is not valid")
     prepared_data = (dataset, train_idx, valid_idx)
@@ -199,6 +204,8 @@ if __name__ == '__main__':
             run(task_num=task_num, model_type=ModelType.SVM, **params)
         elif model == 'randomforest':
             run(task_num=task_num, model_type=ModelType.RANDOMFOREST, **params)
+        elif model == 'ensemble':
+            run(task_num=task_num, model_type=ModelType.ENSEMBLE, **params)
         elif model == 'multistage_batchnorm':
             from learntools.emotiv.multistage_batchnorm import run as multistage_batchnorm_run
             no_conds_params = combine_dict(params, {'conds': None})

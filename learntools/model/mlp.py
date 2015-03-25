@@ -56,7 +56,7 @@ class ConvolutionalMLP(NetworkComponent):
             name=self.subname('convolutional')
         )
 
-        conv_n_out = (n_in - field_width + 1) / ds_factor + (1 if field_width % ds_factor == 0 else 0)
+        conv_n_out = self.hidden.n_out
         self.logRegressionLayer = LogisticRegression(
             n_in=conv_n_out,
             n_out=n_out,

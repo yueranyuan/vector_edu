@@ -201,7 +201,7 @@ class SeqColumn(Column):
             self._data[row][col] = value
 
     def __getitem__(self, key):
-        if isinstance(key, int):
+        if isinstance(key, int) or isinstance(key, slice) or isinstance(key, list):
             return self._data[key]
         else:
             #FIXME this case is broken
@@ -472,6 +472,9 @@ class Dataset(object):
 
     def __str__(self):
         return "<Dataset[" + ', '.join([c.name for c in self.columns]) + "]>"
+
+    def __repr__(self):
+        return self.__str__()
 
     def to_pickle(self):
         '''convert the dataset into a serializable format

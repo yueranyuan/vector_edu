@@ -13,11 +13,6 @@ from learntools.model.net import AutoencodingBatchNormLayer
 from learntools.emotiv.batchnorm import BatchNorm
 
 
-def run(**kwargs):
-    autoencoder1 = AutoencodingBatchNorm(**kwargs)
-    print(autoencoder1.train_full(**kwargs))
-
-
 class AutoencodingBatchNorm(BatchNorm):
     @log_me('...building AutoencodingBatchNorm')
     def __init__(self, prepared_data, batch_size=30, L1_reg=0., L2_reg=0.,

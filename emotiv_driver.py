@@ -1,32 +1,30 @@
 """Emotiv driver.
 run accepts processed data as a text file, trains and validates the model.
-convert_raw accepts raw data from a directory of .mat files and pickles them
-into a Dataset object stored in the output file.
+convert accepts raw data from a directory of .mat files and pickles them into a Dataset object.
 
 Usage:
-    emotiv_driver.py [options]
-    emotiv_driver.py run [options]
-    emotiv_driver.py run_raw [options]
-    emotiv_driver.py convert_raw <directory> <output>
-    emotiv_driver.py run_subject [options]
-    emotiv_driver.py run_autoencoder [options]
-    emotiv_driver.py run_batchnorm [options]
-    emotiv_driver.py run_convbatchnorm [options]
-    emotiv_driver.py run_multistage [options]
+    emotiv_driver.py run [-i <input>] [-m <model>] [-f <feature>...] [-c <cond>...] [options]
+    emotiv_driver.py convert <directory> <output>
 
 Options:
+    -m <model>, --model=<model>
+        The name of the model family to use [default: batchnorm].
+    -f <feature>, --feature=<feature>
+        The names of features to use [default: eig_corr frequency_bands stat_moments hjorth].
+    -c <cond>, --cond=<cond>
+        The names of conditions to use [default: PositiveLowArousalPictures PositiveHighArousalPictures].
+    -i <input>, --in=<input>
+        The input data file to use [default: raw_data/emotiv_processed.mat].
+    -e <error>, --err=<error>
+        The name for the log file to be generated.
+    -o <output>, --out=<output>
+        The name of the file to saved trained model parameters.
     -p <param_set>, --param_set=<param_set>
         The name of the parameter set to use [default: emotiv_wide_search2].
-    -f <file>, --file=<file>
-        The data file to use [default: raw_data/emotiv_processed.mat].
-    -o <file>, --out=<file>
-        The name for the log file to be generated.
     -q, --quiet
-        Do not output to a log file.
+        Suppress writing to log and output files.
     -t, --task_number=<ints>
         A counter representing the queue position of the current job [default: 0].
-    -m <model>, --model=<model>
-        The name of the model family that we are using [default: multistage_batchnorm].
 """
 
 from __future__ import print_function, division
@@ -37,10 +35,10 @@ warnings.filterwarnings("ignore", category=DeprecationWarning)
 
 from docopt import docopt
 
-from learntools.libs.utils import combine_dict
 from learntools.libs.logger import gen_log_name, log_me, set_log_file
-from learntools.emotiv.data import prepare_data, convert_raw_data, segment_raw_data, load_siegle_data
+from learntools.emotiv.data import prepare_data, convert_raw_data, load_raw_data, load_siegle_data, gen_featured_dataset
 from learntools.emotiv.filter import filter_data
+from learntools.emotiv.features import construct_feature_generator
 from learntools.data import cv_split
 from learntools.data.crossvalidation import cv_split_within_column
 import learntools.deploy.config as config
@@ -51,16 +49,15 @@ release_lock.release()  # TODO: use theano config instead. We have to figure out
 # what we need
 
 
-def smart_load_data(dataset_name=None, **kwargs):
+def smart_load_data(dataset_name=None, features=None, **kwargs):
     _, ext = os.path.splitext(dataset_name)
     if ext == '.mat':
         dataset = load_siegle_data(dataset_name=dataset_name, **kwargs)
-    elif ext == '.gz':
-        dataset = segment_raw_data(dataset_name=dataset_name, **kwargs)
+    elif ext == '.gz' or ext == '.pickle':
+        dataset = load_raw_data(dataset_name=dataset_name, **kwargs)
         filter_data(dataset)
-    elif ext == '.pickle':
-        dataset = segment_raw_data(dataset_name=dataset_name, **kwargs)
-        filter_data(dataset)
+        feature_generator = construct_feature_generator(features)
+        dataset = gen_featured_dataset(dataset, feature_generator, **kwargs)
     elif ext == '.txt':
         dataset = prepare_data(dataset_name)
         filter_data(dataset, remove_suffix=True)
@@ -69,122 +66,65 @@ def smart_load_data(dataset_name=None, **kwargs):
     return dataset
 
 
-class ModelType(object):
-    BASE = 0
-    RAW_BASE = 1
-    SUBJECT = 2
-    AUTOENCODER = 3
-    BATCH_NORM = 4
-    SVM = 5
-    MULTISTAGE_BATCH_NORM = 6
-    CONV_BATCH_NORM = 7
-
-
 @log_me()
-def run(task_num=0, model_type=ModelType.BASE, **kwargs):
-    if model_type == ModelType.BASE:
-        from learntools.emotiv.base import BaseEmotiv as SelectedModel
-        dataset = prepare_data(**kwargs)
-        train_idx, valid_idx = cv_split(dataset, percent=0.1, fold_index=task_num)
-    elif model_type == ModelType.RAW_BASE:
-        from learntools.emotiv.base import BaseEmotiv as SelectedModel
-        dataset = segment_raw_data(**kwargs)
-        train_idx, valid_idx = cv_split(dataset, percent=0.50, fold_index=task_num)
-    elif model_type == ModelType.SUBJECT:
-        from learntools.emotiv.persubject import SubjectEmotiv as SelectedModel
-        dataset = segment_raw_data(**kwargs)
-        train_idx, valid_idx = cv_split_within_column(dataset, percent=0.25, fold_index=task_num, min_length=4,
-                                                      key='subject')
-    elif model_type == ModelType.AUTOENCODER:
-        from learntools.emotiv.emotiv_autoencode import AutoencodeEmotiv as SelectedModel
-        dataset = smart_load_data(**kwargs)
-        train_idx, valid_idx = cv_split(dataset, percent=0.10, fold_index=task_num)
-    elif model_type == ModelType.BATCH_NORM:
-        from learntools.emotiv.batchnorm import BatchNorm as SelectedModel
-        dataset = smart_load_data(**kwargs)
-        train_idx, valid_idx = cv_split(dataset, percent=0.1, fold_index=task_num)
-    elif model_type == ModelType.CONV_BATCH_NORM:
-        from learntools.emotiv.batchnorm import ConvBatchNorm as SelectedModel
-        dataset = smart_load_data(**kwargs)
-        train_idx, valid_idx = cv_split(dataset, percent=0.1, fold_index=task_num)
-    elif model_type == ModelType.SVM:
-        from learntools.emotiv.svm import SVM as SelectedModel
-        dataset = smart_load_data()
-        train_idx, valid_idx = cv_split(dataset, percent=0.1, fold_index=task_num)
-    else:
-        raise Exception("model type is not valid")
-    prepared_data = (dataset, train_idx, valid_idx)
+def run(task_num, model, **kwargs):
 
+    if model == 'multistage_batchnorm':
+        no_conds_params = dict(params, conds=None)
+        dataset = smart_load_data(**no_conds_params)
+        train_idx, valid_idx = cv_split(dataset, percent=0.1, fold_index=task_num)
+        from learntools.emotiv.multistage_batchnorm import AutoencodingBatchNorm as SelectedModel
+    else:
+        dataset = smart_load_data(**kwargs)
+        train_idx, valid_idx = cv_split(dataset, percent=0.1, fold_index=task_num)
+
+        if model == 'base':
+            from learntools.emotiv.base import BaseEmotiv as SelectedModel
+        elif model == 'subject':
+            from learntools.emotiv.persubject import SubjectEmotiv as SelectedModel
+            train_idx, valid_idx = cv_split_within_column(dataset, percent=0.25, fold_index=task_num, min_length=4, key='subject')
+        elif model == 'autoencoder':
+            from learntools.emotiv.emotiv_autoencode import AutoencodeEmotiv as SelectedModel
+        elif model == 'batchnorm':
+            from learntools.emotiv.batchnorm import BatchNorm as SelectedModel
+        elif model == 'conv_batchnorm':
+            from learntools.emotiv.batchnorm import ConvBatchNorm as SelectedModel
+        elif model == 'svm':
+            from learntools.emotiv.svm import SVM as SelectedModel
+        else:
+            raise ValueError("model type is not valid")
+
+    prepared_data = (dataset, train_idx, valid_idx)
     model = SelectedModel(prepared_data, **kwargs)
     model.train_full(**kwargs)
 
-'''
-def build_batch_norm(task_num, **kwargs):
-    import numpy as np
-    from learntools.emotiv.batchnorm import BatchNormClassifier
-    dataset = load_siegle_data(**kwargs)
-    train_idx, valid_idx = cv_split(dataset, percent=0.1, fold_index=task_num)
-    xs = dataset.get_data('eeg')
-    ys = dataset.get_data('condition')
-    classifier = BatchNormClassifier(n_in=xs.shape[1], n_out=len(np.unique(ys)), **kwargs)
-    classifier.fit(xs, ys, train_idx, valid_idx)
-'''
 
 if __name__ == '__main__':
     args = docopt(__doc__)
 
-    params = config.get_config(args['--param_set'])
-    log_filename = args['--out'] or gen_log_name()
-    if args['--quiet']:
-        log_filename = os.devnull
-        print("Not printing to log file.")
-    set_log_file(log_filename)
-
-    if args['--file']:
-        params['dataset_name'] = args['--file']
-
-    task_num = int(args['--task_number'])
-
-    cond_types = [
-        ['EyesClosed', 'EyesOpen'],
-        ["PositiveLowArousalPictures", "NegativeLowArousalPictures"],
-        ["PositiveHighArousalPictures", "NegativeHighArousalPictures"],
-        ["PositiveHighArousalPictures", "PositiveLowArousalPictures"],
-        ["NegativeHighArousalPictures", "NegativeLowArousalPictures"]]
-    params['conds'] = cond_types[task_num % len(cond_types)]
-
     if args['run']:
-        run(task_num=task_num, model_type=ModelType.BASE, **params)
-    elif args['run_raw']:
-        run(task_num=task_num, model_type=ModelType.RAW_BASE, **params)
-    elif args['convert_raw']:
+        params = config.get_config(args['--param_set'])
+        err_filename = args['--err'] or gen_log_name()
+        out_filename = args['--out']
+        if args['--quiet']:
+            log_filename = os.devnull
+            out_filename = os.devnull
+            print("Suppressing output.")
+        set_log_file(err_filename)
+
+        task_num = int(args['--task_number'])
+
+        params['model'] = args['--model']
+        params['features'] = args['--feature']
+        params['conds'] = args['--cond']
+        params['dataset_name'] = args['--in']
+        params['output_file'] = args['--out']
+        params['task_num'] = int(args['--task_number'])
+
+        run(**params)
+
+    elif args['convert']:
         convert_raw_data(args['<directory>'], args['<output>'])
-    elif args['run_subject']:
-        run(task_num=task_num, model_type=ModelType.SUBJECT, **params)
-    elif args['run_autoencoder']:
-        run(task_num=task_num, model_type=ModelType.AUTOENCODER, **params)
-    elif args['run_batchnorm']:
-        run(task_num=task_num, model_type=ModelType.BATCH_NORM, **params)
-    elif args['run_convbatchnorm']:
-        run(task_num=task_num, model_type=ModelType.CONV_BATCH_NORM, **params)
-    elif args['run_multistage']:
-        from learntools.emotiv.multistage import run_multistage
-        run_multistage(task_num=task_num, **params)
+
     else:
-        # allowing us to select models with a flag without deprecating the original format
-        model = args['--model']
-        if model == 'batchnorm':
-            run(task_num=task_num, model_type=ModelType.BATCH_NORM, **params)
-        elif model == 'svm':
-            run(task_num=task_num, model_type=ModelType.SVM, **params)
-        elif model == 'multistage_batchnorm':
-            from learntools.emotiv.multistage_batchnorm import run as multistage_batchnorm_run
-            no_conds_params = combine_dict(params, {'conds': None})
-            dataset = smart_load_data(**no_conds_params)
-            train_idx, valid_idx = cv_split(dataset, percent=0.1, fold_index=task_num)
-            prepared_data = (dataset, train_idx, valid_idx)
-            multistage_batchnorm_run(prepared_data=prepared_data, **params)
-        else:
-            raise Exception("invalid model family")
-    
-    print("Finished")
+        raise Exception("Unknown command")

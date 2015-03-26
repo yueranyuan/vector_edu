@@ -14,12 +14,15 @@ TODO:
 - Fractal dimensions
 """
 
+from learntools.libs.eeg import signal_to_freq_bins
+from learntools.libs.wavelet import signal_to_wavelet
+
 import numpy as np
 import scipy.stats
 
 import sys
 
-def eig_corr(data, **kwargs):
+def _eig_corr(data, **kwargs):
     """Ported from https://github.com/drewabbot/kaggle-seizure-prediction/blob/master/qms/QT_eig_corr.m
     data: multichannel eeg data
     lambda: eigenvalues
@@ -29,6 +32,11 @@ def eig_corr(data, **kwargs):
     C[np.isinf(C)] = 0.0
     w, v = np.linalg.eig(C)
     return np.sort(w)
+
+
+def eig_corr(data, **kwargs):
+    return (_eig_corr(data, **kwargs),)
+
 
 def frequency_bands(data, sfreq=128, tfreq=40, ppow=0.5, bands=(0.1, 4.0, 8.0, 12.0, 30.0, 64.0), **kwargs):
     """Ported from https://github.com/drewabbot/kaggle-seizure-prediction/blob/master/qms/QT_6_freq_bands.m
@@ -66,10 +74,11 @@ def frequency_bands(data, sfreq=128, tfreq=40, ppow=0.5, bands=(0.1, 4.0, 8.0, 1
     spedge = abs(B).argmin(axis=0) / topfreq * tfreq
     
     # eigenvalues of spectral correlation matrix
-    lxchannels = abs(eig_corr(dspect))
-    lxfreqbands = abs(eig_corr(dspect.T))
+    lxchannels = abs(_eig_corr(dspect))
+    lxfreqbands = abs(_eig_corr(dspect.T))
 
     return (dspect, spentropy_channels, spentropy_bands, spedge, lxchannels, lxfreqbands)
+
 
 def stat_moments(data, **kwargs):
     """Ported from https://github.com/drewabbot/kaggle-seizure-prediction/blob/master/qms/QT_statistical_moments.m
@@ -87,6 +96,7 @@ def stat_moments(data, **kwargs):
     k = scipy.stats.kurtosis(data2)
 
     return (m, v, s, k)
+
 
 def hjorth(data, **kwargs):
     """https://notendur.hi.is/steinng/qeegeliability07.pdf section 2.3.2
@@ -109,8 +119,70 @@ def hjorth(data, **kwargs):
 
     return (activity, mobility, complexity)
 
-def all_features(*args, **kwargs):
-    return (eig_corr(*args, **kwargs),) + frequency_bands(*args, **kwargs) + stat_moments(*args, **kwargs) + hjorth(*args, **kwargs)
+
+def windowed_fft(data, duration=10, sample_rate=128, cutoffs=(0.5, 4.0, 7.0, 12.0, 30.0), **kwargs):
+    """
+    data: multichannel eeg data
+    duration: length of window
+    sample_rate: sample rate
+    cutoffs: fft bin thresholds
+    """
+    # Fourier transform on eeg
+    # Window size of 1 s, overlap by 0.5 s
+    eeg_freqs = []
+
+    for i in (x * 0.5 for x in xrange(duration * 2)):
+        # window is half second duration (in samples) by eeg vector length
+        window = data[int(i * sample_rate/2) : int((i + 1) * sample_rate/2)]
+        # there are len(cutoffs)-1 bins, window_freq is a list of will have a frequency vector of num channels
+        window_freq = signal_to_freq_bins(window, cutoffs=cutoffs, sampling_rate=sample_rate)
+
+        eeg_freqs.append(np.concatenate(window_freq))
+
+    # (num windows * num bins) * num channels
+    eeg_freqs = np.concatenate(eeg_freqs)
+    return (eeg_freqs,)
+
+
+def wavelet(data, duration=10, sample_rate=128, depth=1, min_length=10, max_length=None, family='db2', **kwargs):
+    # cut eeg to desired length (so that all wavelets are the same length)
+    desired_length = duration * sample_rate
+    if len(data) < desired_length:
+        raise FeatureGenerationException("signal not long enough")
+    data = data[:desired_length]
+
+    # wavelet transform
+    eeg_wavelets = []
+    for i in xrange(data.shape[1]):
+        eeg_wavelet = signal_to_wavelet(data[:, i], min_length=min_length, max_length=max_length,
+                                        depth=depth, family=family)
+        eeg_wavelets += eeg_wavelet
+
+    return (np.concatenate(eeg_wavelets),)
+
+
+FEATURE_MAP = {
+    'eig_corr': eig_corr,
+    'frequency_bands': frequency_bands,
+    'stat_moments': stat_moments,
+    'hjorth': hjorth,
+    'windowed_fft': windowed_fft,
+    'wavelet': wavelet,
+}
+
+
+def construct_feature_generator(feature_strs):
+    """Returns a feature function (which returns a flattened feature vector).
+    feature_strs: a list of strings representing features
+    """
+    feature_fns = [FEATURE_MAP[s] for s in feature_strs]
+
+    def _feature_generator(data, *args, **kwargs):
+        features = [np.concatenate([subfeature.ravel() for subfeature in feature_fn(data, *args, **kwargs)]) for feature_fn in feature_fns]
+        return np.concatenate(features)
+
+    return _feature_generator
+
 
 if __name__ == '__main__':
     eeg_dataset = sys.argv[1] # pass in converted raw data path
@@ -123,7 +195,6 @@ if __name__ == '__main__':
 
     for data in anscombe_quartet:
         print stat_moments(data)
-        print eig_corr(data)
 
     from learntools.emotiv.data import load_raw_data
     ds = load_raw_data(eeg_dataset, conds=['PositiveHighArousalPictures', 'PositiveLowArousalPictures'])

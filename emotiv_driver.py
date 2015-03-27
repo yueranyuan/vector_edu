@@ -33,12 +33,13 @@ from __future__ import print_function, division
 import os
 import warnings
 import random
+import cPickle as pickle
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 
 from docopt import docopt
 
 from learntools.libs.utils import combine_dict
-from learntools.libs.logger import gen_log_name, log_me, set_log_file
+from learntools.libs.logger import gen_log_name, log_me, set_log_file, get_log_file
 from learntools.emotiv.data import (prepare_data, convert_raw_data, segment_raw_data, load_siegle_data,
                                     gen_wavelet_features, gen_fft_features)
 from learntools.emotiv.filter import filter_data
@@ -149,7 +150,8 @@ def run(task_num=0, cv_rand=1, model_type=ModelType.BASE, **kwargs):
     prepared_data = (dataset, train_idx, valid_idx)
 
     model = SelectedModel(prepared_data, **kwargs)
-    model.train_full(**kwargs)
+    _, params = model.train_full(**kwargs)
+    pickle.dump(params, open("{log_name}.params".format(log_name=get_log_file()), "wb"))
 
 '''
 def build_batch_norm(task_num, **kwargs):

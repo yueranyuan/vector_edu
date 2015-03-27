@@ -8,6 +8,9 @@ from learntools.emotiv.skmodel import SKModel
 
 class SVM(SKModel):
     @log_me('...building SVM')
-    def __init__(self, prepared_data, **kwargs):
-        super(SVM, self).__init__(prepared_data, **kwargs)
-        self.c = svm.SVC(kernel='poly', degree=2, C=0.001)
+    def __init__(self, prepared_data, serialized=None, kernel='poly', degree=2, C=0.001, **kwargs):
+        if serialized:
+            classifier = serialized
+        else:
+            classifier = svm.SVC(kernel=kernel, degree=degree, C=C)
+        super(SVM, self).__init__(prepared_data, classifier=classifier, **kwargs)

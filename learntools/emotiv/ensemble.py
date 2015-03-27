@@ -10,9 +10,12 @@ from learntools.emotiv.skmodel import SKModel
 
 class Ensemble(SKModel):
     @log_me('...building Ensemble')
-    def __init__(self, prepared_data, **kwargs):
-        super(Ensemble, self).__init__(prepared_data, **kwargs)
-        self.c = LogRegEnsemble()
+    def __init__(self, prepared_data, serialized=None, **kwargs):
+        if serialized:
+            raise Exception("ensemble model is unserializable")
+        else:
+            classifier = LogRegEnsemble()
+        super(Ensemble, self).__init__(prepared_data, classifier=classifier, **kwargs)
 
 
 class LogRegEnsemble():

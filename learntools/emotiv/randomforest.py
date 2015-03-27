@@ -8,6 +8,9 @@ from learntools.emotiv.skmodel import SKModel
 
 class RandomForest(SKModel):
     @log_me('...building RandomForest')
-    def __init__(self, prepared_data, n_estimators=50, **kwargs):
-        super(RandomForest, self).__init__(prepared_data, **kwargs)
-        self.c = RandomForestClassifier(n_estimators=n_estimators)
+    def __init__(self, prepared_data, n_estimators=50, serialized=None, **kwargs):
+        if serialized:
+            classifier = serialized
+        else:
+            classifier = RandomForestClassifier(n_estimators=n_estimators)
+        super(RandomForest, self).__init__(prepared_data, classifier=classifier, **kwargs)

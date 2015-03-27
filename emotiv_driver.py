@@ -68,31 +68,21 @@ def smart_load_data(dataset_name=None, features=None, **kwargs):
 
 @log_me()
 def run(task_num, model, **kwargs):
-
     if model == 'multistage_batchnorm':
-        no_conds_params = dict(params, conds=None)
-        dataset = smart_load_data(**no_conds_params)
-        train_idx, valid_idx = cv_split(dataset, percent=0.1, fold_index=task_num)
-        from learntools.emotiv.multistage_batchnorm import AutoencodingBatchNorm as SelectedModel
-    else:
-        dataset = smart_load_data(**kwargs)
-        train_idx, valid_idx = cv_split(dataset, percent=0.1, fold_index=task_num)
+        kwargs = dict(kwargs, conds=None)
 
-        if model == 'base':
-            from learntools.emotiv.base import BaseEmotiv as SelectedModel
-        elif model == 'subject':
-            from learntools.emotiv.persubject import SubjectEmotiv as SelectedModel
-            train_idx, valid_idx = cv_split_within_column(dataset, percent=0.25, fold_index=task_num, min_length=4, key='subject')
-        elif model == 'autoencoder':
-            from learntools.emotiv.emotiv_autoencode import AutoencodeEmotiv as SelectedModel
-        elif model == 'batchnorm':
-            from learntools.emotiv.batchnorm import BatchNorm as SelectedModel
-        elif model == 'conv_batchnorm':
-            from learntools.emotiv.batchnorm import ConvBatchNorm as SelectedModel
-        elif model == 'svm':
-            from learntools.emotiv.svm import SVM as SelectedModel
-        else:
-            raise ValueError("model type is not valid")
+    dataset = smart_load_data(**kwargs)
+    train_idx, valid_idx = cv_split(dataset, percent=0.1, fold_index=task_num)
+    if model == 'batchnorm':
+        from learntools.emotiv.batchnorm import BatchNorm as SelectedModel
+    elif model == 'conv_batchnorm':
+        from learntools.emotiv.batchnorm import ConvBatchNorm as SelectedModel
+    elif model == 'multistage_batchnorm':
+        from learntools.emotiv.multistage_batchnorm import AutoencodingBatchNorm as SelectedModel
+    elif model == 'svm':
+        from learntools.emotiv.svm import SVM as SelectedModel
+    else:
+        raise ValueError("model type is not valid")
 
     prepared_data = (dataset, train_idx, valid_idx)
     model = SelectedModel(prepared_data, **kwargs)

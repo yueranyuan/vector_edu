@@ -11,6 +11,8 @@ Usage:
     emotiv_driver.py run_subject [options]
     emotiv_driver.py run_autoencoder [options]
     emotiv_driver.py run_batchnorm [options]
+    emotiv_driver.py run_conv [options]
+    emotiv_driver.py run_convbatchnorm [options]
     emotiv_driver.py run_multistage [options]
 
 Options:
@@ -76,7 +78,7 @@ def smart_load_data(dataset_name=None, feature_type='wavelet', duration=10, wave
         dataset = load_siegle_data(dataset_name=dataset_name, **kwargs)
     elif ext == '.txt':
         dataset = prepare_data(dataset_name=dataset_name, **kwargs)
-        filter_data(dataset)
+        filter_data(dataset, remove_suffix=True)
     elif ext == '.gz' or ext == '.pickle':
         dataset = segment_raw_data(dataset_name=dataset_name, **kwargs)
         if feature_type == 'wavelet':
@@ -102,6 +104,8 @@ class ModelType(object):
     MULTISTAGE_BATCH_NORM = 6
     RANDOMFOREST = 7
     ENSEMBLE = 8
+    CONV_BATCH_NORM = 9
+    CONV = 10
 
 
 @log_me()
@@ -126,6 +130,14 @@ def run(task_num=0, cv_rand=0, model_type=ModelType.BASE, **kwargs):
         train_idx, valid_idx = cv_split_randomized(dataset, percent=0.10, fold_index=task_num)
     elif model_type == ModelType.BATCH_NORM:
         from learntools.emotiv.batchnorm import BatchNorm as SelectedModel
+        dataset = smart_load_data(**kwargs)
+        train_idx, valid_idx = cv_split(dataset, percent=0.1, fold_index=task_num)
+    elif model_type == ModelType.CONV_BATCH_NORM:
+        from learntools.emotiv.batchnorm import ConvBatchNorm as SelectedModel
+        dataset = smart_load_data(**kwargs)
+        train_idx, valid_idx = cv_split(dataset, percent=0.1, fold_index=task_num)
+    elif model_type == ModelType.CONV:
+        from learntools.emotiv.conv import ConvEmotiv as SelectedModel
         dataset = smart_load_data(**kwargs)
         if cv_rand:
             train_idx, valid_idx = cv_split_randomized(dataset, percent=0.2, fold_index=task_num)
@@ -195,6 +207,10 @@ if __name__ == '__main__':
         run(task_num=task_num, model_type=ModelType.AUTOENCODER, **params)
     elif args['run_batchnorm']:
         run(task_num=task_num, model_type=ModelType.BATCH_NORM, **params)
+    elif args['run_conv']:
+        run(task_num=task_num, model_type=ModelType.CONV, **params)
+    elif args['run_convbatchnorm']:
+        run(task_num=task_num, model_type=ModelType.CONV_BATCH_NORM, **params)
     elif args['run_multistage']:
         from learntools.emotiv.multistage import run_multistage
         run_multistage(task_num=task_num, **params)

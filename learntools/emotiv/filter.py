@@ -34,9 +34,11 @@ def _get_acceptable_ids(fname=DEFAULT_CALIBRATION_FILE_LOCATION):
     return acceptable_ids
 
 
-def filter_data(data, calibration_file=DEFAULT_CALIBRATION_FILE_LOCATION, no_children=True):
+def filter_data(data, calibration_file=DEFAULT_CALIBRATION_FILE_LOCATION, no_children=True, remove_suffix=False):
     subjects = data.orig['subject']
     subject_ids = [subject.split('_')[0] for subject in subjects]
+    if remove_suffix:
+        subject_ids = [subject[:-len('.edf')] for subject in subject_ids if subject.endswith('.edf')]
     acceptable_ids = _get_acceptable_ids(fname=calibration_file)
     acceptable_ids = [os.path.splitext(x)[0] for x in acceptable_ids]
     if no_children:

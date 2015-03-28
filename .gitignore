@@ -1,0 +1,15 @@
+*.pyc
+*.pem
+*.log
+*.swp
+*.out
+*.pickle
+*.gz
+.hidden
+.DS_Store
+/data/
+/raw_data/
+/temp_store/
+/temp.py
+*.egg-info/
+/.idea/

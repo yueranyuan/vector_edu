@@ -204,6 +204,7 @@ class SeqColumn(Column):
         if isinstance(key, int):
             return self._data[key]
         else:
+            #FIXME this case is broken
             row, col = key
             if self._data is None:
                 raise Exception("Sequence column '{}' not initialized".format(self.name))

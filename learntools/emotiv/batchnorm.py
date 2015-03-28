@@ -12,7 +12,7 @@ from learntools.libs.logger import log_me
 from learntools.libs.auc import auc
 from learntools.model.theano_utils import make_shared
 from learntools.model import Model, gen_batches_by_size
-from learntools.model.net import BatchNormLayer, AutoencodingBatchNormLayer, TrainableNetwork
+from learntools.model.net import BatchNormLayer, AutoencodingBatchNormLayer, TrainableNetwork, ConvolutionalBatchNormLayer
 from learntools.libs.utils import max_idx
 
 
@@ -183,6 +183,89 @@ class SVMBinarizer(Binarizer):
 
     def apply(self, preds):
         return self.classifier.predict(preds)
+
+
+class ConvBatchNorm(BatchNorm):
+    @log_me('...building ConvBatchNorm')
+    def __init__(self, prepared_data, batch_size=30, L1_reg=0., L2_reg=0.,
+                 classifier_width=500, classifier_depth=2, rng_seed=42, field_width=20,
+                 learning_rate=0.0002, dropout_p=0.0, recon_loss_alpha=0.0, **kwargs):
+        """
+        Args:
+            prepared_data : (Dataset, [int], [int])
+                a tuple that holds the data to be used, the row indices of the
+                training set, and the row indices of the validation set
+            batch_size : int
+                The size of the batches used to train
+        """
+        # 1: Organize data into batches
+        ds, train_idx, valid_idx = prepared_data
+        input_size = ds.get_data('eeg').shape[1]
+        output_size = len(np.unique(ds.get_data('condition')))
+
+        self._xs = make_shared(ds.get_data('eeg'), name='eeg')
+        self._ys = make_shared(ds.get_data('condition'), to_int=True, name='condition')
+
+        self.train_idx = train_idx
+        self.batch_size = batch_size
+        self.valid_batches = gen_batches_by_size(valid_idx, 1)
+
+        # 2: Connect the model
+        rng = np.random.RandomState(rng_seed)
+        self.rng = rng
+
+        t_dropout = T.dscalar('dropout')
+        input_idxs = T.ivector('input_idxs')
+        input_layer = self._xs[input_idxs]
+        bn_updates, subnets = [], []
+        train_layer, infer_layer, updates_layer = input_layer, input_layer, []
+
+        n_in = input_size
+        n_out = (n_in - field_width + 1)
+        recon_losses = []
+        for i in xrange(classifier_depth):
+            bn_layer = ConvolutionalBatchNormLayer(n_in=n_in, n_out=n_out, field_width=field_width)
+            train_layer, infer_layer, updates_layer = bn_layer.instance(train_layer, infer_layer, dropout=t_dropout)
+            bn_updates.extend(updates_layer)
+            subnets.append(bn_layer)
+            #recon_loss = T.mean(T.sqr(train_layer - train_recon))
+            #recon_losses.append(recon_loss)
+            n_in = n_out
+            n_out = (n_in - field_width + 1)
+
+        # softmax
+        bn_layer = BatchNormLayer(n_in=n_in, n_out=output_size, activation='softmax', name='bnsoftmaxlayer')
+        train_pY, infer_pY, updates_layer = bn_layer.instance(train_layer, infer_layer)
+        bn_updates.extend(updates_layer)
+        subnets.append(bn_layer)
+
+        true_y = self._ys[input_idxs]
+        true_y.name = 'true_y'
+
+        # 3: Create theano functions
+        loss = -T.mean(T.log(train_pY + 1e-8)[T.arange(input_idxs.shape[0]), true_y])
+        loss.name = 'loss'
+        cost = (
+            loss
+            + L1_reg * sum([net.L1 for net in subnets])
+            + L2_reg * sum([net.L2_sqr for net in subnets])
+            # + recon_loss_alpha * T.sum(recon_losses)
+        )
+        cost.name = 'overall_cost'
+
+        params = chain.from_iterable(net.params for net in subnets)
+        update_parameters = [(param, param - learning_rate * T.grad(cost, param))
+                             for param in params] + bn_updates
+
+        self._tf_infer = theano.function(inputs=[input_idxs],
+                                         outputs=[loss, infer_pY[:, 1] - infer_pY[:, 0], input_idxs],
+                                         givens=[(t_dropout, 0.0)],
+                                         allow_input_downcast=True)
+        self._tf_train = theano.function(inputs=[input_idxs],
+                                         outputs=[loss, train_pY[:, 1] - train_pY[:, 0], input_idxs],
+                                         givens=[(t_dropout, dropout_p)],
+                                         allow_input_downcast=True, updates=update_parameters)
+        self.subnets = subnets
 
 
 def acc_by_cutoff(y, preds, cutoff):

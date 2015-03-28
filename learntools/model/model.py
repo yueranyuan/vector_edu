@@ -168,5 +168,8 @@ def gen_batches_by_size(idxs, batch_size):
         >>> gen_batches_by_size([0, 1, 2, 3, 4], 2)
         [[0, 1], [2, 3]]
     '''
+    if len(idxs) < batch_size:
+      return [idxs]
+
     return [idxs[i * batch_size: (i + 1) * batch_size] for i in
             xrange(int(len(idxs) / batch_size))]

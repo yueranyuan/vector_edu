@@ -1,6 +1,10 @@
 *.pyc
 *.pem
 *.log
+*.swp
+*.out
+*.pickle
+*.gz
 .hidden
 .DS_Store
 /data/

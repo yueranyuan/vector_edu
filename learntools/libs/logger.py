@@ -1,6 +1,6 @@
 import datetime
 from random import randint
-import inspect
+import json
 
 
 __LOG_FILE__ = None
@@ -22,7 +22,7 @@ def log(txt, also_print=False):
 
 def log_me(start_with=None):
     def logging_decorator(func):
-        echo_wrapper = echo(func, write=log)
+        echo_wrapper = echo(func, write=log, format=format_all_args_json)
 
         def func_wrapper(*args, **kwargs):
             if start_with:
@@ -30,18 +30,6 @@ def log_me(start_with=None):
             return echo_wrapper(*args, **kwargs)
         return func_wrapper
     return logging_decorator
-
-
-def log_args(currentframe, include_kwargs=False, exclude=None):
-    _, _, _, arg_dict = inspect.getargvalues(currentframe)
-    explicit_args = [(k, v) for k, v in arg_dict.iteritems()
-                     if isinstance(v, (int, long, float, str))]
-    keyword_args = arg_dict.get('kwargs', {}).items() if include_kwargs else []
-    print explicit_args
-    all_args = explicit_args + keyword_args
-    all_args = filter(lambda (k, v): k not in exclude, all_args)
-
-    log(', '.join(['{0}={1}'.format(*v) for v in all_args]))
 
 
 def gen_log_name(uid=None):
@@ -61,14 +49,53 @@ import sys
 def format_arg_value(arg_val):
     """ Return a string representing a (name, value) pair.
 
-    >>> format_arg_value(('x', (1, 2, 3)))
-    'x=(1, 2, 3)'
+    Examples:
+        >>> format_arg_value(('x', (1, 2, 3)))
+        'x=(1, 2, 3)'
     """
     arg, val = arg_val
     return "%s=%r" % (arg, val)
 
 
-def echo(fn, write=sys.stdout.write):
+def format_all_args_json(func_name=None, named=None, nameless=None):
+    """ format arguments as json.
+
+    Format arguments as Json. Ignores unnamed arguments. Ignores objects.
+
+    Examples:
+        >>> format_all_args('f1', named=[('x', 1), ('y', 2)], nameless=[3, 'z'])
+        Arguments to f1: {x: 1, y: 2}
+    """
+
+    def _is_serializable(v):
+        try:
+            json.dumps(v)
+            return True
+        except TypeError:
+            return False
+    args_filtered = filter(lambda(k, v): isinstance(k, str) and _is_serializable(v), named)
+    arg_dict = dict(args_filtered)
+    return 'Arguments to {func_name}: {dump}'.format(func_name=func_name, dump=json.dumps(arg_dict))
+
+
+def format_all_args(func_name=None, named=None, nameless=None):
+    """ format arguments as comma delimited "name=value" pairs
+
+    Examples:
+        >>> format_all_args('f1', named=[('x', 1), ('y', 2)], nameless=[3, 'z'])
+        'x=1, y=2, 3, z'
+    """
+    if named is None:
+        named = []
+    if nameless is None:
+        nameless = []
+    named_formatted = map(format_arg_value, named)
+    nameless_formatted = map(repr, nameless)
+    args = named_formatted + nameless_formatted
+    return ", ".join(args)
+
+
+def echo(fn, write=sys.stdout.write, format=format_all_args):
     """ Echo calls to a function.
 
     Returns a decorated version of the input function which "echoes" calls
@@ -78,6 +105,7 @@ def echo(fn, write=sys.stdout.write):
     import functools
     # Unpack function's arg count, arg names, arg defaults
     code = fn.func_code
+    func_name = fn.__name__
     argcount = code.co_argcount
     argnames = code.co_varnames[:argcount]
     fn_defaults = fn.func_defaults or list()
@@ -87,12 +115,13 @@ def echo(fn, write=sys.stdout.write):
     def wrapped(*v, **k):
         # Collect function arguments by chaining together positional,
         # defaulted, extra positional and keyword arguments.
-        positional = map(format_arg_value, zip(argnames, v))
-        defaulted = [format_arg_value((a, argdefs[a]))
+        positional = zip(argnames, v)
+        defaulted = [(a, argdefs[a])
                      for a in argnames[len(v):] if a not in k]
-        nameless = map(repr, v[argcount:])
-        keyword = map(format_arg_value, k.items())
-        args = positional + defaulted + nameless + keyword
-        log(", ".join(args))
+        keyword = k.items()
+        nameless = v[argcount:]
+        named = positional + defaulted + keyword
+        args_formatted = format(func_name=func_name, named=named, nameless=nameless)
+        write(args_formatted)
         return fn(*v, **k)
     return wrapped

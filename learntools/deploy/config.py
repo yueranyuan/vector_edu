@@ -160,4 +160,10 @@ ALL_PARAMS['emotiv_update1'] = {'dropout_p': 0.,
                                 'patience_increase': 2000}
 ALL_PARAMS['emotiv_wide_search2'] = combine_dict(ALL_PARAMS['emotiv_wide_search'],
                                                  ALL_PARAMS['emotiv_update1'])
+ALL_PARAMS['emotiv_update2'] = {'dropout_p': GenVar(0.0, 0.4),
+                                'learning_rate': GenVar(0.001, 0.04),
+                                'patience': 1000,
+                                'patience_increase': 1000}
+ALL_PARAMS['emotiv_wide_search3'] = combine_dict(ALL_PARAMS['emotiv_wide_search2'],
+                                                 ALL_PARAMS['emotiv_update2'])
 all_param_set_keys = ALL_PARAMS.keys()

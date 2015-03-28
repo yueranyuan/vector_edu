@@ -1,4 +1,3 @@
-from __future__ import division
 import theano
 import theano.tensor as T
 import numpy as np
@@ -7,17 +6,17 @@ from itertools import chain, izip
 
 from learntools.libs.logger import log_me
 from learntools.libs.auc import auc
-from learntools.model.mlp import MLP
-from learntools.model.theano_utils import make_shared, shared_zeros_like
+from learntools.model.mlp import ConvolutionalMLP
+from learntools.model.theano_utils import make_shared
 from learntools.model import Model, gen_batches_by_size
 from learntools.model.math import sigmoid
 
 
-class BaseEmotiv(Model):
-    @log_me('...building BaseEmotiv')
+class ConvEmotiv(Model):
+    @log_me('...building ConvEmotiv')
     def __init__(self, prepared_data, batch_size=30, L1_reg=0., L2_reg=0.,
-                 classifier_width=500, classifier_depth=1, rng_seed=42, dropout_p=0.5,
-                 learning_rate=0.02, momentum=0.7, **kwargs):
+                 field_width=20, ds_factor=2, rng_seed=42, dropout_p=0.5,
+                 learning_rate=0.02, **kwargs):
         """
         Args:
             prepared_data : (Dataset, [int], [int])
@@ -40,10 +39,12 @@ class BaseEmotiv(Model):
         rng = np.random.RandomState(rng_seed)
         t_dropout = T.scalar('dropout')
 
-        classifier = MLP(rng=rng,
+        classifier = ConvolutionalMLP(rng=rng,
                          n_in=input_size,
-                         size=[classifier_width] * classifier_depth,
+                         size=[input_size],
                          n_out=2,
+                         field_width=field_width,
+                         ds_factor=ds_factor,
                          dropout=t_dropout)
 
         input_idxs = T.ivector('input_idxs')
@@ -67,14 +68,7 @@ class BaseEmotiv(Model):
         # compute parameter updates
         training_updates = []
         params = list(chain.from_iterable(net.params for net in subnets))
-        raw_deltas = [T.grad(cost, param) for param in params]
-        if momentum > 0:
-            old_deltas = [shared_zeros_like(p) for p in params]
-            deltas = [momentum * old_delta + raw_delta for old_delta, raw_delta in izip(old_deltas, raw_deltas)]
-            update_momentum = [(old_delta, delta) for old_delta, delta in izip(old_deltas, deltas)]
-            training_updates += update_momentum
-        else:
-            deltas = raw_deltas
+        deltas = [T.grad(cost, param) for param in params]
         update_parameters = [(param, param - learning_rate * delta)
                              for param, delta in izip(params, deltas)]
         training_updates += update_parameters
@@ -92,9 +86,7 @@ class BaseEmotiv(Model):
 
     def evaluate(self, idxs, pred):
         y = self._ys.owner.inputs[0].get_value(borrow=True)[idxs]
-        predicted_class = np.zeros(len(pred))
-        predicted_class[np.greater_equal(pred, 0)] = 1
-        return sum(np.equal(predicted_class, y)) / len(pred)
+        return auc(y[:len(pred)], pred, pos_label=1)
 
     def validate(self, idxs, **kwargs):
         res = self._tf_valid(idxs)

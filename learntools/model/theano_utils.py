@@ -17,3 +17,8 @@ def make_probability(init, shape=None, **kwargs):
     logit_p = np.log(init / (1 - init))
     logit_p = make_shared(logit_p, **kwargs)
     return 1 / (1 + T.exp(-logit_p)), logit_p
+
+
+def shared_zeros_like(data, **kwargs):
+    zeros = np.zeros(data.get_value(borrow=True).shape)
+    return make_shared(zeros, **kwargs)

@@ -1,7 +1,8 @@
 import operator
-from itertools import chain, imap
+from itertools import chain, imap, ifilterfalse
 
 import numpy
+import scipy.io
 
 
 # I should probably split these into separate files but it would kind of be a
@@ -81,3 +82,116 @@ def iget_column(data, i):
 
 def get_column(data, i):
     return [d[i] for d in data]
+
+
+# from http://stackoverflow.com/questions/7008608
+def loadmat(filename):
+    '''
+    this function should be called instead of direct spio.loadmat
+    as it cures the problem of not properly recovering python dictionaries
+    from mat files. It calls the function check keys to cure all entries
+    which are still mat-objects
+    '''
+    data = scipy.io.loadmat(filename, struct_as_record=False, squeeze_me=True)
+    return _check_keys(data)
+
+def _check_keys(dict):
+    '''
+    checks if entries in dictionary are mat-objects. If yes
+    todict is called to change them to nested dictionaries
+    '''
+    for key in dict:
+        if isinstance(dict[key], scipy.io.matlab.mio5_params.mat_struct):
+            dict[key] = _todict(dict[key])
+    return dict        
+
+def _todict(matobj):
+    '''
+    A recursive function which constructs from matobjects nested dictionaries
+    '''
+    dict = {}
+    for strg in matobj._fieldnames:
+        elem = matobj.__dict__[strg]
+        if isinstance(elem, scipy.io.matlab.mio5_params.mat_struct):
+            dict[strg] = _todict(elem)
+        else:
+            dict[strg] = elem
+    return dict
+
+class ArgumentNotSpecifiedIndicator(object):
+    """ a singleton object to be used as an argument default to represent that no argument was provided.
+    This is used as a default when 'None' could be a possible value for the argument.
+    """
+    pass
+
+ARGUMENT_NOT_SPECIFIED = ArgumentNotSpecifiedIndicator()  # a singleton object to be used as an argument default
+
+
+class ExceptionFoundIndicator(object):
+    """ a singleton for use by exception_safe_map
+    """
+    pass
+
+_EXCEPTION_FOUND = ExceptionFoundIndicator()  # singleton for use by exception_safe_map
+
+
+def exception_safe_map(func, data, exception=Exception, fill=ARGUMENT_NOT_SPECIFIED):
+    """ a map function that filters out elements where the mapping function generated an exception
+
+    NOTE: this may result in changed indices and length of input data
+
+    Args:
+        func (lambda): the mapping function
+        data (list): some iterable to map over
+        exception (BaseException, optional): the specific type of exception to make safe, all other exceptions will be
+            raised
+        fill (object, optional): object to be used in place of the element that generated an exception. If not specified
+            then the element will simply be omitted. Note that indices and length may change as a result.
+
+    Returns:
+        (list): list mapped with func and with all exception-generating elements removed
+    """
+    def safe_func(inp):
+        try:
+            return func(inp)
+        except exception:
+            return _EXCEPTION_FOUND
+
+    mapped = map(safe_func, data)
+    if fill is ARGUMENT_NOT_SPECIFIED:
+        mapped = filter(lambda(x): x is not _EXCEPTION_FOUND, mapped)
+    else:
+        mapped = map(lambda(x): fill if x is _EXCEPTION_FOUND else x, data)
+    return mapped
+
+
+def iexception_safe_map(func, data, exception=Exception, fill=ARGUMENT_NOT_SPECIFIED):
+    """ the iterator version of exception_safe_map.
+
+    NOTE: this may result in changed indices and length of input data
+
+    A map function that filters out elements where the mapping function generated an exception.
+
+    Args:
+        func (lambda): the mapping function
+        data (list): some iterable to map over
+        exception (BaseException, optional): the specific type of exception to make safe, all other exceptions will be
+            raised
+        fill (object, optional): object to be used in place of the element that generated an exception. If not specified
+            then the element will simply be omitted. Note that indices and length may change as a result.
+
+    Returns:
+        (list): iterator mapped with func and with all exception-generating elements removed
+    """
+    def safe_func(inp):
+        try:
+            return func(inp)
+        except exception:
+            return _EXCEPTION_FOUND
+
+    mapped = imap(safe_func, data)
+    if fill is ARGUMENT_NOT_SPECIFIED:
+        mapped = ifilterfalse(lambda(x): x is _EXCEPTION_FOUND, mapped)
+    else:
+        mapped = imap(lambda(x): fill if x is _EXCEPTION_FOUND else x, data)
+    return mapped

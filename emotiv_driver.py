@@ -17,13 +17,13 @@ Options:
     -p <param_set>, --param_set=<param_set>
         The name of the parameter set to use [default: emotiv_wide_search4].
     -f <file>, --file=<file>
-        The data file to use [default: raw_data/kkchang_matlab_fixed.mat].
+        The data file to use [default: data/emotiv_all.gz].
     -o <file>, --out=<file>
         The name for the log file to be generated.
     -q, --quiet
         Do not output to a log file.
     -t, --task_number=<ints>
-        A counter representing the queue position of the current job [default: 1].
+        A counter representing the queue position of the current job [default: 0].
     -m <model>, --model=<model>
         The name of the model family that we are using [default: randomforest].
 """
@@ -105,7 +105,8 @@ class ModelType(object):
 
 
 @log_me()
-def run(task_num=0, cv_rand=1, model_type=ModelType.BASE, **kwargs):
+def run(task_num=0, cv_rand=0, model_type=ModelType.BASE, **kwargs):
+    # task_num = 0  # KEEP AT 0 FOR ENSEMBLE
     if model_type == ModelType.BASE:
         from learntools.emotiv.base import BaseEmotiv as SelectedModel
         dataset = prepare_data(**kwargs)
@@ -138,11 +139,11 @@ def run(task_num=0, cv_rand=1, model_type=ModelType.BASE, **kwargs):
         from learntools.emotiv.randomforest import RandomForest as SelectedModel
         dataset = smart_load_data(**kwargs)
         if cv_rand:
-            train_idx, valid_idx = cv_split_randomized(dataset, percent=0.1, fold_index=task_num)
+            train_idx, valid_idx = cv_split_randomized(dataset, percent=0.2, fold_index=task_num)
         else:
-            train_idx, valid_idx = cv_split(dataset, percent=0.1, fold_index=task_num)
+            train_idx, valid_idx = cv_split(dataset, percent=0.2, fold_index=task_num)
     elif model_type == ModelType.ENSEMBLE:
-        from learntools.emotiv.ensemble import Ensemble as SelectedModel
+        from learntools.emotiv.ensemble import LogRegEnsemble as SelectedModel
         dataset = smart_load_data(**kwargs)
         train_idx, valid_idx = cv_split_randomized(dataset, percent=0.2, fold_index=task_num)
     else:
@@ -151,7 +152,7 @@ def run(task_num=0, cv_rand=1, model_type=ModelType.BASE, **kwargs):
 
     model = SelectedModel(prepared_data, **kwargs)
     _, params = model.train_full(**kwargs)
-    pickle.dump(params, open("{log_name}.params".format(log_name=get_log_file()), "wb"))
+    pickle.dump({'model_type': model_type, 'params': params}, open("{log_name}.params".format(log_name=get_log_file()), "wb"))
 
 '''
 def build_batch_norm(task_num, **kwargs):

@@ -167,7 +167,7 @@ def analyze(local_dir=None, bucket=None, subfolder=None, start_time=None,
     else:
         contents = {}
         for fn in os.listdir(local_dir):
-            if not re.match(r'.*\.log', fn):
+            if not re.match(r'.*\.log$', fn):
                 continue
             with open(os.path.join(local_dir, fn), 'r') as f:
                 contents[fn] = f.read()
@@ -301,4 +301,4 @@ if __name__ == '__main__':
     # analyze(bucket='cmu-data', subfolder='vectoredu/results', cache_dir='results', start_time=start_time)
     # analyze(cache_dir='results', start_time=start_time)
     # analyze_recent(days=2, local_dir='.')
-    analyze(start_time=datetime(2015, 3, 8, 3, 00), local_dir='.', most_recent_n=100)
+    analyze(start_time=datetime(2015, 3, 8, 3, 00), local_dir='.', most_recent_n=10)

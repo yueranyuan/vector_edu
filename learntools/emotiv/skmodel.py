@@ -25,6 +25,9 @@ class SKModel(Model):
     def serialize(self):
         return self.c
 
+    def predict(self, x):
+        return self.c.predict(x)
+
 
 def train_skmodel(model, **kwargs):
     model.c.fit(model.train_x, model.train_y)

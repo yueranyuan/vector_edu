@@ -150,7 +150,6 @@ def load_processed_siegle_data(dataset_name, conds=None, **kwargs):
         cond_dict = ACTIVITY_CONDITIONS
     n_rows = len(M)
     # data is sorted by cond
-    np.random.shuffle(M)
     Xs = M[:, 4:]
     ys = M[:, 2]
 

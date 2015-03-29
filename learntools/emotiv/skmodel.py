@@ -4,6 +4,7 @@ import numpy as np
 
 from learntools.libs.logger import log
 from learntools.model import Model
+from learntools.libs.auc import auc
 
 
 class SKModel(Model):
@@ -36,6 +37,9 @@ class SKModel(Model):
 def train_skmodel(model, **kwargs):
     model.c.fit(model.train_x, model.train_y)
     preds = model.c.predict(model.valid_x)
-    acc = sum(np.equal(preds, model.valid_y)) / len(preds)
+    binary_preds = np.greater_equal(preds, np.median(preds))
+    acc = sum(np.equal(binary_preds, model.valid_y)) / len(binary_preds)
+    _auc = auc(model.valid_y[:len(preds)], preds, pos_label=1)
+    print("validation auc: {auc}".format(auc=_auc))
     log('epoch 0, validation accuracy {acc:.2%}'.format(acc=acc), True)
     return acc, 0, model.serialize()

@@ -10,7 +10,8 @@ import traceback
 
 from learntools.data import Dataset
 from learntools.data.dataset import LISTEN_TIME_FORMAT
-from learntools.libs.utils import normalize_table, loadmat, clip_outliers, normalize_standard
+from learntools.libs.utils import normalize_table, loadmat
+from learntools.emotiv.features import FeatureGenerationException
 
 DEFAULT_CALIBRATION_FILE_LOCATION = 'raw_data/allcalibqualityreport.csv'
 
@@ -282,10 +283,6 @@ def load_raw_data(dataset_name, conds=None, duration=10, sample_rate=128, **kwar
         new_ds[i] = seg_data
 
     return new_ds
-
-
-class FeatureGenerationException(Exception):
-    pass
 
 
 def gen_featured_dataset(ds, func, subject_norm=1, clip=True, **kwargs):

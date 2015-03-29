@@ -31,7 +31,6 @@ from __future__ import print_function, division
 
 import os
 import warnings
-import random
 import cPickle as pickle
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 
@@ -48,10 +47,6 @@ import release_lock
 release_lock.release()  # TODO: use theano config instead. We have to figure out
 # what they did with the config.compile.timeout variable because that's actually
 # what we need
-
-COND_TYPES = [
-        ["PositiveLowArousalPictures", "NegativeLowArousalPictures"],
-        ["PositiveHighArousalPictures", "PositiveLowArousalPictures"]]
 
 def smart_load_data(dataset_name=None, features=None, **kwargs):
     _, ext = os.path.splitext(dataset_name)

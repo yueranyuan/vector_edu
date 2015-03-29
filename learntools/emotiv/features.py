@@ -22,6 +22,11 @@ import scipy.stats
 
 import sys
 
+
+class FeatureGenerationException(Exception):
+    pass
+
+
 def _eig_corr(data, **kwargs):
     """Ported from https://github.com/drewabbot/kaggle-seizure-prediction/blob/master/qms/QT_eig_corr.m
     data: multichannel eeg data

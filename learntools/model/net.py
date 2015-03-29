@@ -8,7 +8,7 @@ import theano.tensor as T
 from theano.tensor.nnet import conv
 from theano.tensor.signal import downsample
 
-from learntools.model.math import rectifier, sigmoid
+from learntools.model.math import rectifier, p_rectifier, sigmoid
 from learntools.libs.logger import log
 from learntools.libs.auc import auc
 from learntools.libs.utils import transpose, combine_dict
@@ -320,11 +320,10 @@ class HiddenLayer(NetworkComponent):
     def __init__(self, inp=None, n_in=None, n_out=None, rng_state=None, W=None, t_W=None, b=None,
                  activation='rectifier', name='hiddenlayer'):
         super(HiddenLayer, self).__init__(inp=inp, name=name, rng_state=rng_state)
+        print(activation)
 
         ########
         # STEP 0: load initializing values
-
-        self.activation = activation
 
         self.srng = theano.tensor.shared_randomstreams.RandomStreams(
             self.rng.randint(999999))
@@ -351,6 +350,11 @@ class HiddenLayer(NetworkComponent):
         else:
             self.params = [self.t_W, self.t_b]
 
+        if activation == 'p_rectifier':
+            rectifier_params = np.ones((n_out,), dtype=theano.config.floatX) * 0.5
+            self.t_rectifier_params = theano.shared(value=rectifier_params, name=self.subname('rectifier_params'), borrow=True)
+            self.params.append(self.t_rectifier_params)
+
         if self.input is None:
             self.input = T.dmatrix(self.subname('input'))
 
@@ -375,6 +379,8 @@ class HiddenLayer(NetworkComponent):
     def activation_fn(self):
         if self.activation == 'rectifier':
             return rectifier
+        elif self.activation == 'p_rectifier':
+            return p_rectifier(self.t_rectifier_params)
         elif self.activation == 'sigmoid':
             return sigmoid
         elif self.activation == 'softmax':
@@ -458,7 +464,7 @@ class HiddenNetwork(NetworkComponent):
 
 class BatchNormLayer(HiddenLayer):
     def __init__(self, inp=None, n_in=None, n_out=None, W=None, t_W=None, b=None, beta=None, gamma=None, alpha=0.999,
-                 mean=None, variance=None, rng_state=None, activation='rectifier', name='batchnormlayer'):
+                 mean=None, variance=None, rng_state=None, activation='p_rectifier', name='batchnormlayer'):
         """alpha is the exponential moving average falloff multiplier"""
         super(BatchNormLayer, self).__init__(inp=inp, rng_state=rng_state, n_in=n_in, n_out=n_out, W=W, t_W=t_W, b=b,
                                              activation=activation, name=name)

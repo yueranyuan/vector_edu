@@ -12,8 +12,8 @@ from learntools.libs.logger import log_me
 from learntools.libs.auc import auc
 from learntools.model.theano_utils import make_shared
 from learntools.model import Model, gen_batches_by_size
-from learntools.model.net import BatchNormLayer, AutoencodingBatchNormLayer, TrainableNetwork, ConvolutionalBatchNormLayer
-from learntools.libs.utils import max_idx
+from learntools.model.net import BatchNormLayer, ConvolutionalBatchNormLayer
+from learntools.libs.utils import max_idx, flatten
 
 
 class BatchNorm(Model):
@@ -139,6 +139,11 @@ class BatchNorm(Model):
 
     def serialize(self):
         return [net.serialize() for net in self.layers]
+
+    @property
+    def validation_predictions(self):
+        pYs = flatten([self.validate(idxs)[1] for idxs in self.valid_batches])
+        return np.asarray([pY[0] - pY[1] for pY in pYs])
 
 
 class Binarizer():

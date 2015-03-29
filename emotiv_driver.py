@@ -41,14 +41,17 @@ from learntools.libs.logger import gen_log_name, log_me, set_log_file, get_log_f
 from learntools.emotiv.data import prepare_data, convert_raw_data, load_raw_data, load_siegle_data, gen_featured_dataset
 from learntools.emotiv.filter import filter_data
 from learntools.emotiv.features import construct_feature_generator
-from learntools.data import cv_split, cv_split_randomized
-from learntools.data.crossvalidation import cv_split_within_column
+from learntools.data import cv_split_binarized
 import learntools.deploy.config as config
 
 import release_lock
 release_lock.release()  # TODO: use theano config instead. We have to figure out
 # what they did with the config.compile.timeout variable because that's actually
 # what we need
+
+COND_TYPES = [
+        ["PositiveLowArousalPictures", "NegativeLowArousalPictures"],
+        ["PositiveHighArousalPictures", "PositiveLowArousalPictures"]]
 
 def smart_load_data(dataset_name=None, features=None, **kwargs):
     _, ext = os.path.splitext(dataset_name)
@@ -74,7 +77,7 @@ def run(task_num, model, **kwargs):
         multistage_batchnorm_run(**kwargs)
 
     dataset = smart_load_data(**kwargs)
-    train_idx, valid_idx = cv_split_randomized(dataset, percent=0.2, fold_index=task_num)
+    train_idx, valid_idx = cv_split_binarized(dataset, percent=0.2, fold_index=task_num)
     if model == 'batchnorm':
         from learntools.emotiv.batchnorm import BatchNorm as SelectedModel
     elif model == 'conv':
@@ -86,15 +89,15 @@ def run(task_num, model, **kwargs):
     elif model == 'randomforest':
         from learntools.emotiv.randomforest import RandomForest as SelectedModel
     elif model == 'ensemble':
-        from learntools.emotiv.ensemble import Ensemble as SelectedModel
+        from learntools.emotiv.ensemble import LogRegEnsemble as SelectedModel
     else:
         raise ValueError("model type is not valid")
 
     prepared_data = (dataset, train_idx, valid_idx)
     model = SelectedModel(prepared_data, **kwargs)
-    _, params = model.train_full(**kwargs)
-    pickle.dump({'model_type': model_type, 'params': params}, open("{log_name}.params".format(log_name=get_log_file()), "wb"))
-
+    model.train_full(**kwargs)
+    with open("{log_name}.model".format(log_name=get_log_file()), "wb") as f:
+        pickle.dump(model, f)
 
 if __name__ == '__main__':
     args = docopt(__doc__)
@@ -154,3 +157,5 @@ if __name__ == '__main__':
 
     else:
         raise Exception("Unknown command")
+    
+    print("Finished")

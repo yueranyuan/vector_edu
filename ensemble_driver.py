@@ -27,12 +27,11 @@ warnings.filterwarnings("ignore", category=DeprecationWarning)
 
 from docopt import docopt
 
-from learntools.libs.logger import gen_log_name, log_me, set_log_file, get_log_file
+from learntools.libs.logger import gen_log_name, log_me, set_log_file
 from learntools.emotiv.data import (prepare_data, segment_raw_data, load_siegle_data,
                                     gen_wavelet_features, gen_fft_features)
 from learntools.emotiv.filter import filter_data
-from learntools.data import cv_split, cv_split_randomized
-import learntools.deploy.config as config
+from learntools.data import cv_split, cv_split_binarized
 
 import release_lock
 release_lock.release()  # TODO: use theano config instead. We have to figure out
@@ -68,19 +67,16 @@ def smart_load_data(dataset_name=None, feature_type='wavelet', duration=10, wave
 
 
 @log_me()
-def run(task_num=0, cv_rand=0, **kwargs):
+def run(task_num=0, **kwargs):
     from learntools.emotiv.ensemble import Ensemble as SelectedModel
 
     # prepare data
     dataset = smart_load_data(**kwargs)
-    if cv_rand:
-        train_idx, valid_idx = cv_split_randomized(dataset, percent=0.2, fold_index=task_num)
-    else:
-        train_idx, valid_idx = cv_split(dataset, percent=0.2, fold_index=task_num)
+    train_idx, valid_idx = cv_split_binarized(dataset, percent=0.2, fold_index=task_num)
     prepared_data = (dataset, train_idx, valid_idx)
 
     # load classifiers to build ensemble out of
-    saved_classifiers = filter(lambda(fn): os.path.splitext(fn)[1] == '.params', os.listdir('.'))
+    saved_classifiers = filter(lambda(fn): os.path.splitext(fn)[1] == '.model', os.listdir('.'))
 
     # build and train ensemble
     model = SelectedModel(prepared_data, saved_classifiers=saved_classifiers, **kwargs)

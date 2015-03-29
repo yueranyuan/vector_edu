@@ -1,7 +1,8 @@
 import operator
-from itertools import chain, imap, ifilterfalse
+from itertools import chain, imap, ifilterfalse, compress
+import math
 
-import numpy
+import numpy as np
 import scipy.io
 
 
@@ -49,15 +50,71 @@ def flatten(arr):
     return list(chain.from_iterable(arr))
 
 
-def normalize_table(table):
-    table = numpy.array(table)
-    mins = table.min(axis=0)
-    maxs = table.max(axis=0)
+def clip_outliers(matrix, method='iqr', axis=None):
+    # take things within 25th-75th percentile, with subsampling for speedup
+    size = len(matrix)
+    samples = math.log(size) if size > 100 else size
+    subsample = matrix[::int(size / samples)]
+    sorted_subsample = np.sort(subsample, axis=axis)
+    if axis is None:
+        N = len(sorted_subsample)
+    else:
+        N = sorted_subsample.shape[axis]
+    iqr = np.take(sorted_subsample, range(int(N * 0.25), int(N * 0.75)), axis=axis)
+    if iqr.shape[0] == 1:
+        raise Exception("insufficient rows in matrix to get reliable interquartial range")
+    mean = np.mean(iqr, axis=axis)
+    if method == 'iqr':  # use interquartile range
+        lower_bound = iqr[0]
+        upper_bound = iqr[-1]
+        lo_thresh = mean + 1.5 * (lower_bound - mean)
+        hi_thresh = mean + 1.5 * (upper_bound - mean)
+    elif method == 'std':  # use standard deviation
+        std = np.std(iqr, axis=axis)
+        lo_thresh = mean - 3.0 * std
+        hi_thresh = mean + 3.0 * std
+    else:
+        raise ValueError("clipping method unknown")
+    return np.minimum(np.maximum(lo_thresh, matrix), hi_thresh)
+
+
+def normalize_standard(matrix, epsilon=1e-7):
+    # subsampling for speedup
+    size = len(matrix)
+    samples = math.log(size)
+    subsample = matrix[::int(size / samples)]
+    mean = np.mean(subsample, axis=0)
+    std = np.std(subsample, axis=0)
+
+    return (matrix - mean) / (std + epsilon)
+
+
+def normalize_table(table, clip=False, within_subject=None, axis=None):
+    if not isinstance(table, np.ndarray):
+        table = np.asarray(table)
+
+    if within_subject:
+        if not isinstance(within_subject, np.ndarray):
+            within_subject = np.asarray(within_subject)
+
+        subjects = np.unique(within_subject)
+        for subject in subjects:
+            selected_idxs = list(compress(range(len(within_subject)), within_subject == subject))
+            table_s = table[selected_idxs]
+            norm_table_s = normalize_table(table_s, clip=clip, axis=axis)
+            table[selected_idxs] = norm_table_s
+        return table
+
+    if clip:
+        table = clip_outliers(table)
+
+    mins = table.min(axis=axis)
+    maxs = table.max(axis=axis)
     norm_table = (table - mins) / (maxs - mins)
-    if numpy.any(numpy.isnan(norm_table)):
+    if np.any(np.isnan(norm_table)):
         # TODO: issue warning all nan
         print "Warning: normalized table contains nans"
-        if not numpy.any(numpy.isnan(table)):
+        if not np.any(np.isnan(table)):
             print "Warning: nans were not present in input table"
     return norm_table
 
@@ -67,13 +124,13 @@ def normalize_table(table):
 def idx_to_mask(idxs, mask_len=None):
     if not mask_len:
         mask_len = max(idxs) + 1
-    mask = numpy.array([False] * mask_len)
+    mask = np.array([False] * mask_len)
     mask[idxs] = True
     return mask
 
 
 def mask_to_idx(mask):
-    return numpy.nonzero(mask)[0]
+    return np.nonzero(mask)[0]
 
 
 def iget_column(data, i):

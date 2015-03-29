@@ -11,6 +11,10 @@ def set_log_file(log_file):
     __LOG_FILE__ = log_file
 
 
+def get_log_file():
+    return __LOG_FILE__
+
+
 def log(txt, also_print=False):
     if also_print:
         print txt

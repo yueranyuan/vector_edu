@@ -1,10 +1,12 @@
 from __future__ import division
 
+import abc
 from itertools import chain, izip
 
 import theano
 import theano.tensor as T
 import numpy as np
+from sklearn import svm
 
 from learntools.libs.logger import log_me
 from learntools.libs.auc import auc
@@ -18,7 +20,7 @@ class BatchNorm(Model):
     @log_me('...building BatchNorm')
     def __init__(self, prepared_data, batch_size=30, L1_reg=0., L2_reg=0.,
                  classifier_width=500, classifier_depth=2, rng_seed=42,
-                 learning_rate=0.0002, dropout_p=0.0, recon_loss_alpha=0.0, **kwargs):
+                 learning_rate=0.0002, dropout_p=0.0, serialized=None, **kwargs):
         """
         Args:
             prepared_data : (Dataset, [int], [int])
@@ -29,10 +31,11 @@ class BatchNorm(Model):
         """
         # 1: Organize data into batches
         ds, train_idx, valid_idx = prepared_data
-        input_size = ds.get_data('eeg').shape[1]
+        xs = ds.get_data('eeg')
+        input_size = xs.shape[1]
         output_size = len(np.unique(ds.get_data('condition')))
 
-        self._xs = make_shared(ds.get_data('eeg'), name='eeg')
+        self._xs = make_shared(xs, name='eeg')
         self._ys = make_shared(ds.get_data('condition'), to_int=True, name='condition')
 
         self.train_idx = train_idx
@@ -49,19 +52,29 @@ class BatchNorm(Model):
         bn_updates, subnets = [], []
         train_layer, infer_layer, updates_layer = input_layer, input_layer, []
 
+        if serialized is None:
+            serialized = []
+        serialized += [{}] * (classifier_depth + 1 - len(serialized))  # pad serialized subnets
+
         n_in, n_out = input_size, classifier_width
-        recon_losses = []
-        for i in xrange(classifier_depth):
-            bn_layer = AutoencodingBatchNormLayer(n_in=n_in, n_out=n_out)
-            train_layer, infer_layer, updates_layer, train_recon, infer_recon = bn_layer.instance(train_layer, infer_layer, dropout=t_dropout)
+        self.layers = []
+        for i, net_params in enumerate(serialized[:-1]):
+            bn_layer = BatchNormLayer(n_in=n_in, n_out=n_out, **net_params)
+            train_layer, infer_layer, updates_layer = bn_layer.instance(train_layer, infer_layer, dropout=t_dropout)
+            self.layers.append(bn_layer)
             bn_updates.extend(updates_layer)
             subnets.append(bn_layer)
-            recon_loss = T.mean(T.sqr(train_layer - train_recon))
-            recon_losses.append(recon_loss)
             n_in, n_out = classifier_width, classifier_width
 
         # softmax
-        bn_layer = BatchNormLayer(n_in=classifier_width, n_out=output_size, activation='softmax')
+        if serialized[-1] is None:
+            softmax_params = {}
+        else:
+            softmax_params = serialized[-1]
+            if 'activation' in softmax_params:
+                del softmax_params['activation']  # conflicts with explicit keyword arg
+        bn_layer = BatchNormLayer(n_in=bn_layer.W.shape[1], n_out=output_size, activation='softmax', **softmax_params)
+        self.layers.append(bn_layer)
         train_pY, infer_pY, updates_layer = bn_layer.instance(train_layer, infer_layer)
         bn_updates.extend(updates_layer)
         subnets.append(bn_layer)
@@ -76,7 +89,6 @@ class BatchNorm(Model):
             loss
             + L1_reg * sum([net.L1 for net in subnets])
             + L2_reg * sum([net.L2_sqr for net in subnets])
-            # + recon_loss_alpha * T.sum(recon_losses)
         )
         cost.name = 'overall_cost'
 
@@ -85,14 +97,16 @@ class BatchNorm(Model):
                              for param in params] + bn_updates
 
         self._tf_infer = theano.function(inputs=[input_idxs],
-                                         outputs=[loss, infer_pY[:, 1] - infer_pY[:, 0], input_idxs],
+                                         outputs=[loss, infer_pY, input_idxs],
                                          givens=[(t_dropout, 0.0)],
                                          allow_input_downcast=True)
         self._tf_train = theano.function(inputs=[input_idxs],
-                                         outputs=[loss, train_pY[:, 1] - train_pY[:, 0], input_idxs],
+                                         outputs=[loss, train_pY, input_idxs],
                                          givens=[(t_dropout, dropout_p)],
                                          allow_input_downcast=True, updates=update_parameters)
         self.subnets = subnets
+
+        self.binarizer = CutoffBinarizer()
 
     def validate(self, idxs, **kwargs):
         return self._tf_infer(idxs)
@@ -108,23 +122,67 @@ class BatchNorm(Model):
 
     def train_evaluate(self, idxs, preds, *args, **kwargs):
         y = self._ys.owner.inputs[0].get_value(borrow=True)[idxs]
-        best_pred_cutoff = find_best_cutoff(y, preds)
-
-        # gradually change the prediction cutoff to avoid instability
-        PRED_CUTOFF_ALPHA = 0.2
-        if hasattr(self, 'pred_cutoff'):
-            self.pred_cutoff = (1.0 - PRED_CUTOFF_ALPHA) * self.pred_cutoff + PRED_CUTOFF_ALPHA * best_pred_cutoff
-        else:
-            self.pred_cutoff = best_pred_cutoff
-
-        return acc_by_cutoff(y, preds, self.pred_cutoff)
+        self.binarizer.train(y, preds)
+        return compute_accuracy(y, self.binarizer.apply(preds))
 
     def valid_evaluate(self, idxs, preds, *args, **kwargs):
         y = self._ys.owner.inputs[0].get_value(borrow=True)[idxs]
-        best_acc = acc_by_cutoff(y, preds, find_best_cutoff(y, preds))
-        _auc = auc(y[:len(preds)], preds, pos_label=1)
+        ey = self.binarizer.apply(preds)
+
+        # compute best-case accuracies
+        preds = np.asarray(preds)
+        p = preds[:, 1] - preds[:, 0]
+        best_acc = acc_by_cutoff(y, p, find_best_cutoff(y, p))
+        _auc = auc(y[:len(p)], p, pos_label=1)
         print("validation auc: {auc}, best cutoff accuracy: {best_acc}".format(auc=_auc, best_acc=best_acc))
-        return acc_by_cutoff(y, preds, self.pred_cutoff)
+        return compute_accuracy(y, ey)
+
+    def serialize(self):
+        return [net.serialize() for net in self.layers]
+
+
+class Binarizer():
+    __metaclass__ = abc.ABCMeta
+
+    @abc.abstractmethod
+    def train(self, ys, preds):
+        pass
+
+    @abc.abstractmethod
+    def apply(self, preds):
+        pass
+
+
+class CutoffBinarizer(Binarizer):
+    def __init__(self, alpha=0.2):
+        self.alpha = alpha
+        self.best_cutoff = None
+
+    def train(self, ys, preds):
+        preds = np.asarray(preds)
+        p = preds[:, 1] - preds[:, 0]
+        best_pred_cutoff = find_best_cutoff(ys, p)
+        if self.best_cutoff is None:
+            self.best_cutoff = best_pred_cutoff
+        else:
+            self.best_cutoff = (1.0 - self.alpha) * self.best_cutoff + self.alpha * best_pred_cutoff
+
+    def apply(self, preds):
+        preds = np.asarray(preds)
+        p = preds[:, 1] - preds[:, 0]
+        return np.greater_equal(p, self.best_cutoff)
+
+
+class SVMBinarizer(Binarizer):
+    def __init__(self):
+        self.classifier = None
+
+    def train(self, ys, preds):
+        self.classifier = svm.SVC()
+        self.classifier.fit(preds, ys)
+
+    def apply(self, preds):
+        return self.classifier.predict(preds)
 
 
 class ConvBatchNorm(BatchNorm):
@@ -222,6 +280,11 @@ def acc_by_cutoff(y, preds, cutoff):
     0.5
     """
     ey = np.greater_equal(preds, cutoff)
+    correct = sum(np.equal(y[:len(ey)], ey))
+    return correct / len(ey)
+
+
+def compute_accuracy(y, ey):
     correct = sum(np.equal(y[:len(ey)], ey))
     return correct / len(ey)
 

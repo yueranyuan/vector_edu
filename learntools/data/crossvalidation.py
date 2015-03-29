@@ -21,7 +21,7 @@ def _cv_split_helper(splits, fold_index=0, percent=None):
         heldout = [splits[fold_index % len(splits)]]
     return heldout
 
-def cv_split_randomized(ds, fold_index=0, percent=0.1, seed=0xbada55, y_column='condition', balance=True, **kwargs):
+def cv_split_binarized(ds, fold_index=0, percent=0.1, seed=0xbada55, randomize=False, y_column='condition', **kwargs):
     """
     We need to generate cv splits such that the proportion of classes in different folds is the same
     and also have the subjects within each fold be up to randomness. Also, the folds should be disjoint.
@@ -35,10 +35,13 @@ def cv_split_randomized(ds, fold_index=0, percent=0.1, seed=0xbada55, y_column='
         mask = ds[y_column] == condition
         condition_idxs[condition] = mask_to_idx(mask)
 
-    if balance:
-        min_condition_n = min(len(idxs) for idxs in condition_idxs.values())
-        for key, idxs in condition_idxs.iteritems():
-            condition_idxs[key] = np.asarray(random.sample(idxs, min_condition_n))
+    min_condition_n = min(len(idxs) for idxs in condition_idxs.values())
+    for key, idxs in condition_idxs.iteritems():
+        if randomize:
+            idxs = random.sample(idxs, min_condition_n)
+        else:
+            idxs = idxs[:min_condition_n]
+        condition_idxs[key] = np.asarray(idxs)
 
     # generate the random disjoint folds, keyed by condition
     train_condition_idxs = {}
@@ -46,8 +49,9 @@ def cv_split_randomized(ds, fold_index=0, percent=0.1, seed=0xbada55, y_column='
     for condition, condition_idx in condition_idxs.items():
         # we index into condition_idx so we can use logical_not to retrieve train indices from valid indices
         idx_idxs = np.arange(len(condition_idx))
-        shuffled_idx_idxs = rng.permutation(idx_idxs)
-        valid_idx_idxs = _cv_split_helper(shuffled_idx_idxs, fold_index=fold_index, percent=percent)
+        if randomize:
+            idx_idxs = rng.permutation(idx_idxs)
+        valid_idx_idxs = _cv_split_helper(idx_idxs, fold_index=fold_index, percent=percent)
         valid_condition_idxs[condition] = condition_idx[valid_idx_idxs]
         train_idx_idxs = mask_to_idx(np.logical_not(idx_to_mask(valid_idx_idxs, mask_len=len(condition_idx))))
         train_condition_idxs[condition] = condition_idx[train_idx_idxs]

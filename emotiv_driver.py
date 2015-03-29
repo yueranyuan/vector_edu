@@ -19,7 +19,7 @@ Options:
     -p <param_set>, --param_set=<param_set>
         The name of the parameter set to use [default: emotiv_wide_search4].
     -f <file>, --file=<file>
-        The data file to use [default: data/emotiv_all.gz].
+        The data file to use [default: raw_data/sg_matlab.mat].
     -o <file>, --out=<file>
         The name for the log file to be generated.
     -q, --quiet
@@ -45,7 +45,7 @@ from learntools.libs.logger import gen_log_name, log_me, set_log_file, get_log_f
 from learntools.emotiv.data import (prepare_data, convert_raw_data, segment_raw_data, load_siegle_data,
                                     gen_wavelet_features, gen_fft_features)
 from learntools.emotiv.filter import filter_data
-from learntools.data import cv_split, cv_split_randomized
+from learntools.data import cv_split, cv_split_binarized
 from learntools.data.crossvalidation import cv_split_within_column
 import learntools.deploy.config as config
 
@@ -109,16 +109,16 @@ class ModelType(object):
 
 
 @log_me()
-def run(task_num=0, cv_rand=0, model_type=ModelType.BASE, **kwargs):
+def run(task_num=0, model_type=ModelType.BASE, **kwargs):
     # task_num = 0  # KEEP AT 0 FOR ENSEMBLE
     if model_type == ModelType.BASE:
         from learntools.emotiv.base import BaseEmotiv as SelectedModel
         dataset = prepare_data(**kwargs)
-        train_idx, valid_idx = cv_split_randomized(dataset, percent=0.1, fold_index=task_num)
+        train_idx, valid_idx = cv_split_binarized(dataset, percent=0.1, fold_index=task_num)
     elif model_type == ModelType.RAW_BASE:
         from learntools.emotiv.base import BaseEmotiv as SelectedModel
         dataset = smart_load_data(**kwargs)
-        train_idx, valid_idx = cv_split_randomized(dataset, percent=0.50, fold_index=task_num)
+        train_idx, valid_idx = cv_split_binarized(dataset, percent=0.50, fold_index=task_num)
     elif model_type == ModelType.SUBJECT:
         from learntools.emotiv.persubject import SubjectEmotiv as SelectedModel
         dataset = smart_load_data(**kwargs)
@@ -127,37 +127,31 @@ def run(task_num=0, cv_rand=0, model_type=ModelType.BASE, **kwargs):
     elif model_type == ModelType.AUTOENCODER:
         from learntools.emotiv.emotiv_autoencode import AutoencodeEmotiv as SelectedModel
         dataset = smart_load_data(**kwargs)
-        train_idx, valid_idx = cv_split_randomized(dataset, percent=0.10, fold_index=task_num)
+        train_idx, valid_idx = cv_split_binarized(dataset, percent=0.10, fold_index=task_num)
     elif model_type == ModelType.BATCH_NORM:
         from learntools.emotiv.batchnorm import BatchNorm as SelectedModel
         dataset = smart_load_data(**kwargs)
-        train_idx, valid_idx = cv_split(dataset, percent=0.1, fold_index=task_num)
+        train_idx, valid_idx = cv_split_binarized(dataset, percent=0.2, fold_index=task_num)
     elif model_type == ModelType.CONV_BATCH_NORM:
         from learntools.emotiv.batchnorm import ConvBatchNorm as SelectedModel
         dataset = smart_load_data(**kwargs)
-        train_idx, valid_idx = cv_split(dataset, percent=0.1, fold_index=task_num)
+        train_idx, valid_idx = cv_split_binarized(dataset, percent=0.1, fold_index=task_num)
     elif model_type == ModelType.CONV:
         from learntools.emotiv.conv import ConvEmotiv as SelectedModel
         dataset = smart_load_data(**kwargs)
-        if cv_rand:
-            train_idx, valid_idx = cv_split_randomized(dataset, percent=0.2, fold_index=task_num)
-        else:
-            train_idx, valid_idx = cv_split(dataset, percent=0.2, fold_index=task_num)
+        train_idx, valid_idx = cv_split_binarized(dataset, percent=0.2, fold_index=task_num)
     elif model_type == ModelType.SVM:
         from learntools.emotiv.svm import SVM as SelectedModel
         dataset = smart_load_data(**kwargs)
-        train_idx, valid_idx = cv_split_randomized(dataset, percent=0.2, fold_index=task_num)
+        train_idx, valid_idx = cv_split_binarized(dataset, percent=0.2, fold_index=task_num)
     elif model_type == ModelType.RANDOMFOREST:
         from learntools.emotiv.randomforest import RandomForest as SelectedModel
         dataset = smart_load_data(**kwargs)
-        if cv_rand:
-            train_idx, valid_idx = cv_split_randomized(dataset, percent=0.2, fold_index=task_num)
-        else:
-            train_idx, valid_idx = cv_split(dataset, percent=0.2, fold_index=task_num)
+        train_idx, valid_idx = cv_split_binarized(dataset, percent=0.2, fold_index=task_num)
     elif model_type == ModelType.ENSEMBLE:
         from learntools.emotiv.ensemble import LogRegEnsemble as SelectedModel
         dataset = smart_load_data(**kwargs)
-        train_idx, valid_idx = cv_split_randomized(dataset, percent=0.2, fold_index=task_num)
+        train_idx, valid_idx = cv_split_binarized(dataset, percent=0.2, fold_index=task_num)
     else:
         raise Exception("model type is not valid")
     prepared_data = (dataset, train_idx, valid_idx)
@@ -165,6 +159,8 @@ def run(task_num=0, cv_rand=0, model_type=ModelType.BASE, **kwargs):
     model = SelectedModel(prepared_data, **kwargs)
     _, params = model.train_full(**kwargs)
     pickle.dump({'model_type': model_type, 'params': params}, open("{log_name}.params".format(log_name=get_log_file()), "wb"))
+    with open("{log_name}.model".format(log_name=get_log_file()), "wb") as f:
+        pickle.dump(model, f)
 
 '''
 def build_batch_norm(task_num, **kwargs):
@@ -236,7 +232,7 @@ if __name__ == '__main__':
             from learntools.emotiv.multistage_batchnorm import pretrain
             no_conds_params = combine_dict(params, {'conds': None})
             dataset = smart_load_data(**no_conds_params)
-            train_idx, valid_idx = cv_split_randomized(dataset, percent=0.1, fold_index=task_num)
+            train_idx, valid_idx = cv_split_binarized(dataset, percent=0.1, fold_index=task_num)
             full_data = (dataset, train_idx, valid_idx)
             pretrain(log_name=log_filename, full_data=full_data, **params)
         elif model == 'multistage_tune':
@@ -246,7 +242,7 @@ if __name__ == '__main__':
             selected_weight_file = saved_weights[random.randint(0, len(saved_weights) - 1)]
             selected_weight_file = "2015_03_09_22_48_46_29694.log.weights"
             dataset = smart_load_data(**params)
-            train_idx, valid_idx = cv_split_randomized(dataset, percent=0.1, fold_index=task_num)
+            train_idx, valid_idx = cv_split_binarized(dataset, percent=0.1, fold_index=task_num)
             prepared_data = (dataset, train_idx, valid_idx)
             tune(prepared_data=prepared_data, weight_file=selected_weight_file, **params)
         elif model == 'multistage_randomforest':
@@ -254,7 +250,7 @@ if __name__ == '__main__':
             selected_weight_file = "2015_03_10_16_09_35_33122.log.weights"
             dataset = smart_load_data(**params)
             if 1:  # TODO: fix this
-                train_idx, valid_idx = cv_split_randomized(dataset, percent=0.1, fold_index=task_num)
+                train_idx, valid_idx = cv_split_binarized(dataset, percent=0.1, fold_index=task_num)
             else:
                 train_idx, valid_idx = cv_split(dataset, percent=0.1, fold_index=task_num)
             prepared_data = (dataset, train_idx, valid_idx)

@@ -28,6 +28,10 @@ class SKModel(Model):
     def predict(self, x):
         return self.c.predict(x)
 
+    @property
+    def validation_predictions(self):
+        return self.predict(self.valid_x)
+
 
 def train_skmodel(model, **kwargs):
     model.c.fit(model.train_x, model.train_y)

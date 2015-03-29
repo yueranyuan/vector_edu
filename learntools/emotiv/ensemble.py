@@ -24,15 +24,9 @@ class ModelType(object):
     ENSEMBLE = 8
 
 
-def load_classifier(prepared_data, classifier_file, **kwargs):
+def load_classifier(classifier_file):
     with open(classifier_file, 'r') as f:
-        content = pickle.load(f)
-    model_type = content['model_type']
-    serialized = content['params']
-    if model_type == ModelType.RANDOMFOREST:
-        classifier = RandomForest(prepared_data, serialized=serialized, **kwargs)
-    else:
-        raise Exception("invalid model type")
+        classifier = pickle.load(f)
     return classifier
 
 
@@ -41,7 +35,7 @@ class Ensemble(Model):
     def __init__(self, prepared_data, saved_classifiers=None, **kwargs):
         if not saved_classifiers:
             raise Exception("no classifiers loaded")
-        self.classifiers = [load_classifier(prepared_data, classifier_file, **kwargs)
+        self.classifiers = [load_classifier(classifier_file)
                             for classifier_file in saved_classifiers]
 
         ds, train_idx, valid_idx = prepared_data
@@ -58,7 +52,7 @@ class Ensemble(Model):
 
 
 def train_ensemble(model, **kwargs):
-    all_preds = np.asarray([c.predict(model.valid_x) for c in model.classifiers])
+    all_preds = np.asarray([c.validation_predictions for c in model.classifiers])
     preds = np.sum(all_preds, axis=0)
     binary_preds = np.greater_equal(preds, np.median(preds))
     acc = sum(np.equal(binary_preds, model.valid_y)) / len(binary_preds)

@@ -69,7 +69,7 @@ def test_emotive_base_random():
 @use_logger_in_test
 def test_emotiv_simple():
     """ tests that we can train a simple logistic regression model on the emotiv data """
-    dataset = prepare_data('raw_data/all_siegle.txt', conds=['EyesOpen', 'EyesClosed'])
+    dataset = prepare_data('raw_data/indices_all.txt', conds=['EyesOpen', 'EyesClosed'])
     train_idx, valid_idx = cv_split(dataset, percent=0.3, fold_index=0)
     model = SimpleEmotiv((dataset, train_idx, valid_idx), batch_size=1)
     best_loss, best_epoch = model.train_full(n_epochs=100, patience=100)

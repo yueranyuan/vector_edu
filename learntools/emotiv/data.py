@@ -10,7 +10,7 @@ import traceback
 
 from learntools.data import Dataset
 from learntools.data.dataset import LISTEN_TIME_FORMAT
-from learntools.libs.utils import normalize_table, loadmat
+from learntools.libs.utils import normalize_table, loadmat, clip_outliers, normalize_standard
 
 DEFAULT_CALIBRATION_FILE_LOCATION = 'raw_data/allcalibqualityreport.csv'
 
@@ -69,7 +69,7 @@ CONDITIONS = dict(ACTIVITY_CONDITIONS.items() + META_CONDITIONS.items())
 CONDITIONS_STR = dict((v, k) for k, v in CONDITIONS.items())
 
 
-def prepare_data(dataset_name, conds=None, duration=10, sample_rate=128, **kwargs):
+def prepare_data(dataset_name, conds=None, clip=True, subject_norm=False, **kwargs):
     """load siegle data into a Dataset
 
     Args:
@@ -90,10 +90,15 @@ def prepare_data(dataset_name, conds=None, duration=10, sample_rate=128, **kwarg
     data = Dataset.from_csv(dataset_name, headers)
     data.rename_column('fname', 'subject')
     data.rename_column('Condition', 'condition')
+    data.set_column('subject', Dataset.STR)
+    for i, fname in enumerate(data['group']):
+        data.get_column('subject')[i] = os.path.splitext(fname)[0]
     data.set_column('eeg', Dataset.MATFLOAT)
     for i, eeg in enumerate(itertools.izip(*[data[h] for (h, _) in eeg_headers])):
         data.get_column('eeg')[i] = eeg
-    data.get_column('eeg').data = normalize_table(data['eeg'])
+    # data.get_column('eeg').data = normalize_table(data['eeg'])
+    within_subject = data['subject'] if subject_norm else None
+    data.get_column('eeg').data = normalize_table(data['eeg'], clip=clip, within_subject=within_subject)
 
     # only keep selected conditions
     # TODO: turn this these temporary mode switches into a context
@@ -120,18 +125,44 @@ def prepare_data(dataset_name, conds=None, duration=10, sample_rate=128, **kwarg
 
 
 def load_siegle_data(dataset_name, conds=None, **kwargs):
+    if os.path.basename(dataset_name) == 'emotiv_processed.mat':
+        return load_processed_siegle_data(dataset_name, conds=conds, **kwargs)
+    return load_processed_siegle_data(dataset_name, conds=conds, **kwargs)
+
+
+def load_unprocessed_siegle_data(dataset_name, conds=None, clip=False, **kwargs):
+    f = loadmat(dataset_name)
+    cond_data_pairs = list(f['dat'].iteritems())
+    if conds is not None:
+        cond_data_pairs = filter(lambda(cond, mat): cond in conds, cond_data_pairs)
+    n_rows = sum(len(mat) for cond, mat in cond_data_pairs)
+    ds = Dataset(SIEGLE_HEADERS, n_rows=n_rows)
+    row_i = 0
+    for cond, mat in cond_data_pairs:
+        for data_row in mat:
+            ds[row_i] = (data_row, cond)
+            row_i += 1
+    # ds.get_column('eeg').data = normalize_table(ds['eeg'], clip=clip, axis=0)
+    return ds
+
+
+def load_processed_siegle_data(dataset_name, conds=None, **kwargs):
     if conds is None:
         conds = ACTIVITY_CONDITIONS.keys()
-    cond_values = [ACTIVITY_CONDITIONS[cond] for cond in conds]
+
     f = loadmat(dataset_name)
     M = f['M']
+    if 'feats' in f:
+        cond_dict = {cond: i + 1 for i, cond in enumerate(f['feats'])}
+    else:
+        cond_dict = ACTIVITY_CONDITIONS
     n_rows = len(M)
     # data is sorted by cond
     np.random.shuffle(M)
-    Xs = M[:, 3:]
-    ys = M[:, 1]
+    Xs = M[:, 4:]
+    ys = M[:, 2]
 
-    idxs = np.arange(n_rows)[reduce(np.logical_or, [ys == ACTIVITY_CONDITIONS[cond] for cond in conds])]
+    idxs = np.arange(n_rows)[reduce(np.logical_or, [ys == cond_dict[cond] for cond in conds])]
 
     ds = Dataset(SIEGLE_HEADERS, len(idxs))
     for i in xrange(len(idxs)):
@@ -246,6 +277,7 @@ def load_raw_data(dataset_name, conds=None, duration=10, sample_rate=128, **kwar
                 segment_end = min(segment_end, segment_begin + duration * sample_rate)
                 # shape should be (duration * sample_rate) by eeg vector length
                 eeg_segment = eeg_seq[segment_begin:segment_end, :]
+
                 segments.append((subject, source, eeg_segment, label))
 
     # add all segments to the new dataset
@@ -260,7 +292,7 @@ class FeatureGenerationException(Exception):
     pass
 
 
-def gen_featured_dataset(ds, func, *args, **kwargs):
+def gen_featured_dataset(ds, func, subject_norm=1, clip=True, **kwargs):
     """Applies 'func' to generate features for the eeg segment of each row.
 
     Normalizes eeg features
@@ -277,7 +309,7 @@ def gen_featured_dataset(ds, func, *args, **kwargs):
         _, source, eeg_segment, _ = ds[i]
         subject, _, _, label = ds.orig[i]
         try:
-            eeg_features = func(eeg_segment, *args, **kwargs)
+            eeg_features = func(eeg_segment, **kwargs)
         except FeatureGenerationException:
             # TODO: convert to a warning
             print('could not generate features for row {i}, (subject: {subject}, source: {source}, label: {label})'.format(
@@ -296,7 +328,8 @@ def gen_featured_dataset(ds, func, *args, **kwargs):
 
     # TODO normalization should be shared across some columns
     print('feature vector width: {}'.format(new_ds.get_column('eeg').data.shape[1]))  # TODO: replace with 'width' once we merge
-    new_ds.get_column('eeg').data = normalize_table(new_ds['eeg'])
+    within_subject = new_ds['subject'] if subject_norm else None
+    new_ds.get_column('eeg').data = normalize_table(new_ds['eeg'], clip=clip, within_subject=within_subject)
 
     return new_ds
 
@@ -307,4 +340,3 @@ def filter_indices_by_condition(dataset, idx, conds):
     # convert from cond string to cond enum, to internal cond enum, to mask
     want = [dataset.get_data('condition')[idx] == mapping[ACTIVITY_CONDITIONS[cond]] for cond in conds]
     return idx[reduce(np.logical_or, want)]
-    return new_ds

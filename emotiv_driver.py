@@ -8,19 +8,19 @@ Usage:
 
 Options:
     -m <model>, --model=<model>
-        The name of the model family to use [default: batchnorm].
+        The name of the model family to use [default: randomforest].
     -f <feature>, --feature=<feature>
         The names of features to use [default: eig_corr frequency_bands stat_moments hjorth].
     -c <cond>, --cond=<cond>
         The names of conditions to use [default: PositiveLowArousalPictures PositiveHighArousalPictures].
     -i <input>, --in=<input>
-        The input data file to use [default: raw_data/emotiv_processed.mat].
+        The input data file to use.
     -e <error>, --err=<error>
         The name for the log file to be generated.
     -o <output>, --out=<output>
         The name of the file to saved trained model parameters.
     -p <param_set>, --param_set=<param_set>
-        The name of the parameter set to use [default: emotiv_wide_search2].
+        The name of the parameter set to use [default: emotiv_wide_search4].
     -q, --quiet
         Suppress writing to log and output files.
     -t, --task_number=<ints>
@@ -31,6 +31,7 @@ from __future__ import print_function, division
 
 import os
 import warnings
+import random
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 
 from docopt import docopt
@@ -39,7 +40,7 @@ from learntools.libs.logger import gen_log_name, log_me, set_log_file
 from learntools.emotiv.data import prepare_data, convert_raw_data, load_raw_data, load_siegle_data, gen_featured_dataset
 from learntools.emotiv.filter import filter_data
 from learntools.emotiv.features import construct_feature_generator
-from learntools.data import cv_split
+from learntools.data import cv_split, cv_split_randomized
 from learntools.data.crossvalidation import cv_split_within_column
 import learntools.deploy.config as config
 
@@ -47,7 +48,6 @@ import release_lock
 release_lock.release()  # TODO: use theano config instead. We have to figure out
 # what they did with the config.compile.timeout variable because that's actually
 # what we need
-
 
 def smart_load_data(dataset_name=None, features=None, **kwargs):
     _, ext = os.path.splitext(dataset_name)
@@ -69,10 +69,11 @@ def smart_load_data(dataset_name=None, features=None, **kwargs):
 @log_me()
 def run(task_num, model, **kwargs):
     if model == 'multistage_batchnorm':
-        kwargs = dict(kwargs, conds=None)
+        from learntools.emotiv.multistage_batchnorm import run as multistage_batchnorm_run
+        multistage_batchnorm_run(**kwargs)
 
     dataset = smart_load_data(**kwargs)
-    train_idx, valid_idx = cv_split(dataset, percent=0.1, fold_index=task_num)
+    train_idx, valid_idx = cv_split_randomized(dataset, percent=0.2, fold_index=task_num)
     if model == 'batchnorm':
         from learntools.emotiv.batchnorm import BatchNorm as SelectedModel
     elif model == 'conv_batchnorm':
@@ -81,6 +82,10 @@ def run(task_num, model, **kwargs):
         from learntools.emotiv.multistage_batchnorm import AutoencodingBatchNorm as SelectedModel
     elif model == 'svm':
         from learntools.emotiv.svm import SVM as SelectedModel
+    elif model == 'randomforest':
+        from learntools.emotiv.randomforest import RandomForest as SelectedModel
+    elif model == 'ensemble':
+        from learntools.emotiv.ensemble import Ensemble as SelectedModel
     else:
         raise ValueError("model type is not valid")
 
@@ -92,26 +97,55 @@ def run(task_num, model, **kwargs):
 if __name__ == '__main__':
     args = docopt(__doc__)
 
+    # load args
+    params = config.get_config(args['--param_set'])
+    err_filename = args['--err'] or gen_log_name()
+    out_filename = args['--out']
+    if args['--quiet']:
+        log_filename = os.devnull
+        out_filename = os.devnull
+        print("Suppressing output.")
+    set_log_file(err_filename)
+
+    task_num = int(args['--task_number'])
+
+    params['model'] = args['--model']
+    params['features'] = args['--feature']
+    params['conds'] = args['--cond']
+    params['dataset_name'] = args['--in']
+    params['output_file'] = args['--out']
+    params['task_num'] = int(args['--task_number'])
+
     if args['run']:
-        params = config.get_config(args['--param_set'])
-        err_filename = args['--err'] or gen_log_name()
-        out_filename = args['--out']
-        if args['--quiet']:
-            log_filename = os.devnull
-            out_filename = os.devnull
-            print("Suppressing output.")
-        set_log_file(err_filename)
-
-        task_num = int(args['--task_number'])
-
-        params['model'] = args['--model']
-        params['features'] = args['--feature']
-        params['conds'] = args['--cond']
-        params['dataset_name'] = args['--in']
-        params['output_file'] = args['--out']
-        params['task_num'] = int(args['--task_number'])
-
         run(**params)
+
+    # TODO: figure out a good interface
+    # elif model == 'multistage_pretrain':
+    #     from learntools.emotiv.multistage_batchnorm import pretrain
+    #     no_conds_params = combine_dict(params, {'conds': None})
+    #     dataset = smart_load_data(**no_conds_params)
+    #     train_idx, valid_idx = cv_split_randomized(dataset, percent=0.1, fold_index=task_num)
+    #     full_data = (dataset, train_idx, valid_idx)
+    #     pretrain(log_name=log_filename, full_data=full_data, **params)
+    # elif model == 'multistage_tune':
+    #     from learntools.emotiv.multistage_batchnorm import tune
+    #     # find a param-file to load
+    #     saved_weights = filter(lambda(fn): os.path.splitext(fn)[1] == '.weights', os.listdir('.'))
+    #     selected_weight_file = saved_weights[random.randint(0, len(saved_weights) - 1)]
+    #     dataset = smart_load_data(**params)
+    #     train_idx, valid_idx = cv_split_randomized(dataset, percent=0.1, fold_index=task_num)
+    #     prepared_data = (dataset, train_idx, valid_idx)
+    #     tune(prepared_data=prepared_data, weight_file=selected_weight_file, **params)
+    # elif model == 'multistage_randomforest':
+    #     from learntools.emotiv.multistage_randomforest import run as mrf_run
+    #     selected_weight_file = "2015_03_10_16_09_35_33122.log.weights"
+    #     dataset = smart_load_data(**params)
+    #     if 1:  # TODO: fix this
+    #         train_idx, valid_idx = cv_split_randomized(dataset, percent=0.1, fold_index=task_num)
+    #     else:
+    #         train_idx, valid_idx = cv_split(dataset, percent=0.1, fold_index=task_num)
+    #     prepared_data = (dataset, train_idx, valid_idx)
+    #     mrf_run(prepared_data=prepared_data, weight_file=selected_weight_file, **params)
 
     elif args['convert']:
         convert_raw_data(args['<directory>'], args['<output>'])

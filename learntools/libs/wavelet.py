@@ -1,6 +1,8 @@
 import numpy as np
 import pywt
 
+import matplotlib.pyplot as plt
+
 
 def _downsample(arr, n):
     """Downsample a signal by averaging neighboring points.
@@ -8,10 +10,37 @@ def _downsample(arr, n):
     Code adapted from
     http://stackoverflow.com/questions/10847660/subsampling-averaging-over-a-numpy-array"""
     end = n * int(len(arr) / n)
-    return np.mean(arr[:end].reshape(n, -1), 1)
+    return np.std(arr[:end].reshape(n, -1), 1)
+
+# Make a scalogram given an MRA tree.
+def scalogram(data):
+    bottom = 0
+
+    vmin = min(map(lambda x: min(abs(x)), data))
+    vmax = max(map(lambda x: max(abs(x)), data))
+
+    plt.gca().set_autoscale_on(False)
+
+    for row in range(0, len(data)):
+        scale = 2.0 ** (row - len(data))
+
+        plt.imshow(
+            np.array([abs(data[row])]),
+            interpolation='nearest',
+            vmin=vmin,
+            vmax=vmax,
+            extent=[0, 1, bottom, bottom + scale])
+        bottom += scale
 
 
-def signal_to_wavelet(y, family='db2', double=False, min_length=10, max_length=None, depth=1):
+def signal_to_wavelet(y, family='db6', min_length=10, max_length=None, depth=1):
+    coeffs = pywt.wavedec(y, family, level=depth)
+    coeffs_downsampled = [_downsample(coeff, max_length) if max_length else coeff
+                          for coeff in coeffs if len(coeff) > min_length]
+    return coeffs_downsampled
+
+
+def signal_to_wavelet_manual(y, family='db6', double=False, min_length=10, max_length=None, depth=1):
     c_a, c_d = pywt.dwt(y, family)
 
     # determine whether we want to split the approximation and/or the detail any further

@@ -32,11 +32,12 @@ from __future__ import print_function, division
 import os
 import warnings
 import random
+import cPickle as pickle
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 
 from docopt import docopt
 
-from learntools.libs.logger import gen_log_name, log_me, set_log_file
+from learntools.libs.logger import gen_log_name, log_me, set_log_file, get_log_file
 from learntools.emotiv.data import prepare_data, convert_raw_data, load_raw_data, load_siegle_data, gen_featured_dataset
 from learntools.emotiv.filter import filter_data
 from learntools.emotiv.features import construct_feature_generator
@@ -76,10 +77,10 @@ def run(task_num, model, **kwargs):
     train_idx, valid_idx = cv_split_randomized(dataset, percent=0.2, fold_index=task_num)
     if model == 'batchnorm':
         from learntools.emotiv.batchnorm import BatchNorm as SelectedModel
+    elif model == 'conv':
+        from learntools.emotiv.conv import ConvEmotiv as SelectedModel
     elif model == 'conv_batchnorm':
         from learntools.emotiv.batchnorm import ConvBatchNorm as SelectedModel
-    elif model == 'multistage_batchnorm':
-        from learntools.emotiv.multistage_batchnorm import AutoencodingBatchNorm as SelectedModel
     elif model == 'svm':
         from learntools.emotiv.svm import SVM as SelectedModel
     elif model == 'randomforest':
@@ -91,7 +92,8 @@ def run(task_num, model, **kwargs):
 
     prepared_data = (dataset, train_idx, valid_idx)
     model = SelectedModel(prepared_data, **kwargs)
-    model.train_full(**kwargs)
+    _, params = model.train_full(**kwargs)
+    pickle.dump({'model_type': model_type, 'params': params}, open("{log_name}.params".format(log_name=get_log_file()), "wb"))
 
 
 if __name__ == '__main__':

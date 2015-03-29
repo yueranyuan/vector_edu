@@ -737,19 +737,22 @@ class ConvolutionalBatchNormLayer(HiddenLayer):
 
 # inspired by http://deeplearning.net/tutorial/lenet.html
 class ConvolutionalLayer(NetworkComponent):
-    def __init__(self, rng, n_in, n_out=None, W=None, b=None, field_width=3, ds_factor=2,
-                 activation=rectifier, dropout=None, name='convolutionallayer'):
+    def __init__(self, rng, n_in, W=None, b=None, field_width=3, ds_factor=2,
+                 activation=rectifier, dropout=None, num_channels=5, name='convolutionallayer'):
         super(ConvolutionalLayer, self).__init__(name=name)
         self.dropout = T.scalar('dropout') if dropout is None else dropout
         self.srng = theano.tensor.shared_randomstreams.RandomStreams(
             rng.randint(999999))
+        
+        n_out = ((n_in - field_width + 1) / ds_factor + (1 if field_width % ds_factor == 0 else 0)) \
+                  - 9 *(num_channels - 1)
 
         if W is None:
-            W_values = numpy.asarray(
+            W_values = np.asarray(
                 rng.uniform(
-                    low=-numpy.sqrt(6. / (n_in + n_out)),
-                    high=numpy.sqrt(6. / (n_in + n_out)),
-                    size=(1, 1, field_width, 1)
+                    low=-np.sqrt(6. / (n_in + n_out)),
+                    high=np.sqrt(6. / (n_in + n_out)),
+                    size=(num_channels, num_channels, field_width, 1)
                 ),
                 dtype=theano.config.floatX
             )
@@ -759,7 +762,7 @@ class ConvolutionalLayer(NetworkComponent):
             W = theano.shared(value=W_values, name=self.subname('W'), borrow=True)
 
         if b is None:
-            b_values = numpy.zeros((1,), dtype=theano.config.floatX)
+            b_values = np.zeros((num_channels,), dtype=theano.config.floatX)
             b = theano.shared(value=b_values, name=self.subname('b'), borrow=True)
 
         self.W = W
@@ -772,6 +775,9 @@ class ConvolutionalLayer(NetworkComponent):
         self.L2_sqr = (self.W ** 2).sum()
 
         self.ds_factor = ds_factor
+        self.num_channels = T.constant(num_channels)
+        
+        self.n_out = n_out
 
     def instance(self, x, **kwargs):
         # dropouts
@@ -779,11 +785,13 @@ class ConvolutionalLayer(NetworkComponent):
         # cast because int * float32 = float64 which does not run on GPU
         x = x * T.cast(mask, theano.config.floatX)
         
-        x_reshaped = T.reshape(x, (x.shape[0], 1, x.shape[1], 1), ndim=4)
-        conv_output = conv.conv2d(x_reshaped, self.W)
+        x_reshaped = T.reshape(x, (x.shape[0], x.shape[1] / self.num_channels, self.num_channels, 1), ndim=4)
+        x_reordered = x_reshaped.dimshuffle(0, 2, 1, 3)
+
+        conv_output = conv.conv2d(x_reordered, self.W)
         pooled_output = downsample.max_pool_2d(conv_output, (self.ds_factor, 1))
         lin_output = (pooled_output + self.b.dimshuffle('x', 0, 'x', 'x')) * (1 / (1 - self.dropout))
-        ret = self.activation(lin_output.reshape((lin_output.shape[0], lin_output.shape[2])))
+        ret = self.activation(lin_output.reshape((lin_output.shape[0], lin_output.shape[2] * self.num_channels)))
         return ret
 
 
@@ -795,12 +803,11 @@ class ConvolutionalNetwork(NetworkComponent):
         self.layers = []
         for i, (n_in_, n_out_) in enumerate(zip([n_in] + size, size)):
             self.layers.append(ConvolutionalLayer(n_in=n_in_,
-                                           n_out=n_out_,
                                            name=self.subname('layer{i}'.format(i=i)),
                                            field_width=field_width,
                                            ds_factor=ds_factor,
                                            **kwargs))
-        self.n_out = n_out_
+        self.n_out = self.layers[-1].n_out
         self.components = self.layers
 
     def instance(self, x, **kwargs):

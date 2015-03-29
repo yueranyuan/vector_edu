@@ -68,14 +68,7 @@ class ConvEmotiv(Model):
         # compute parameter updates
         training_updates = []
         params = list(chain.from_iterable(net.params for net in subnets))
-        raw_deltas = [T.grad(cost, param) for param in params]
-        if momentum > 0:
-            old_deltas = [shared_zeros_like(p) for p in params]
-            deltas = [momentum * old_delta + raw_delta for old_delta, raw_delta in izip(old_deltas, raw_deltas)]
-            update_momentum = [(old_delta, delta) for old_delta, delta in izip(old_deltas, deltas)]
-            training_updates += update_momentum
-        else:
-            deltas = raw_deltas
+        deltas = [T.grad(cost, param) for param in params]
         update_parameters = [(param, param - learning_rate * delta)
                              for param, delta in izip(params, deltas)]
         training_updates += update_parameters

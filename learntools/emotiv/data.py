@@ -69,7 +69,7 @@ CONDITIONS = dict(ACTIVITY_CONDITIONS.items() + META_CONDITIONS.items())
 CONDITIONS_STR = dict((v, k) for k, v in CONDITIONS.items())
 
 
-def prepare_data(dataset_name, conds=None, clip=True, subject_norm=False, **kwargs):
+def prepare_data(dataset_name, conds=None, clip=True, subject_norm=False, duration=10, sample_rate=128, **kwargs):
     """load siegle data into a Dataset
 
     Args:
@@ -90,9 +90,6 @@ def prepare_data(dataset_name, conds=None, clip=True, subject_norm=False, **kwar
     data = Dataset.from_csv(dataset_name, headers)
     data.rename_column('fname', 'subject')
     data.rename_column('Condition', 'condition')
-    data.set_column('subject', Dataset.STR)
-    for i, fname in enumerate(data['group']):
-        data.get_column('subject')[i] = os.path.splitext(fname)[0]
     data.set_column('eeg', Dataset.MATFLOAT)
     for i, eeg in enumerate(itertools.izip(*[data[h] for (h, _) in eeg_headers])):
         data.get_column('eeg')[i] = eeg
@@ -134,7 +131,7 @@ def load_unprocessed_siegle_data(dataset_name, conds=None, clip=False, **kwargs)
     f = loadmat(dataset_name)
     cond_data_pairs = list(f['dat'].iteritems())
     if conds is not None:
-        cond_data_pairs = filter(lambda(cond, mat): cond in conds, cond_data_pairs)
+        cond_data_pairs = filter(lambda cond, mat: cond in conds, cond_data_pairs)
     n_rows = sum(len(mat) for cond, mat in cond_data_pairs)
     ds = Dataset(SIEGLE_HEADERS, n_rows=n_rows)
     row_i = 0
@@ -158,7 +155,6 @@ def load_processed_siegle_data(dataset_name, conds=None, **kwargs):
         cond_dict = ACTIVITY_CONDITIONS
     n_rows = len(M)
     # data is sorted by cond
-    np.random.shuffle(M)
     Xs = M[:, 4:]
     ys = M[:, 2]
 
@@ -339,4 +335,5 @@ def filter_indices_by_condition(dataset, idx, conds):
     idx = np.array(idx)
     # convert from cond string to cond enum, to internal cond enum, to mask
     want = [dataset.get_data('condition')[idx] == mapping[ACTIVITY_CONDITIONS[cond]] for cond in conds]
+
     return idx[reduce(np.logical_or, want)]

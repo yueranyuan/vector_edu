@@ -181,4 +181,5 @@ ALL_PARAMS['short_train'] = {'patience': 400,
                              'patience_increase': 300}
 ALL_PARAMS['emotiv_wide_search_autoencode'] = combine_dict(ALL_PARAMS['emotiv_wide_search3'],
                                                            ALL_PARAMS['short_train'])
+ALL_PARAMS['randomforest'] = {'n_estimators': GenVar(30, 90, type=int)}
 all_param_set_keys = ALL_PARAMS.keys()

@@ -1,6 +1,7 @@
 *.pyc
 *.pem
 *.log
+*.log.model
 *.swp
 *.out
 *.pickle

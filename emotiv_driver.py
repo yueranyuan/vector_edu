@@ -31,6 +31,7 @@ from __future__ import print_function, division
 
 import os
 import warnings
+import random
 import cPickle as pickle
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 
@@ -66,7 +67,7 @@ def smart_load_data(dataset_name=None, features=None, **kwargs):
 
 
 @log_me()
-def run(task_num, model, **kwargs):
+def run(task_num, model, output_name, **kwargs):
     if model == 'multistage_batchnorm':
         from learntools.emotiv.multistage_batchnorm import run as multistage_batchnorm_run
         multistage_batchnorm_run(**kwargs)
@@ -91,8 +92,9 @@ def run(task_num, model, **kwargs):
     prepared_data = (dataset, train_idx, valid_idx)
     model = SelectedModel(prepared_data, **kwargs)
     model.train_full(**kwargs)
-    with open("{log_name}.model".format(log_name=get_log_file()), "wb") as f:
+    with open(output_name, "wb") as f:
         pickle.dump(model, f)
+
 
 if __name__ == '__main__':
     args = docopt(__doc__)
@@ -100,11 +102,11 @@ if __name__ == '__main__':
     # load args
     params = config.get_config(args['--param_set'])
     err_filename = args['--err'] or gen_log_name()
-    out_filename = args['--out']
+    out_filename = args['--out'] or "{}.model".format(err_filename)
     if args['--quiet']:
         log_filename = os.devnull
         out_filename = os.devnull
-        print("Suppressing output.")
+        print("Suppressing logging and output.")
     set_log_file(err_filename)
 
     task_num = int(args['--task_number'])
@@ -113,7 +115,7 @@ if __name__ == '__main__':
     params['features'] = args['--feature']
     params['conds'] = args['--cond']
     params['dataset_name'] = args['--in']
-    params['output_file'] = args['--out']
+    params['output_name'] = out_filename
     params['task_num'] = int(args['--task_number'])
 
     if args['run']:

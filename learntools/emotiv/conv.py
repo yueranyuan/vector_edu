@@ -15,7 +15,7 @@ from learntools.model.math import sigmoid
 class ConvEmotiv(Model):
     @log_me('...building ConvEmotiv')
     def __init__(self, prepared_data, batch_size=30, L1_reg=0., L2_reg=0.,
-                 field_width=20, ds_factor=2, rng_seed=42, dropout_p=0.5,
+                 field_width=3, ds_factor=2, rng_seed=42, dropout_p=0.5,
                  learning_rate=0.02, **kwargs):
         """
         Args:

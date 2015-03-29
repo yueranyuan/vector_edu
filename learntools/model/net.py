@@ -701,8 +701,7 @@ class ConvolutionalLayer(NetworkComponent):
         self.srng = theano.tensor.shared_randomstreams.RandomStreams(
             rng.randint(999999))
         
-        n_out = ((n_in - field_width + 1) / ds_factor + (1 if field_width % ds_factor == 0 else 0)) \
-                  - 9 *(num_channels - 1)
+        n_out = (n_in - field_width + 1 - ((field_width - 1) * (num_channels - 1))) / ds_factor
 
         if W is None:
             W_values = np.asarray(

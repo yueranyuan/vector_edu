@@ -7,6 +7,7 @@ import glob
 import numpy as np
 import os
 import traceback
+from collections import defaultdict
 
 from learntools.data import Dataset
 from learntools.data.dataset import LISTEN_TIME_FORMAT
@@ -320,7 +321,7 @@ def gen_featured_dataset(ds, func, subject_norm=1, clip=True, **kwargs):
         new_ds[i] = row
 
     # TODO normalization should be shared across some columns
-    print('feature vector width: {}'.format(new_ds.get_column('eeg').data.shape[1]))  # TODO: replace with 'width' once we merge
+    print('feature vector: {}'.format(new_ds.get_column('eeg').width))
     within_subject = new_ds['subject'] if subject_norm else None
     new_ds.get_column('eeg').data = normalize_table(new_ds['eeg'], clip=clip, within_subject=within_subject)
 
@@ -334,3 +335,64 @@ def filter_indices_by_condition(dataset, idx, conds):
     want = [dataset.get_data('condition')[idx] == mapping[ACTIVITY_CONDITIONS[cond]] for cond in conds]
 
     return idx[reduce(np.logical_or, want)]
+
+
+def to_paired(prepared_data):
+    # parse data
+    dataset, train_idx, valid_idx = prepared_data
+    conds = dataset['condition']
+    subjects = dataset['subject']
+    eegs = dataset['eeg']
+
+    # collect subj and cond specific indices
+    subj_dict = defaultdict(set)
+    conds_dict = defaultdict(set)
+    unique_conds = np.unique(conds)
+    unique_subjects = np.unique(subjects)
+    for cond in unique_conds:
+        conds_dict[cond] = set(np.where(conds == cond)[0])
+    for subj in unique_subjects:
+        subj_dict[subj] = set(np.where(subjects == subj)[0])
+
+    # build (subj, other_cond) indices table
+    subj_cond_dict = defaultdict(set)
+    for subj, subj_idxs in subj_dict.iteritems():
+        for cond, cond_idxs in conds_dict.iteritems():
+            subj_cond_dict[(subj, cond)] = list(cond_idxs & subj_idxs)
+
+    # build up all permutations of the condition pairs per subject
+    paired_indices = []
+    for subj in unique_subjects:
+        subj_conds = [subj_cond_dict[subj, cond] for cond in unique_conds]
+        combinations = itertools.product(*subj_conds)
+        permutations = itertools.chain.from_iterable(itertools.permutations(combination) for combination in combinations)
+        paired_indices += list(permutations)
+
+    # build new train_idx and valid_idx from the new indices
+    old_train_idx = set(train_idx)
+    old_valid_idx = set(valid_idx)
+    new_train_idx = []
+    new_valid_idx = []
+    for i, idxs in enumerate(paired_indices):
+        set_idxs = set(idxs)
+        train_overlap = len(set_idxs & old_train_idx)
+        valid_overlap = len(set_idxs & old_valid_idx)
+        if valid_overlap:
+            new_valid_idx.append(i)
+        elif train_overlap:
+            new_train_idx.append(i)
+
+    # create dataset to hold the paired data
+    new_dataset = Dataset(headers=dataset.headers, n_rows=len(paired_indices))
+    interested_cond = unique_conds[0]
+    for i, idxs in enumerate(paired_indices):
+        new_dataset['subject'][i] = subjects[idxs[0]]
+        new_dataset['eeg'][i] = list(itertools.chain.from_iterable(eegs[idx] for idx in idxs))
+        for cond_i, idx in enumerate(idxs):
+            if conds[idx] == interested_cond:
+                new_dataset['condition'][i] = cond_i
+                break
+        else:
+            raise Exception("condition not found")
+
+    return new_dataset, new_train_idx, new_valid_idx

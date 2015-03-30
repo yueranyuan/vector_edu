@@ -25,6 +25,8 @@ Options:
         Suppress writing to log and output files.
     -t, --task_number=<ints>
         A counter representing the queue position of the current job [default: 0].
+    -d <data_mode>, --data_mode=<data_mode>
+        Way to arrange the data after loading it - normal or paired [default: normal].
 """
 
 from __future__ import print_function, division
@@ -37,8 +39,9 @@ warnings.filterwarnings("ignore", category=DeprecationWarning)
 
 from docopt import docopt
 
-from learntools.libs.logger import gen_log_name, log_me, set_log_file, get_log_file
-from learntools.emotiv.data import prepare_data, convert_raw_data, load_raw_data, load_siegle_data, gen_featured_dataset
+from learntools.libs.logger import gen_log_name, log_me, set_log_file
+from learntools.emotiv.data import (prepare_data, convert_raw_data, load_raw_data, load_siegle_data,
+                                    gen_featured_dataset, to_paired)
 from learntools.emotiv.filter import filter_data
 from learntools.emotiv.features import construct_feature_generator
 from learntools.data import cv_split_binarized
@@ -67,7 +70,7 @@ def smart_load_data(dataset_name=None, features=None, **kwargs):
 
 
 @log_me()
-def run(task_num, model, output_name, **kwargs):
+def run(task_num, model, output_name, data_mode, **kwargs):
     if model == 'multistage_batchnorm':
         from learntools.emotiv.multistage_batchnorm import run as multistage_batchnorm_run
         multistage_batchnorm_run(**kwargs)
@@ -90,6 +93,14 @@ def run(task_num, model, output_name, **kwargs):
         raise ValueError("model type is not valid")
 
     prepared_data = (dataset, train_idx, valid_idx)
+    if data_mode == 'normal':
+        pass
+    elif data_mode == 'paired':
+        prepared_data = to_paired(prepared_data)
+    else:
+        raise ValueError("data_mode '{}' is not valid".format(data_mode))
+
+
     model = SelectedModel(prepared_data, **kwargs)
     model.train_full(**kwargs)
     with open(output_name, "wb") as f:
@@ -115,6 +126,7 @@ if __name__ == '__main__':
     params['features'] = args['--feature']
     params['conds'] = args['--cond']
     params['dataset_name'] = args['--in']
+    params['data_mode'] = args['--data_mode']
     params['output_name'] = out_filename
     params['task_num'] = int(args['--task_number'])
 

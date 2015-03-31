@@ -10,7 +10,7 @@ Options:
     -m <model>, --model=<model>
         The name of the model family to use [default: randomforest].
     -f <feature>, --feature=<feature>
-        The names of features to use [default: eig_corr frequency_bands stat_moments hjorth].
+        The names of features to use [default: windowed_fft].
     -c <cond>, --cond=<cond>
         The names of conditions to use [default: PositiveLowArousalPictures PositiveHighArousalPictures].
     -i <input>, --in=<input>

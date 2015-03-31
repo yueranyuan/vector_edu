@@ -125,20 +125,18 @@ def hjorth(data, **kwargs):
     return (activity, mobility, complexity)
 
 
-def windowed_fft(data, duration=10, sample_rate=128, cutoffs=(0.5, 4.0, 7.0, 12.0, 30.0), **kwargs):
-    """
-    data: multichannel eeg data
-    duration: length of window
-    sample_rate: sample rate
-    cutoffs: fft bin thresholds
-    """
+def windowed_fft(data, duration=10, sample_rate=128, cutoffs=(0.5, 4.0, 7.0, 12.0, 30.0), fft_window=1.5, **kwargs):
     # Fourier transform on eeg
     # Window size of 1 s, overlap by 0.5 s
     eeg_freqs = []
+    overlap = 0.5
+    start_t = 0.0
+    data = data[:duration * sample_rate]
+    while (start_t + fft_window) * sample_rate < len(data):
+        end_t = start_t + fft_window
+        window = data[int(start_t * sample_rate):int(end_t * sample_rate)]
+        start_t = end_t - overlap
 
-    for i in (x * 0.5 for x in xrange(duration * 2)):
-        # window is half second duration (in samples) by eeg vector length
-        window = data[int(i * sample_rate/2) : int((i + 1) * sample_rate/2)]
         # there are len(cutoffs)-1 bins, window_freq is a list of will have a frequency vector of num channels
         window_freq = signal_to_freq_bins(window, cutoffs=cutoffs, sampling_rate=sample_rate)
 

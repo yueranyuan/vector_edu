@@ -243,6 +243,7 @@ class ConvBatchNorm(BatchNorm):
         train_pY, infer_pY, updates_layer = bn_layer.instance(train_layer, infer_layer)
         bn_updates.extend(updates_layer)
         subnets.append(bn_layer)
+        self.layers = subnets
 
         true_y = self._ys[input_idxs]
         true_y.name = 'true_y'
@@ -263,14 +264,18 @@ class ConvBatchNorm(BatchNorm):
                              for param in params] + bn_updates
 
         self._tf_infer = theano.function(inputs=[input_idxs],
-                                         outputs=[loss, infer_pY[:, 1] - infer_pY[:, 0], input_idxs],
+                                         outputs=[loss, infer_pY, input_idxs],
                                          givens=[(t_dropout, 0.0)],
                                          allow_input_downcast=True)
         self._tf_train = theano.function(inputs=[input_idxs],
-                                         outputs=[loss, train_pY[:, 1] - train_pY[:, 0], input_idxs],
+                                         outputs=[loss, train_pY, input_idxs],
                                          givens=[(t_dropout, dropout_p)],
                                          allow_input_downcast=True, updates=update_parameters)
         self.subnets = subnets
+        self.binarizer = CutoffBinarizer()
+
+    def serialize(self):
+        return []
 
 
 def acc_by_cutoff(y, preds, cutoff):

@@ -125,7 +125,7 @@ def hjorth(data, **kwargs):
     return (activity, mobility, complexity)
 
 
-def windowed_fft(data, duration=10, sample_rate=128, cutoffs=(0.5, 4.0, 7.0, 12.0, 30.0), fft_window=1.5, **kwargs):
+def windowed_fft_variable(data, duration=10, sample_rate=128, cutoffs=(0.5, 4.0, 7.0, 12.0, 30.0), fft_window=1.5, **kwargs):
     # Fourier transform on eeg
     # Window size of 1 s, overlap by 0.5 s
     eeg_freqs = []
@@ -147,7 +147,37 @@ def windowed_fft(data, duration=10, sample_rate=128, cutoffs=(0.5, 4.0, 7.0, 12.
     return (eeg_freqs,)
 
 
-def wavelet(data, duration=10, sample_rate=128, depth=1, min_length=10, max_length=None, family='db2', **kwargs):
+def windowed_fft(data, duration=10, sample_rate=128, cutoffs=(0.5, 4.0, 7.0, 12.0, 30.0), **kwargs):
+    """
+    data: multichannel eeg data
+    duration: length of window
+    sample_rate: sample rate
+    cutoffs: fft bin thresholds
+    """
+    # Fourier transform on eeg
+    # Window size of 1 s, overlap by 0.5 s
+    eeg_freqs = []
+
+    for i in (x * 0.5 for x in xrange(duration)):
+        # window is half second duration (in samples) by eeg vector length
+        window = data[int(i * sample_rate) : int((i + 1) * sample_rate)]
+        # there are len(cutoffs)-1 bins, window_freq is a list of will have a frequency vector of num channels
+        window_freq = signal_to_freq_bins(window, cutoffs=cutoffs, sampling_rate=sample_rate)
+
+        eeg_freqs.append(np.concatenate(window_freq))
+
+    # (num windows * num bins) * num channels
+    eeg_freqs = np.concatenate(eeg_freqs)
+    return (eeg_freqs,)
+
+
+def just_fft(data, duration=10, sample_rate=128, cutoffs=(0.5, 4.0, 7.0, 12.0, 30.0), **kwargs):
+    eeg_freqs = np.concatenate(signal_to_freq_bins(data, cutoffs=cutoffs, sampling_rate=sample_rate))
+    print(eeg_freqs)
+    return (eeg_freqs,)
+
+
+def wavelet(data, duration=10, sample_rate=128, depth=0, min_length=10, max_length=None, family='db2', **kwargs):
     # cut eeg to desired length (so that all wavelets are the same length)
     desired_length = duration * sample_rate
     if len(data) < desired_length:
@@ -164,13 +194,20 @@ def wavelet(data, duration=10, sample_rate=128, depth=1, min_length=10, max_leng
     return (np.concatenate(eeg_wavelets),)
 
 
+def raw(data, lower_boundary=0.05, upper_boundary=0.95, **kwargs):
+    N = data.shape[0]
+    boundaries = (N * lower_boundary, N * upper_boundary)
+    return (np.concatenate(data[boundaries[0]:boundaries[1], :].T), )
+
+
 FEATURE_MAP = {
     'eig_corr': eig_corr,
     'frequency_bands': frequency_bands,
     'stat_moments': stat_moments,
     'hjorth': hjorth,
-    'windowed_fft': windowed_fft,
+    'windowed_fft': just_fft,
     'wavelet': wavelet,
+    'raw': raw
 }
 
 

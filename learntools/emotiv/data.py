@@ -286,7 +286,7 @@ def load_raw_data(dataset_name, conds=None, duration=10, sample_rate=128, **kwar
     return new_ds
 
 
-def gen_featured_dataset(ds, func, subject_norm=1, clip=True, **kwargs):
+def gen_featured_dataset(ds, func, subject_norm=False, clip=False, **kwargs):
     """Applies 'func' to generate features for the eeg segment of each row.
 
     Normalizes eeg features

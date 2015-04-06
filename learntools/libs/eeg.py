@@ -3,7 +3,6 @@ from itertools import izip, islice
 from operator import add
 import math
 
-from numpy.fft import fft
 import numpy as np
 
 
@@ -13,12 +12,20 @@ def signal_to_freq_bins(y, cutoffs, sampling_rate=512.0, window='hanning'):
         window = np.hanning(len(y))
         y = window[:, np.newaxis] * y
 
-    Y = fft(y)
+    Y = np.fft.fft(y)
     f = abs(Y)
-    cutoffs = [c * sampling_rate / len(y) for c in cutoffs]
+    #freqs = np.fft.fftfreq(len(y), d=1/sampling_rate)
+    #cutoffs2 = []
+    #for c in cutoffs:
+    #    for freq_i, freq in enumerate(freqs):
+    #        if freq > c:
+    #            cutoffs2.append(freq_i)
+    #            break
+    cutoffs_scaled = [c * len(y) / sampling_rate for c in cutoffs]
+
     # need a vectorlike zero element for bins to have the same dimensions
     bins = [reduce(add, f[math.ceil(low):math.floor(high)], np.zeros(f.shape[1:])) for low, high
-            in izip(cutoffs, islice(cutoffs, 1, None))]
+            in izip(cutoffs_scaled, islice(cutoffs_scaled, 1, None))]
     return bins
 
 if __name__ == "__main__":

@@ -10,11 +10,11 @@ Options:
     -m <model>, --model=<model>
         The name of the model family to use [default: randomforest].
     -f <feature>, --feature=<feature>
-        The names of features to use [default: windowed_fft].
+        The names of features to use [default: raw].
     -c <cond>, --cond=<cond>
-        The names of conditions to use [default: PositiveLowArousalPictures PositiveHighArousalPictures].
+        The names of conditions to use [default: NegativeLowArousalPictures PositiveLowArousalPictures].
     -i <input>, --in=<input>
-        The input data file to use.
+        The input data file to use. [default: data/emotiv_all.gz]
     -e <error>, --err=<error>
         The name for the log file to be generated.
     -o <output>, --out=<output>
@@ -33,7 +33,6 @@ from __future__ import print_function, division
 
 import os
 import warnings
-import random
 import cPickle as pickle
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 
@@ -49,8 +48,8 @@ import learntools.deploy.config as config
 
 import release_lock
 release_lock.release()  # TODO: use theano config instead. We have to figure out
-# what they did with the config.compile.timeout variable because that's actually
-# what we need
+# what they did with the config.compile.timeout variable because that's actually what we need
+
 
 def smart_load_data(dataset_name=None, features=None, **kwargs):
     _, ext = os.path.splitext(dataset_name)
@@ -87,6 +86,8 @@ def run(task_num, model, output_name, data_mode, **kwargs):
         from learntools.emotiv.svm import SVM as SelectedModel
     elif model == 'randomforest':
         from learntools.emotiv.randomforest import RandomForest as SelectedModel
+    elif model == 'knn':
+        from learntools.emotiv.knn import KNN as SelectedModel
     elif model == 'ensemble':
         from learntools.emotiv.ensemble import LogRegEnsemble as SelectedModel
     else:
@@ -100,10 +101,9 @@ def run(task_num, model, output_name, data_mode, **kwargs):
     else:
         raise ValueError("data_mode '{}' is not valid".format(data_mode))
 
-
     model = SelectedModel(prepared_data, **kwargs)
     model.train_full(**kwargs)
-    with open(output_name, "wb") as f:
+    with open('{}.model'.format(output_name), "wb") as f:
         pickle.dump(model, f)
 
 

@@ -207,9 +207,11 @@ def analyze(local_dir=None, bucket=None, subfolder=None, start_time=None,
         ["PositiveLowArousalPictures", "NegativeLowArousalPictures"],
         ["PositiveHighArousalPictures", "NegativeHighArousalPictures"],
         ["PositiveLowArousalPictures", "PositiveHighArousalPictures"],
-        ["NegativeHighArousalPictures", "NegativeLowArousalPictures"]]
+        ["NegativeHighArousalPictures", "NegativeLowArousalPictures"],
+        ["NegativeLowArousalPictures", "PositiveHighArousalPictures"]]
+    COND_TYPES = map(set, COND_TYPES)
     for key_name, (args, history, run_time) in parsed_content:
-        args['conds'] = COND_TYPES.index(args['conds'])
+        args['conds'] = COND_TYPES.index(set(args['conds']))
     # parsed_content = filter(lambda (key_name, (args, history, run_time)): args["conds"] == 3, parsed_content)
 
     # parse content of each individual log file and fill a data store of
@@ -301,4 +303,4 @@ if __name__ == '__main__':
     # analyze(bucket='cmu-data', subfolder='vectoredu/results', cache_dir='results', start_time=start_time)
     # analyze(cache_dir='results', start_time=start_time)
     # analyze_recent(days=2, local_dir='.')
-    analyze(start_time=datetime(2015, 3, 8, 3, 00), local_dir='.', most_recent_n=100)
+    analyze(start_time=datetime(2015, 3, 8, 3, 00), local_dir='.', most_recent_n=30)

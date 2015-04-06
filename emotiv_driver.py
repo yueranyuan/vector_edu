@@ -12,7 +12,7 @@ Options:
     -f <feature>, --feature=<feature>
         The names of features to use [default: raw].
     -c <cond>, --cond=<cond>
-        The names of conditions to use [default: NegativeLowArousalPictures PositiveLowArousalPictures].
+        The names of conditions to use [default: PositiveHighArousalPictures PositiveLowArousalPictures].
     -i <input>, --in=<input>
         The input data file to use. [default: data/emotiv_all.gz]
     -e <error>, --err=<error>

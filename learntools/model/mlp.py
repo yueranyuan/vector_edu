@@ -42,7 +42,7 @@ class MLP(NetworkComponent):
 
 class ConvolutionalMLP(NetworkComponent):
     def __init__(self, rng, n_in, size, n_out, activation=rectifier,
-                 dropout=None, field_width=3, ds_factor=2, name='MLP'):
+                 dropout=None, field_width=3, ds_factor=2, time_convolution=True, name='MLP'):
         super(ConvolutionalMLP, self).__init__(name=name)
         self.dropout = T.scalar('dropout') if dropout is None else dropout
         self.hidden = ConvolutionalNetwork(
@@ -53,6 +53,7 @@ class ConvolutionalMLP(NetworkComponent):
             dropout=self.dropout,
             field_width=field_width,
             ds_factor=ds_factor,
+            time_convolution=time_convolution,
             name=self.subname('convolutional')
         )
 

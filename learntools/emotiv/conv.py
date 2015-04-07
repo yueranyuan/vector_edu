@@ -16,7 +16,7 @@ class ConvEmotiv(Model):
     @log_me('...building ConvEmotiv')
     def __init__(self, prepared_data, batch_size=30, L1_reg=0., L2_reg=0.,
                  field_width=3, ds_factor=2, rng_seed=42, dropout_p=0.5,
-                 learning_rate=0.02, **kwargs):
+                 learning_rate=0.02, time_convolution=True, **kwargs):
         """
         Args:
             prepared_data : (Dataset, [int], [int])
@@ -45,6 +45,7 @@ class ConvEmotiv(Model):
                          n_out=2,
                          field_width=field_width,
                          ds_factor=ds_factor,
+                         time_convolution=time_convolution,
                          dropout=t_dropout)
 
         input_idxs = T.ivector('input_idxs')

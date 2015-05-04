@@ -3,11 +3,10 @@
 \usepackage{hyperref}
 \usepackage{url}
 %\documentstyle[nips14submit_09,times,art10]{article} % For LaTeX 2.09
+\usepackage[backend=biber]{biblatex}
+\bibliography{paper}
 
-
-\title{
-%TODO: we did a thing
-Deep learning on psychological arousal classification}
+\title{Deep learning on psychological arousal classification}
 
 
 \author{
@@ -25,20 +24,21 @@ Pittsburgh, PA 15213\\
 
 \begin{document}
 
-
 \maketitle
 
 \begin{abstract}
-%TODO: hi so like there's this problem, we tried to do this. it kinda works not really
+We present a task for psychological arousal state classification from EEG data and a model for classifying EEG data using deep learning and ensemble techniques. The task is classification of 10-second recordings taken from Emotiv EPOC headsets into the activities performed during each recording. We find that our model outperforms baseline accuracy values established by random forests and SVMs.
 \end{abstract}
 
-\section*{Introduction}
-%TODO: so like there's this problem right? we wanted to solve it and we think our approach would be a good idea. in section 1 we'll discuss the things people have tried before. in section 2 we'll discuss the data we had. in section 3 we'll discuss our approach. in section 4 we'll discuss why we're legit scientists. in section 5 we'll discuss what results we got. in the conclusion we'll wax philosophical.
-%-the problem in general
-%-what we did in general and why
-%-what the sections are
+\section{Introduction} \label{section:introduction}
+One of the ongoing challenges of brain-computer interface (BCI) research is the creation of a non-invasive device that can be directly and accurately controlled with one's mental processes. The most studied approach is electroencephalography (EEG), which is a technique that attaches several electrodes to the scalp to measure the electric potential changes caused by neural oscillations in the brain. EEG devices have been difficult to access for non-researchers until recently, as more EEG headsets become easier to use and available at a lower cost. However, the ability to reliably infer information from the brain using EEG such as intent is limited by poor spatial resolution and susceptibility to noise.
 
-\section{Prior work}
+In the last decade, deep learning techniques have made significant advances in machine vision, natural language processing, and speech processing. This success is attributed to the ability of deep neural networks (DNNs) to learn complex and robust distributed representations of inputs \cite{DBLP:journals/corr/abs-1206-5538} when given large numbers of training examples. Because EEG data can be more easily acquired due to the availability of consumer-grade EEG headsets, DNNs present an opportunity for improving performance in BCI. Thus, we developed a deep learning model to classify a constrained set of EEG data.
+
+In section \ref{section:litreview}, we present a detailed discussion of EEG and deep learning. In section \ref{section:data}, we discuss the characteristics of our EEG dataset, features used in EEG signal processing, and the task at hand. In section \ref{section:techniques}, we describe the deep learning and ensemble approaches used in our exploration of the problem. In section \ref{section:experiment}, we describe our experimental setup and evaluation metrics for the task. In section \ref{section:results}, we describe the results we obtained.
+
+
+\section{Prior work} \label{section:litreview}
 %TODO: so like our thing has never actually been done before. actually, this guy did this one thing but it really sucks. so we were like obviously we could do better with technology x.
 %-EEG
 % -what is EEG
@@ -48,7 +48,7 @@ Pittsburgh, PA 15213\\
 % -what is deep learning
 % -deep learning + EEG
 
-\section{Data}
+\section{Data} \label{section:data}
 %TODO: we have big data, oooh. okay maybe not that big but it still takes forever to load 
 %-Dataset (details)
 % -processing
@@ -59,21 +59,23 @@ Pittsburgh, PA 15213\\
 % -wavelets
 % -other
 
-\section{Techniques}
+\section{Techniques} \label{section:techniques}
 %TODO: we thought technology x would be a great idea because it has these advantages over the sucky way that one guy was doing it. so we wrote some code and did it. we wrote the code. :o
 %-Deep learning
 % -deep nets
 % -dropout
 % -autoencoder
-% -denoting autoencoder
+% -denoising autoencoder
 % -convolutional neural nets
 % -parameterized rectifiers
+Parameterized rectified linear units (PReLUs) \cite{DBLP:journals/corr/HeZR015} are leaky ReLUs whose slopes are learnable parameters.
 % -batchnorm (plus all that other stuff)
+Batch normalization \cite{DBLP:journals/corr/IoffeS15} is a method for training deep neural networks that makes normalization a part of the network, allowing for better performance and training speed.
 %-Ensemble
 % -random forest
 % -classifier fusion
 
-\section{Experiment}
+\section{Experiment} \label{section:experiment}
 %TODO: we're not making up numbers here yo.
 %-Cross-validation
 %-Parameter search
@@ -83,20 +85,19 @@ Pittsburgh, PA 15213\\
 %-Alternative evaluations
 %-Ranking channels for importance
 
-\section{Results}
+\section{Results} \label{section:results}
 %TODO: yeah so um our thing sucks like the other guy's stuff. but it sucks less. so yaya
 %-the results
 
-\section*{Conclusion}
+\section{Conclusion} \label{section:conclusion}
 %TODO: look at what we did. we think we can do better next time. but yeah we'll need money for ramen so gib pls
 %-refer back to the prev work
 %-future work
 
-\subsubsection*{Acknowledgments}
+\section*{Acknowledgments}
 %TODO: thanks mom
 
-\subsubsection*{References}
-%TODO: [1] awesome paper by awesome guy
 
+\printbibliography
 
 \end{document}

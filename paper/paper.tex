@@ -82,6 +82,13 @@ Batch normalization \cite{DBLP:journals/corr/IoffeS15} is a method for training 
 %-Evaluation
 % -baseline classifiers
 % -auc, acc, best-cutoff
+\subsection{Evaluation Metrics}
+\subsubsection{Accuracy}
+The output of our classifiers when classifying input $x$ into category $A$ or $B$ is two probabilities $P(A_x)$ and $P(B_x)$ (the predicted probability that $x$ is in category $A$ or $B$ respectively), with $P(A_x)+P(B_x)=1$.  We choose the greater of these probabilities and declare its category to be the predicted category for $x$.  The accuracy of the classifier over a set of input samples is then simply the percentage of samples for which the predicted and actual categories agree.
+\subsubsection{Best-Cutoff Accuracy}
+Best-cutoff accuracy is a generalization of our accuracy calculation described above.  The only change is in how the predicted category for a sample is determined: a cutoff $c$ is set, with the sample declared to be in category $A$ if $P(A_x) > c$ and category $B$ otherwise.  Each time that the best-cutoff accuracy is computed for a set of predictions, the value of the cutoff is dynamically chosen such that the final accuracy result is maximized.
+\subsubsection{AUC}
+The area under the receiver operating characteristic (ROC) curve has been proposed \cite{DBLP:conf/ijcai/LingHZ03} as a more effective metric for comparing classifiers than accuracy.  The ROC curve represents the ratio of the true positive rate of a classifier to its false positive rate as its discrimination cutoff is varied.  We arbitrarily select one class here to be the positive class and the other to be the negative class.  We then construct a ranking of all input samples from least-likely to most-likely to be in the positive class (as determined by the probability assigned to that class by the classifier).  Our discrimination cutoff is then the point in this ranking list for which we determine less-likely-positive samples to be negative and more-likely ones to be positive.  We calculate the area under the ROC curve over all possible values of this cutoff, using this result as our metric.
 %-Alternative evaluations
 %-Ranking channels for importance
 

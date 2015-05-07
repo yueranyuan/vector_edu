@@ -96,9 +96,11 @@ Batch normalization \cite{DBLP:journals/corr/IoffeS15} is a method for training 
 %-Cross-validation
 %-Parameter search
 %-Evaluation
+\subsection{Evaluation}
 % -baseline classifiers
+\subsubsection{Baseline Classifiers}
+In addition to our deep learning-based classifiers, we compared against two traditional classifiers: support vector machines (SVM) and random forests.
 % -auc, acc, best-cutoff
-\subsection{Evaluation Metrics}
 \subsubsection{Accuracy}
 The output of our classifiers when classifying input $x$ into category $A$ or $B$ is two probabilities $P(A_x)$ and $P(B_x)$ (the predicted probability that $x$ is in category $A$ or $B$ respectively), with $P(A_x)+P(B_x)=1$.  We choose the greater of these probabilities and declare its category to be the predicted category for $x$.  The accuracy of the classifier over a set of input samples is then simply the percentage of samples for which the predicted and actual categories agree.
 \subsubsection{Best-Cutoff Accuracy}

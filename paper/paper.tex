@@ -79,9 +79,13 @@ The data was processed with %TODO: asdfasdfasdf how did siegle process the data?
 % -autoencoder
 % -denoising autoencoder
 % -convolutional neural nets
+\subsection{Convolutional Neural Networks}
+Convolutional neural networks (CNNs) \cite{DBLP:conf/nips/KrizhevskySH12} are neural networks that are not fully connected: instead, each neuron has a limited field of inputs, which overlaps with the fields of adjacent neurons on its layer.  This technique has found success in image processing, as it mimics the functioning of the human brain's visual cortex.  It has also been applied to EEG analysis \cite{DBLP:journals/pami/CecottiG11}, which we attempt in two different ways.  In the first, time-based convolution, we represent our input sample as a series of time points, each of which consists of a vector of features over several channels; the convolutional neurons' fields consist of overlapping slices of time.  In the second, channel-based convolution, the sample is represented as a series of channels, each of which consists of a vector of data points from that channel over time; the convolutional neurons' fields are sets of channels.  We also use a max-pooling downsampling layer above the convolutional layer; this downsamples the results of the convolution by keeping only the maximum value out of each of a set of non-overlapping regions of the convolutional layer.  Finally, we apply a logistic regression classifier to the results of the downsampling to obtain a classification.
 % -parameterized rectifiers
+\subsection{Parameterized Rectifiers}
 Parameterized rectified linear units (PReLUs) \cite{DBLP:journals/corr/HeZR015} are leaky ReLUs whose slopes are learnable parameters.
 % -batchnorm (plus all that other stuff)
+\subsection{Batch Normalization}
 Batch normalization \cite{DBLP:journals/corr/IoffeS15} is a method for training deep neural networks that makes normalization a part of the network, allowing for better performance and training speed.
 %-Ensemble
 % -random forest

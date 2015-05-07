@@ -39,14 +39,22 @@ In section \ref{section:litreview}, we present a detailed discussion of EEG and 
 
 
 \section{Prior work} \label{section:litreview}
-%TODO: so like our thing has never actually been done before. actually, this guy did this one thing but it really sucks. so we were like obviously we could do better with technology x.
-%-EEG
-% -what is EEG
-% -EEG patterns (psych stuff/neuro stuff)
-% -Dataset (brief)
-%-Deep learning
-% -what is deep learning
-% -deep learning + EEG
+\subsection{EEG}
+The EEG (electroencephalogram) signal is a voltage signal that can be measured on the surface of the scalp, arising from large areas of coordinated neural activity. Rhythmic fluctuations (oscillation patterns) in the EEG signal occur within several particular frequency bands, and the relative level of activity within each frequency band has been associated with brain/emotional states such as focused attentional processing, engagement, and frustration (Marosi et al., 2002; Marosi et al., 2001;
+Mundy-Castle, 1951; Berka et al., 2007) and cognitive and memory performance (Gruber et al., 2004; Fernandez et al., 1998; Gevins et al., 1997; Jensen et al., 2007; Klimesch, 1999). The discriminating power of EEG has been demonstrated in a number of studies, achieving 86\% accuracy on 14-way task discrimination, 95\% accuracy on discriminating high/low memory load (Gevins et al., 1998). 
+\subsection{IAPS}
+\subsection{Deep Learning}
+Contemporary deep learning was introduced relatively recently (Hinton, 2006). Prior to the advent of deep learning, classification algorithms by in large operated on some pre-determined preprocessing steps which transforms the raw input into features. These features were then used by a learning algorithm to train a classifier. Deep algorithms, by contrast, combine data processing and classification in the same learning pipeline. This allows the system to learn how to process raw data from
+patterns in the data rather than relying on hand-engineered pre-processing steps. This is why deep learning has alternatively been called feature learning or representation learning.
+Deep learning excels when it is trained on large repositories of data. So the relatively recent availability of large datasets for speech, computer vision, and text processing has allowed deep learning researchers to train models matching or beating state-of-the-art systems (Boulanger-Lewandowski et al., 2012; Krizhevsky et al., 2012; Miklov et al., 2011).  Deep learning is particularly good at extracting structure and information from raw data with little to no knowledge about the
+nature of the data or the nature of the intended classification task by performing unsupervised pre-training (Mesnil et al., 2012). Researchers hypothesize that this is because deep learning algorithms are able to disentangle the many sources of variation (Bengio, 2009).  This is supported by empirical analysis of the learnt features which demonstrate that features that best distinguish task domains are largely separate from features that best distinguish classification conditions (Glorot et
+al., 2011), a separation that suggests features are selectively sensitive to only one type of variation.  The usefulness of this disentanglement is evident in the strong performance of deep learning algorithms in transfer learning competitions (Mesnil et al .,2012; Goodfellow et al., 2011).
+Disentangling sources of variation is a particularly useful trait for use in EEG. As mentioned earlier, sources of signal in EEG are not well-understood and feature engineering is very difficult. By providing deep learning algorithms with a sufficiently large EEG dataset, the algorithms may be able to disentangle the many sources of noise and signal to recognize the specific patterns associated with mental states of interest and discarding patterns associated with environmental noise.
+Further, deep algorithms excel at transferring between different task domains which may be helpful in creating classifiers that can be used on unseen subjects despite non-trivial differences in subject psychology and physiology.
+\subsection{Deep Learning and EEG}
+Deep learning has also had some very recent success in non-EEG biometrics and laboratory EEG. Mirowski et al. (2008) used a convolutional neural network on intracranial EEG signal, predicting seizures with zero-false-alarm rate on 20 out of 21 patients, beating SVM and logistic regression. Cecotti and Gräser (2010) achieved state-of-the-art results on detecting the P300 event-related-potential with laboratory grade EEG also using convolutional networks. And more recently, Martinez et al.
+(2013) used deep learning techniques to produce models of affect from non-EEG biometrics (Skin Conductance and Blood Volume Pulse) which perform significantly better than ad-hoc feature models.
+Uniquely, we are using Deep Learning techniques on non-medical-grade EEG devices to track emotion.
 
 \section{Data} \label{section:data}
 %TODO: we have big data, oooh. okay maybe not that big but it still takes forever to load 

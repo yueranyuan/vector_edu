@@ -72,21 +72,47 @@ The data was processed with %TODO: asdfasdfasdf how did siegle process the data?
 % -other
 
 \section{Techniques} \label{section:techniques}
-%TODO: we thought technology x would be a great idea because it has these advantages over the sucky way that one guy was doing it. so we wrote some code and did it. we wrote the code. :o
-%-Deep learning
-% -deep nets
-% -dropout
-% -autoencoder
-% -denoising autoencoder
-% -convolutional neural nets
+\subsection{Deep nets}
+Deep nets, neural nets composed of many layers, are known to be able to represent highly complex decision boundaries when used with non-linear activation functions.
+
+In our models, we use the rectified linear unit (ReLU) \cite{ICML:2010NairH10}
+\[ \mathrm{ReLU}(x) = \max(0, x) \]
+as the activation function for the hidden layers. This non-linear function comes with the advantage that it and its derivatives are quick to compute. However, it is not differentiable at zero; this introduces no effects in practice.
+
+One may use a ``leaky'' ReLU
+\[ \mathrm{ReLU}(x; k) = \max(kx, x) \]
+where the negative arm of the function has a slightly positive slope $0 < k \ll 1$, ensuring non-zero derivatives.
+
+Parameterized rectified linear units (PReLUs) \cite{DBLP:journals/corr/HeZR015} are leaky ReLUs whose slopes are learnable parameters.
+
+Other standard candidates are the sigmoid function
+\[ \sigma(x) = \frac{1}{1+e^{-x}} \]
+and the hyperbolic tangent function
+\[ \tanh(x) = \frac{e^x - e^{-x}}{e^x + e^{-x}} \]
+as they are differentiable everywhere.
+
+% TODO: describe the layers/architecture more in detail
+
 \subsection{Convolutional Neural Networks}
 Convolutional neural networks (CNNs) \cite{DBLP:conf/nips/KrizhevskySH12} are neural networks that are not fully connected: instead, each neuron has a limited field of inputs, which overlaps with the fields of adjacent neurons on its layer.  This technique has found success in image processing, as it mimics the functioning of the human brain's visual cortex.  It has also been applied to EEG analysis \cite{DBLP:journals/pami/CecottiG11}, which we attempt in two different ways.  In the first, time-based convolution, we represent our input sample as a series of time points, each of which consists of a vector of features over several channels; the convolutional neurons' fields consist of overlapping slices of time.  In the second, channel-based convolution, the sample is represented as a series of channels, each of which consists of a vector of data points from that channel over time; the convolutional neurons' fields are sets of channels.  We also use a max-pooling downsampling layer above the convolutional layer; this downsamples the results of the convolution by keeping only the maximum value out of each of a set of non-overlapping regions of the convolutional layer.  Finally, we apply a logistic regression classifier to the results of the downsampling to obtain a classification.
-% -parameterized rectifiers
-\subsection{Parameterized Rectifiers}
-Parameterized rectified linear units (PReLUs) \cite{DBLP:journals/corr/HeZR015} are leaky ReLUs whose slopes are learnable parameters.
-% -batchnorm (plus all that other stuff)
-\subsection{Batch Normalization}
-Batch normalization \cite{DBLP:journals/corr/IoffeS15} is a method for training deep neural networks that makes normalization a part of the network, allowing for better performance and training speed.
+
+\subsection{Autoencoders}
+Autoencoders are a class of neural network architectures employed for use in representation learning. Autoencoders are fully connected neural networks containing at least one hidden layer, an encoder, and a decoder. The transformation described by the weights going from the input units to the middle hidden layer is the encoder, and the transformation described by the weights going from the middle hidden layer to the output units is the decoder. Typically, the decoder weights are shared as the transpose of the encoder weights with a separate set of bias units.
+
+Autoencoders can be trained in an unsupervised manner by learning the identity function on a set of data. An autoencoder with multiple hidden layers can be represented as a composition of multiple autoencoders, each with one hidden layer. These stacked autoencoders can be trained in a layerwise fashion, i.e. by greedily training the outermost autoencoder, then combining with the next inner autoencoder, initializing with the pretrained weights. So, we consider the behavior of autoencoders with one hidden layer: depending on the dimension of the hidden layers compared to the dimension of the input and output layers, autoencoders fall into two realms of behaviors.
+
+\subsubsection{Hidden layer smaller than input layer}
+If the hidden layer has a smaller dimension than the input layer, then in order to accurately approximate the identity function, the autoencoder learns to compress the larger input space into the smaller vector space represented by the hidden layer activations and retain salient features. If linear activation units $f(x) = x$ are used, then autoencoding is equivalent to principal component analysis (PCA). The trained encoder weights can be used to initialize a subset of a larger neural net classifier to expose the same learned features.
+
+\subsubsection{Hidden layer larger than input layer}
+If the hidden layer has a larger dimension than the input layer, straightforward training does not learn a meaningful representation because the identity encoding is a trivial optimum for training and will overfit. To force a useful representation, we introduce noise in the input and try to get the network to learn the original output. This causes the network to produce distributed representations of the input data that are useful in reconstructing the data. By adding Gaussian distributed noise to the input vectors during preprocessing, we obtain a denoising autoencoder that becomes resistant to noise. Another method of adding noise is dropout: during training, a fraction $p$ of the input vector dimensions (usually $p = 0.5$) is randomly set to $0$. During testing, the entire input vector is used and the layer weights are multiplied by $\frac{1}{p}$ to restore scaling of activations.
+
+\subsection{Training and batch normalization}
+Training is typically done on batches of inputs at once to take advantage of data parallelism techniques to speed up training.
+Batch normalization \cite{DBLP:journals/corr/IoffeS15} is a method for training deep neural networks that incorporates normalization a part of the network, allowing for better performance and training speed. In each layer, with each batch that is propagated through the network, the mean and variance is taken within the batch to renormalize each example. Two learnable coefficients $\alpha$ and $\beta$ are trained to rescale the normalized values.
+At test time, a global mean and variance is taken over samples drawn from the training set to be used to scale test examples.
+
+\subsection{Ensemble learning}
 %-Ensemble
 % -random forest
 % -classifier fusion

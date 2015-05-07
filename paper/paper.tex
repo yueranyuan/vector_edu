@@ -60,7 +60,9 @@ Uniquely, we are using Deep Learning techniques on non-medical-grade EEG devices
 Our experiment uses data from Siegle et al. (forthcoming). To our knowledge, this is the largest dataset of EEG collected in controlled laboratory conditions (TODO: get x and n) with n unique subjects from x different sites. The dataset contains various stimuli types and our experiments focus on the IAPS stimuli (TODO: cite lang et al 2008). IAPS is a set of images designed to illicit emotional responses along two emotional axes - high, low arousal and positive, negative valence. The stimuli
 fall into 4 categories - low arousal positive valence, low arousal negative valence, high arousal positive valence, and high arousal negative valence. In this dataset, each subject viewed 10 images from each category with a 2 (TODO: check this) second fixation period between each stimulus category. One limitation of the experiment was that the images were shown to the subject in the same sequence.
 
-The data was processed with %TODO: asdfasdfasdf how did siegle process the data??
+The dataset was collected with Emotiv EPOC EEG devices. The EEG data has 14 channels at 128Hz.  The data was processed with %TODO: asdfasdfasdf how did siegle process the data??
+
+We post-processed the resulting 128Hz signal with DFT and wavelets. We used 5 channel DFT threshholding at 0.1Hz, 4Hz, 8Hz, 12Hz, 30Hz, and 64Hz. We used Debauchey wavelets, trying a variety of wavelet decomposition depths. We also derived a number of features based on the feature set used in recent work of (citation needed) which includes eigen correlation, statistical moments, and Hjorth parameters.
 %TODO: we have big data, oooh. okay maybe not that big but it still takes forever to load 
 %-Dataset (details)
 % -processing

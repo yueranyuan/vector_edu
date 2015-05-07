@@ -39,17 +39,28 @@ In section \ref{section:litreview}, we present a detailed discussion of EEG and 
 
 
 \section{Prior work} \label{section:litreview}
-
-%TODO: so like our thing has never actually been done before. actually, this guy did this one thing but it really sucks. so we were like obviously we could do better with technology x.
-%-EEG
-% -what is EEG
-% -EEG patterns (psych stuff/neuro stuff)
-% -Dataset (brief)
-%-Deep learning
-% -what is deep learning
-% -deep learning + EEG
+\subsection{EEG}
+The EEG (electroencephalogram) signal is a voltage signal that can be measured on the surface of the scalp, arising from large areas of coordinated neural activity. Rhythmic fluctuations (oscillation patterns) in the EEG signal occur within several particular frequency bands, and the relative level of activity within each frequency band has been associated with brain/emotional states such as focused attentional processing, engagement, and frustration (Marosi et al., 2002; Marosi et al., 2001;
+Mundy-Castle, 1951; Berka et al., 2007) and cognitive and memory performance (Gruber et al., 2004; Fernandez et al., 1998; Gevins et al., 1997; Jensen et al., 2007; Klimesch, 1999). The discriminating power of EEG has been demonstrated in a number of studies, achieving 86\% accuracy on 14-way task discrimination, 95\% accuracy on discriminating high/low memory load (Gevins et al., 1998). 
+\subsection{IAPS}
+\subsection{Deep Learning}
+Contemporary deep learning was introduced relatively recently (Hinton, 2006). Prior to the advent of deep learning, classification algorithms by in large operated on some pre-determined preprocessing steps which transforms the raw input into features. These features were then used by a learning algorithm to train a classifier. Deep algorithms, by contrast, combine data processing and classification in the same learning pipeline. This allows the system to learn how to process raw data from
+patterns in the data rather than relying on hand-engineered pre-processing steps. This is why deep learning has alternatively been called feature learning or representation learning.
+Deep learning excels when it is trained on large repositories of data. So the relatively recent availability of large datasets for speech, computer vision, and text processing has allowed deep learning researchers to train models matching or beating state-of-the-art systems (Boulanger-Lewandowski et al., 2012; Krizhevsky et al., 2012; Miklov et al., 2011).  Deep learning is particularly good at extracting structure and information from raw data with little to no knowledge about the
+nature of the data or the nature of the intended classification task by performing unsupervised pre-training (Mesnil et al., 2012). Researchers hypothesize that this is because deep learning algorithms are able to disentangle the many sources of variation (Bengio, 2009).  This is supported by empirical analysis of the learnt features which demonstrate that features that best distinguish task domains are largely separate from features that best distinguish classification conditions (Glorot et
+al., 2011), a separation that suggests features are selectively sensitive to only one type of variation.  The usefulness of this disentanglement is evident in the strong performance of deep learning algorithms in transfer learning competitions (Mesnil et al .,2012; Goodfellow et al., 2011).
+Disentangling sources of variation is a particularly useful trait for use in EEG. As mentioned earlier, sources of signal in EEG are not well-understood and feature engineering is very difficult. By providing deep learning algorithms with a sufficiently large EEG dataset, the algorithms may be able to disentangle the many sources of noise and signal to recognize the specific patterns associated with mental states of interest and discarding patterns associated with environmental noise.
+Further, deep algorithms excel at transferring between different task domains which may be helpful in creating classifiers that can be used on unseen subjects despite non-trivial differences in subject psychology and physiology.
+\subsection{Deep Learning and EEG}
+Deep learning has also had some very recent success in non-EEG biometrics and laboratory EEG. Mirowski et al. (2008) used a convolutional neural network on intracranial EEG signal, predicting seizures with zero-false-alarm rate on 20 out of 21 patients, beating SVM and logistic regression. Cecotti and Gräser (2010) achieved state-of-the-art results on detecting the P300 event-related-potential with laboratory grade EEG also using convolutional networks. And more recently, Martinez et al.
+(2013) used deep learning techniques to produce models of affect from non-EEG biometrics (Skin Conductance and Blood Volume Pulse) which perform significantly better than ad-hoc feature models.
+Uniquely, we are using Deep Learning techniques on non-medical-grade EEG devices to track emotion.
 
 \section{Data} \label{section:data}
+Our experiment uses data from Siegle et al. (forthcoming). To our knowledge, this is the largest dataset of EEG collected in controlled laboratory conditions (TODO: get x and n) with n unique subjects from x different sites. The dataset contains various stimuli types and our experiments focus on the IAPS stimuli (TODO: cite lang et al 2008). IAPS is a set of images designed to illicit emotional responses along two emotional axes - high, low arousal and positive, negative valence. The stimuli
+fall into 4 categories - low arousal positive valence, low arousal negative valence, high arousal positive valence, and high arousal negative valence. In this dataset, each subject viewed 10 images from each category with a 2 (TODO: check this) second fixation period between each stimulus category. One limitation of the experiment was that the images were shown to the subject in the same sequence.
+
+The data was processed with %TODO: asdfasdfasdf how did siegle process the data??
 %TODO: we have big data, oooh. okay maybe not that big but it still takes forever to load 
 %-Dataset (details)
 % -processing
@@ -82,6 +93,9 @@ as they are differentiable everywhere.
 
 % TODO: describe the layers/architecture more in detail
 
+\subsection{Convolutional Neural Networks}
+Convolutional neural networks (CNNs) \cite{DBLP:conf/nips/KrizhevskySH12} are neural networks that are not fully connected: instead, each neuron has a limited field of inputs, which overlaps with the fields of adjacent neurons on its layer.  This technique has found success in image processing, as it mimics the functioning of the human brain's visual cortex.  It has also been applied to EEG analysis \cite{DBLP:journals/pami/CecottiG11}, which we attempt in two different ways.  In the first, time-based convolution, we represent our input sample as a series of time points, each of which consists of a vector of features over several channels; the convolutional neurons' fields consist of overlapping slices of time.  In the second, channel-based convolution, the sample is represented as a series of channels, each of which consists of a vector of data points from that channel over time; the convolutional neurons' fields are sets of channels.  We also use a max-pooling downsampling layer above the convolutional layer; this downsamples the results of the convolution by keeping only the maximum value out of each of a set of non-overlapping regions of the convolutional layer.  Finally, we apply a logistic regression classifier to the results of the downsampling to obtain a classification.
+
 \subsection{Autoencoders}
 Autoencoders are a class of neural network architectures employed for use in representation learning. Autoencoders are fully connected neural networks containing at least one hidden layer, an encoder, and a decoder. The transformation described by the weights going from the input units to the middle hidden layer is the encoder, and the transformation described by the weights going from the middle hidden layer to the output units is the decoder. Typically, the decoder weights are shared as the transpose of the encoder weights with a separate set of bias units.
 
@@ -99,7 +113,6 @@ Batch normalization \cite{DBLP:journals/corr/IoffeS15} is a method for training 
 At test time, a global mean and variance is taken over samples drawn from the training set to be used to scale test examples.
 
 \subsection{Ensemble learning}
-% TODO
 %-Ensemble
 % -random forest
 % -classifier fusion
@@ -111,6 +124,13 @@ At test time, a global mean and variance is taken over samples drawn from the tr
 %-Evaluation
 % -baseline classifiers
 % -auc, acc, best-cutoff
+\subsection{Evaluation Metrics}
+\subsubsection{Accuracy}
+The output of our classifiers when classifying input $x$ into category $A$ or $B$ is two probabilities $P(A_x)$ and $P(B_x)$ (the predicted probability that $x$ is in category $A$ or $B$ respectively), with $P(A_x)+P(B_x)=1$.  We choose the greater of these probabilities and declare its category to be the predicted category for $x$.  The accuracy of the classifier over a set of input samples is then simply the percentage of samples for which the predicted and actual categories agree.
+\subsubsection{Best-Cutoff Accuracy}
+Best-cutoff accuracy is a generalization of our accuracy calculation described above.  The only change is in how the predicted category for a sample is determined: a cutoff $c$ is set, with the sample declared to be in category $A$ if $P(A_x) > c$ and category $B$ otherwise.  Each time that the best-cutoff accuracy is computed for a set of predictions, the value of the cutoff is dynamically chosen such that the final accuracy result is maximized.
+\subsubsection{AUC}
+The area under the receiver operating characteristic (ROC) curve has been proposed \cite{DBLP:conf/ijcai/LingHZ03} as a more effective metric for comparing classifiers than accuracy.  The ROC curve represents the ratio of the true positive rate of a classifier to its false positive rate as its discrimination cutoff is varied.  We arbitrarily select one class here to be the positive class and the other to be the negative class.  We then construct a ranking of all input samples from least-likely to most-likely to be in the positive class (as determined by the probability assigned to that class by the classifier).  Our discrimination cutoff is then the point in this ranking list for which we determine less-likely-positive samples to be negative and more-likely ones to be positive.  We calculate the area under the ROC curve over all possible values of this cutoff, using this result as our metric.
 %-Alternative evaluations
 %-Ranking channels for importance
 

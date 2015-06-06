@@ -18,6 +18,8 @@ email me at yuerany@andrew.cmu.edu
 * this should default to 14 fold cross validation. Each fold is run individually by doing 'python kt_driver.py -t [fold#]'
 * example results: "python kt_driver.py -t 2" yields ~80% validation accuracy at convergence
 
+note: there is a deployment package that can batch run all folds (locally or on aws) and analyze the results but usage isn't super straight-forward, message/email me to inquire about deployment.
+
 
 Details
 -------

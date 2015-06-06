@@ -16,7 +16,7 @@ class ModelType(object):
 
 
 @log_me()
-def run(task_num, model_type=ModelType.PREVLOGKT, **kwargs):
+def run(task_num, model_type=ModelType.DEEPKT, **kwargs):
     if model_type == ModelType.DEEPKT:
         from learntools.kt.deepkt import DeepKT as SelectedModel
     elif model_type == ModelType.LOGKT:

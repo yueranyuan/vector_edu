@@ -13,20 +13,23 @@ class ModelType(object):
     DEEPKT = 0
     LOGKT = 1
     PREVLOGKT = 2
+    SVMKT = 3
 
 
 @log_me()
-def run(task_num, model_type=ModelType.DEEPKT, **kwargs):
+def run(task_num, model_type=ModelType.DEEPKT, top_n=14, **kwargs):
     if model_type == ModelType.DEEPKT:
         from learntools.kt.deepkt import DeepKT as SelectedModel
     elif model_type == ModelType.LOGKT:
         from learntools.kt.logkt import LogKT as SelectedModel
     elif model_type == ModelType.PREVLOGKT:
         from learntools.kt.prevlogkt import PrevLogKT as SelectedModel
+    elif model_type == ModelType.SVMKT:
+        from learntools.kt.svmkt import SvmKT as SelectedModel
     else:
         raise Exception("model type is not valid")
 
-    prepared_data = prepare_data(**kwargs)
+    prepared_data = prepare_data(top_n=top_n, **kwargs)
     train_idx, valid_idx = cv_split(prepared_data, fold_index=task_num, **kwargs)
 
     skill_matrix = gen_skill_matrix(prepared_data.get_data('skill'),
